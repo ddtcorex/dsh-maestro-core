@@ -1,0 +1,107 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { mkdtemp, rm, readFile, writeFile, mkdir, access } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { load, resetForTests } from '../src/index.ts'
+
+let home: string
+beforeEach(async () => { home = await mkdtemp(join(tmpdir(), 'cfgmig-')); resetForTests() })
+afterEach(async () => { await rm(home, { recursive: true, force: true }) })
+
+const LEGACY_DIR = () => join(home, 'dsh-maestro-harness')
+const LEGACY = () => join(LEGACY_DIR(), 'config.json')
+const STORE = () => join(home, 'maestro', 'settings.json')
+
+const LEGACY_15 = {
+  gitlabBaseUrl: 'https://gitlab.example.com',
+  gitlabToken: 'glpat-SECRET',
+  botUsername: 'maestro-bot',
+  webhookSecret: 'wh-SECRET',
+  projectMappings: { 'group/proj': 'session-x' },
+  autoRereviewOnPush: true,
+  reviewModel: 'deepseek-chat',
+  tunnelHostname: 'tunnel.example.com',
+  tunnelCredentialsFile: '/home/k/.cloudflared/cert.json',
+  tunnelId: 'cf-123',
+  tunnelMode: 'quick',
+  lastTunnelRunning: true,
+  telegramBotToken: 'tg-SECRET',
+  telegramChatId: '42',
+  telegramReviewNotifications: false,
+}
+
+async function seedLegacy(doc: unknown): Promise<void> {
+  await mkdir(LEGACY_DIR(), { recursive: true })
+  await writeFile(LEGACY(), JSON.stringify(doc), 'utf8')
+}
+
+describe('legacy migration', () => {
+  it('maps the 15 legacy keys to namespaced domains on first load', async () => {
+    await seedLegacy(LEGACY_15)
+    const doc = await load({ dshHome: home })
+    expect(doc.domains.gitlab).toEqual({
+      baseUrl: 'https://gitlab.example.com', token: 'glpat-SECRET', botUsername: 'maestro-bot',
+      webhookSecret: 'wh-SECRET', projectMappings: { 'group/proj': 'session-x' }, autoRereviewOnPush: true,
+    })
+    expect(doc.domains.review).toEqual({ model: 'deepseek-chat' })
+    expect(doc.domains.tunnel).toEqual({
+      hostname: 'tunnel.example.com', credentialsFile: '/home/k/.cloudflared/cert.json',
+      id: 'cf-123', mode: 'quick',
+    })
+    expect((doc.domains.notify as any).telegram).toEqual({ botToken: 'tg-SECRET', chatId: '42' })
+    expect((doc.domains.notify as any).policy).toEqual({ reviewNotifications: false })
+    // lastTunnelRunning is runtime state — dropped per spec
+    expect(JSON.stringify(doc)).not.toContain('lastTunnelRunning')
+  })
+
+  it('renames the legacy file to .bak after a successful migration', async () => {
+    await seedLegacy(LEGACY_15)
+    await load({ dshHome: home })
+    await expect(access(LEGACY())).rejects.toThrow()
+    const bak = JSON.parse(await readFile(LEGACY() + '.bak', 'utf8'))
+    expect(bak.gitlabToken).toBe('glpat-SECRET')
+  })
+
+  it('new store file is created with mode 600', async () => {
+    await seedLegacy(LEGACY_15)
+    await load({ dshHome: home })
+    const { stat } = await import('node:fs/promises')
+    const st = await stat(STORE())
+    expect(st.mode & 0o777).toBe(0o600)
+  })
+
+  it('skips migration when the new store already exists', async () => {
+    await mkdir(join(home, 'maestro'), { recursive: true })
+    await writeFile(STORE(), JSON.stringify({ version: 1, domains: { mine: { a: 1 } } }), { mode: 0o600 })
+    await seedLegacy(LEGACY_15)
+    const doc = await load({ dshHome: home })
+    expect(doc.domains.mine).toEqual({ a: 1 })
+    expect(doc.domains.gitlab).toBeUndefined()
+    await expect(access(LEGACY())).resolves.toBeUndefined() // untouched
+  })
+
+  it('never crashes on corrupt legacy JSON — leaves everything untouched', async () => {
+    await mkdir(LEGACY_DIR(), { recursive: true })
+    await writeFile(LEGACY(), '{not-json', 'utf8')
+    const doc = await load({ dshHome: home })
+    expect(doc.domains).toEqual({})
+    await expect(access(LEGACY())).resolves.toBeUndefined()
+    await expect(access(STORE())).rejects.toThrow()
+  })
+
+  it('unknown legacy keys land in the _legacy bucket', async () => {
+    await seedLegacy({ ...LEGACY_15, someFutureKey: 'x' })
+    const doc = await load({ dshHome: home })
+    expect(doc.domains._legacy).toEqual({ someFutureKey: 'x' })
+  })
+
+  it('merges multiple legacy sources when present (harness wins conflicts)', async () => {
+    await seedLegacy(LEGACY_15)
+    const remoteDir = join(home, 'dsh-maestro-remote')
+    await mkdir(remoteDir, { recursive: true })
+    await writeFile(join(remoteDir, 'config.json'),
+      JSON.stringify({ tunnelHostname: 'remote-wins.example.com' }), 'utf8')
+    const doc = await load({ dshHome: home })
+    expect((doc.domains.tunnel as any).hostname).toBe('remote-wins.example.com')
+  })
+})

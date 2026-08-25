@@ -124,14 +124,101 @@ async function writeDocLocked(path: string, doc: SettingsDoc): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// legacy migration (one-shot, non-destructive)
+// ---------------------------------------------------------------------------
+
+const LEGACY_SOURCES = [
+  'dsh-maestro-harness/config.json',
+  'dsh-maestro-remote/config.json',
+  'dsh-maestro-review/config.json',
+]
+
+const LEGACY_KEY_MAP: Record<string, string> = {
+  gitlabBaseUrl: 'gitlab.baseUrl',
+  gitlabToken: 'gitlab.token',
+  botUsername: 'gitlab.botUsername',
+  webhookSecret: 'gitlab.webhookSecret',
+  projectMappings: 'gitlab.projectMappings',
+  autoRereviewOnPush: 'gitlab.autoRereviewOnPush',
+  reviewModel: 'review.model',
+  tunnelHostname: 'tunnel.hostname',
+  tunnelCredentialsFile: 'tunnel.credentialsFile',
+  tunnelId: 'tunnel.id',
+  tunnelMode: 'tunnel.mode',
+  telegramBotToken: 'notify.telegram.botToken',
+  telegramChatId: 'notify.telegram.chatId',
+  telegramReviewNotifications: 'notify.policy.reviewNotifications',
+}
+
+/** Runtime state, not settings — deliberately dropped during migration. */
+const DROPPED_LEGACY_KEYS = new Set(['lastTunnelRunning'])
+
+function setIn(obj: Record<string, unknown>, dotted: string, value: unknown): void {
+  const parts = dotted.split('.')
+  let cur = obj
+  for (const part of parts.slice(0, -1)) {
+    if (typeof cur[part] !== 'object' || cur[part] === null) cur[part] = {}
+    cur = cur[part] as Record<string, unknown>
+  }
+  cur[parts[parts.length - 1]] = value
+}
+
+/**
+ * If the new store does not exist yet and any legacy per-package config.json is
+ * present, transform them into one namespaced store (later sources override
+ * earlier ones), rename every CONSUMED source to `.bak`, and report true.
+ * Corrupt sources are skipped untouched; the function never deletes anything.
+ */
+async function migrateLegacyIfPresent(storeP: string, dshHome: string): Promise<boolean> {
+  try {
+    await stat(storeP)
+    return false // modern store already exists — never migrate over it
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') throw err
+  }
+  const domains: Record<string, unknown> = {}
+  const legacyBucket: Record<string, unknown> = {}
+  const consumed: string[] = []
+  for (const rel of LEGACY_SOURCES) {
+    const src = join(resolveDshHome(dshHome), rel)
+    let raw: string
+    let parsed: Record<string, unknown>
+    try {
+      raw = await readFile(src, 'utf8')
+      parsed = JSON.parse(raw) as Record<string, unknown>
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('not an object')
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') continue
+      continue // corrupt or wrong shape — leave it alone, never destructive
+    }
+    for (const [k, v] of Object.entries(parsed)) {
+      if (DROPPED_LEGACY_KEYS.has(k)) continue
+      const target = LEGACY_KEY_MAP[k]
+      if (target) setIn(domains, target, v)
+      else legacyBucket[k] = v
+    }
+    consumed.push(src)
+  }
+  if (consumed.length === 0) return false
+  if (Object.keys(legacyBucket).length > 0) domains._legacy = legacyBucket
+  await writeDocLocked(storeP, { version: 1, domains })
+  for (const src of consumed) {
+    await rename(src, `${src}.bak`).catch(() => {})
+  }
+  return true
+}
+
+// ---------------------------------------------------------------------------
 // public API
 // ---------------------------------------------------------------------------
 
 export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
-  const key = resolveDshHome(opts?.dshHome)
-  if (cached && cached.key === key) return cached.doc
-  const doc = await readDoc(storePath(opts))
-  cached = { key, doc }
+  const path = storePath(opts)
+  const homeKey = resolveDshHome(opts?.dshHome)
+  await migrateLegacyIfPresent(path, homeKey)
+  if (cached && cached.key === homeKey) return cached.doc
+  const doc = await readDoc(path)
+  cached = { key: homeKey, doc }
   return doc
 }
 
