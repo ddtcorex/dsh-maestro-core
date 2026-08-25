@@ -5,7 +5,9 @@ const RPC_CHANNEL = '/dsh-maestro-config'
 function useRpc(ctx: any) {
   return React.useCallback(
     (endpoint: string, payload: unknown) => {
-      const conn = (ctx as any).connection ?? (ctx as any).get?.('connection')
+      // Property access (ctx.connection) trips the client Guard when the
+      // plugin object lacks inject — ctx.get() is the allowed optional read.
+      const conn = (ctx as any).get?.('connection')
       if (!conn?.rpc?.call) return Promise.reject(new Error('RPC not available'))
       return conn.rpc
         .call(RPC_CHANNEL, endpoint, payload)
@@ -35,6 +37,7 @@ function MaestroConfigSection({ ctx }: { ctx: any }): React.ReactElement {
   const [nestedKeys, setNestedKeys] = React.useState<string[]>([])
   const [status, setStatus] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [loaded, setLoaded] = React.useState(false)
 
   const loadDomain = React.useCallback(
     async (domain: string) => {
@@ -68,13 +71,18 @@ function MaestroConfigSection({ ctx }: { ctx: any }): React.ReactElement {
         if (!alive) return
         const list = Array.isArray(value) ? (value as string[]) : []
         setDomains(list)
+        setLoaded(true)
         const first = list[0]
         if (first !== undefined) {
           setSelected(first)
           await loadDomain(first)
         }
       })
-      .catch((err: any) => alive && setStatus(`list failed: ${err?.message ?? String(err)}`))
+      .catch((err: any) => {
+        if (!alive) return
+        setLoaded(true)
+        setStatus(`list failed: ${err?.message ?? String(err)}`)
+      })
     return () => {
       alive = false
     }
@@ -128,7 +136,7 @@ function MaestroConfigSection({ ctx }: { ctx: any }): React.ReactElement {
           d,
         ),
       ),
-      domains.length === 0 && !status
+      loaded && domains.length === 0 && !status
         ? React.createElement('span', null, 'no domains yet — install a plugin that owns one')
         : null,
     ),
