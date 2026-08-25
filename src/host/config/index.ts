@@ -6,7 +6,7 @@ import { createMaestroConfigService, type MaestroConfigService } from './service
 export const name = 'maestro-config'
 export const inject = ['connection']
 
-const RPC_CHANNEL = 'maestro.config'
+const RPC_CHANNEL = '/dsh-maestro-config'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
