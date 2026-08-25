@@ -105,3 +105,16 @@ describe('legacy migration', () => {
     expect((doc.domains.tunnel as any).hostname).toBe('remote-wins.example.com')
   })
 })
+
+describe('cache invalidation after late migration', () => {
+  it('a memoized empty load does not hide domains written by a later migration', async () => {
+    // First load: nothing exists anywhere -> empty doc gets memoized.
+    const first = await load({ dshHome: home })
+    expect(first.domains).toEqual({})
+    // Legacy appears afterwards (e.g. another tool wrote it), next load must see it.
+    await seedLegacy({ reviewModel: 'late-model', tunnelMode: 'quick' })
+    const second = await load({ dshHome: home })
+    expect((second.domains.review as any)?.model).toBe('late-model')
+    expect((second.domains.tunnel as any)?.mode).toBe('quick')
+  })
+})
