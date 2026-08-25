@@ -57,3 +57,17 @@ describe('domain schemas', () => {
     expect(doc.domains.tunnel).toEqual({ hostname: 'h' })
   })
 })
+
+import { definedDomains } from '../src/index.ts'
+describe('definedDomains()', () => {
+  it('lists registered domain names without affecting the store', () => {
+    resetForTests()
+    defineDomain('alpha', typeValidator({}))
+    defineDomain('beta', typeValidator({}))
+    // Registry is process-global and intentionally survives resets, so other
+    // suites' domains may be present — assert membership, not exact contents.
+    const names = definedDomains()
+    expect(names).toContain('alpha')
+    expect(names).toContain('beta')
+  })
+})

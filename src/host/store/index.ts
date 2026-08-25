@@ -248,3 +248,8 @@ export async function set(
   })
   for (const cb of changeCbs) cb(domain)
 }
+
+/** Names of domains registered via defineDomain (schema owners). */
+export function definedDomains(): string[] {
+  return [...domainValidators.keys()]
+}
