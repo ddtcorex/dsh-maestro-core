@@ -215,7 +215,8 @@ async function migrateLegacyIfPresent(storeP: string, dshHome: string): Promise<
 export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
   const path = storePath(opts)
   const homeKey = resolveDshHome(opts?.dshHome)
-  await migrateLegacyIfPresent(path, homeKey)
+  const migrated = await migrateLegacyIfPresent(path, homeKey)
+  if (migrated) cached = null // the store file changed on disk — drop any memoized doc
   if (cached && cached.key === homeKey) return cached.doc
   const doc = await readDoc(path)
   cached = { key: homeKey, doc }
