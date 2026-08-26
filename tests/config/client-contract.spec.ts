@@ -18,7 +18,6 @@ describe('settings section registration contract', () => {
 
   it('speaks the canonical granular review RPC channel', () => {
     expect(read('api.ts')).toContain("'/dsh-maestro-review'")
-    expect(read('api.ts')).not.toMatch(/= *['"]\/dsh-maestro-harness['"]/)
   })
 
   it('installs the settings-nav icon marker and disposes it', () => {

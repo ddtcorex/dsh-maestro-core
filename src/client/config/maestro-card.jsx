@@ -1,4 +1,4 @@
-// Verbatim port of the proven dsh-maestro-harness Settings card: fields and
+// Verbatim port of the proven Maestro Settings card design: fields and
 // styles preserved (--dsw-alias-* tokens, masked SecretInput, sectioned
 // layout, QR + model selector + project mappings). The RPC channel now
 // resolves to the granular dsh-maestro-review settings-rpc row (see api.ts).
