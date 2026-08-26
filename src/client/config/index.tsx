@@ -1,230 +1,79 @@
-import React from 'react'
+// Verbatim legacy-card port (fields/styles preserved; see maestro-card.tsx).
+import { MaestroSettingsTab } from './maestro-card.jsx'
+import { MAESTRO_RPC_CHANNEL } from './api.js'
+import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-icon.js'
 
-const RPC_CHANNEL = '/dsh-maestro-config'
+/**
+ * DSH 0.1.x gives external settings sections a generic gear and exposes no
+ * icon field in the settings.section contract (mirrors dsh-better-sidebar):
+ * the marker only claims this plugin's localized row and this CSS paints the
+ * Lucide "audio-lines" glyph as a currentColor mask so it follows native nav
+ * hover/active colors at the shell's 16px icon rhythm.
+ */
+const SETTINGS_NAV_CSS = `
 
-function useRpc(ctx: any) {
-  return React.useCallback(
-    (endpoint: string, payload: unknown) => {
-      // Property access (ctx.connection) trips the client Guard when the
-      // plugin object lacks inject — ctx.get() is the allowed optional read.
-      const conn = (ctx as any).get?.('connection')
-      if (!conn?.rpc?.call) return Promise.reject(new Error('RPC not available'))
-      return conn.rpc
-        .call(RPC_CHANNEL, endpoint, payload)
-        .then((result: any) => {
-          if (result?.ok === true) return result.value
-          const message =
-            typeof result?.error?.message === 'string' ? result.error.message : 'RPC request failed'
-          throw new Error(message)
-        })
-    },
-    [ctx],
-  )
+/* maestro: replace the settings-nav fallback gear with the maestro glyph */
+[${SETTINGS_NAV_MARKER}] > svg:first-child {
+  display: none;
 }
 
-type Draft = Record<string, string | number | boolean>
+[${SETTINGS_NAV_MARKER}]::before {
+  content: '';
+  flex: none;
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 10v3'/%3E%3Cpath d='M6 4v16'/%3E%3Cpath d='M10 8v8'/%3E%3Cpath d='M14 4v16'/%3E%3Cpath d='M18 6v12'/%3E%3Cpath d='M22 10v3'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 10v3'/%3E%3Cpath d='M6 4v16'/%3E%3Cpath d='M10 8v8'/%3E%3Cpath d='M14 4v16'/%3E%3Cpath d='M18 6v12'/%3E%3Cpath d='M22 10v3'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+`
 
-function isEditablePrimitive(v: unknown): v is string | number | boolean {
-  return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+type SlotsApi = {
+  inject(name: string, factory: () => unknown): void
+  register(
+    options: Record<string, unknown>,
+    render: (props: { rpcCall: RpcCall }) => unknown,
+  ): unknown
+}
+type RpcCall = (endpoint: string, payload?: unknown, signal?: AbortSignal) => Promise<unknown>
+
+interface ClientCtx {
+  get?(name: string): unknown
+  effect(fn: () => () => void, label?: string): unknown
 }
 
-/** One settings page: pick a domain, edit its primitive keys, save as a merge patch. */
-function MaestroConfigSection({ ctx }: { ctx: any }): React.ReactElement {
-  const rpc = useRpc(ctx)
-  const [domains, setDomains] = React.useState<string[]>([])
-  const [selected, setSelected] = React.useState<string>('')
-  const [draft, setDraft] = React.useState<Draft>({})
-  const [nestedKeys, setNestedKeys] = React.useState<string[]>([])
-  const [status, setStatus] = React.useState('')
-  const [busy, setBusy] = React.useState(false)
-  const [loaded, setLoaded] = React.useState(false)
-
-  const loadDomain = React.useCallback(
-    async (domain: string) => {
-      setStatus('')
-      try {
-        const value = (await rpc('get', { domain })) as Record<string, unknown> | null
-        if (value === null || typeof value !== 'object') {
-          setDraft({})
-          setNestedKeys([])
-          return
-        }
-        const nextDraft: Draft = {}
-        const nested: string[] = []
-        for (const [k, v] of Object.entries(value)) {
-          if (isEditablePrimitive(v)) nextDraft[k] = v
-          else nested.push(k)
-        }
-        setDraft(nextDraft)
-        setNestedKeys(nested)
-      } catch (err: any) {
-        setStatus(`load failed: ${err?.message ?? String(err)}`)
-      }
-    },
-    [rpc],
-  )
-
-  React.useEffect(() => {
-    let alive = true
-    rpc('list', {})
-      .then(async (value: unknown) => {
-        if (!alive) return
-        // Handler wraps as ok({ domains }); tolerate a bare array too.
-        const raw =
-          Array.isArray(value)
-            ? value
-            : (value as { domains?: unknown } | null)?.domains
-        const list = Array.isArray(raw) ? (raw as string[]) : []
-        setDomains(list)
-        setLoaded(true)
-        const first = list[0]
-        if (first !== undefined) {
-          setSelected(first)
-          await loadDomain(first)
-        }
-      })
-      .catch((err: any) => {
-        if (!alive) return
-        setLoaded(true)
-        setStatus(`list failed: ${err?.message ?? String(err)}`)
-      })
-    return () => {
-      alive = false
-    }
-  }, [rpc, loadDomain])
-
-  const save = async () => {
-    if (!selected) return
-    setBusy(true)
-    setStatus('')
-    try {
-      await rpc('set', { domain: selected, patch: draft })
-      setStatus('saved ✓')
-    } catch (err: any) {
-      setStatus(`save failed: ${err?.message ?? String(err)}`)
-    } finally {
-      setBusy(false)
-    }
+function installNavIconStyle(): () => void {
+  const tag = document.createElement('style')
+  tag.dataset.plugin = '@ddtcorex/dsh-maestro-config'
+  tag.dataset.pluginCss = 'maestro/settings-nav.css'
+  tag.textContent = SETTINGS_NAV_CSS
+  document.head.appendChild(tag)
+  return () => {
+    document.querySelector('style[data-plugin-css="maestro/settings-nav.css"]')?.remove()
   }
-
-  const fieldStyle: React.CSSProperties = {
-    display: 'flex', gap: 8, alignItems: 'center', margin: '4px 0',
-  }
-  const inputStyle: React.CSSProperties = {
-    flex: 1, padding: '4px 8px', borderRadius: 6,
-    border: '1px solid var(--dsh-border, #8884)',
-    background: 'var(--dsh-bg, transparent)', color: 'inherit',
-  }
-
-  return React.createElement(
-    'div',
-    { style: { maxWidth: 560 } },
-    React.createElement(
-      'div',
-      { style: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 } },
-      domains.map((d) =>
-        React.createElement(
-          'button',
-          {
-            key: d,
-            onClick: () => {
-              setSelected(d)
-              void loadDomain(d)
-            },
-            style: {
-              padding: '3px 10px', borderRadius: 999, cursor: 'pointer', fontSize: 12,
-              border: '1px solid var(--dsh-border, #8884)',
-              background: d === selected ? 'var(--dsh-accent, #4a7dff)' : 'transparent',
-              color: d === selected ? '#fff' : 'inherit',
-            },
-          },
-          d,
-        ),
-      ),
-      loaded && domains.length === 0 && !status
-        ? React.createElement('span', null, 'no domains yet — install a plugin that owns one')
-        : null,
-    ),
-    selected
-      ? React.createElement(
-          React.Fragment,
-          null,
-          Object.keys(draft).length === 0
-            ? React.createElement(
-                'div',
-                { style: { opacity: 0.7, margin: '6px 0' } },
-                `(domain "${selected}" has no primitive keys — nested objects are preserved untouched)`,
-              )
-            : Object.entries(draft).map(([key, value]) =>
-                React.createElement(
-                  'label',
-                  { key, style: fieldStyle },
-                  React.createElement(
-                    'span',
-                    { style: { minWidth: 140, fontSize: 13, opacity: 0.85 } },
-                    key,
-                  ),
-                  typeof value === 'boolean'
-                    ? React.createElement('input', {
-                        type: 'checkbox',
-                        checked: value,
-                        onChange: (e) =>
-                          setDraft((d) => ({ ...d, [key]: (e.target as HTMLInputElement).checked })),
-                      })
-                    : React.createElement('input', {
-                        type: typeof value === 'number' ? 'number' : 'text',
-                        value: String(value),
-                        style: inputStyle,
-                        onChange: (e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            [key]:
-                              typeof value === 'number'
-                                ? Number((e.target as HTMLInputElement).value)
-                                : (e.target as HTMLInputElement).value,
-                          })),
-                      }),
-                  ),
-              ),
-          nestedKeys.length > 0
-            ? React.createElement(
-                'div',
-                { style: { opacity: 0.65, fontSize: 12, margin: '6px 0' } },
-                `preserved untouched: ${nestedKeys.join(', ')}`,
-              )
-            : null,
-          React.createElement(
-            'button',
-            {
-              onClick: () => void save(),
-              disabled: busy,
-              style: {
-                marginTop: 8, padding: '6px 14px', borderRadius: 8, cursor: 'pointer',
-                border: '1px solid var(--dsh-border, #8884)', color: 'inherit',
-                background: 'var(--dsh-bg, transparent)',
-              },
-            },
-            busy ? 'saving…' : `Save "${selected}"`,
-          ),
-        )
-      : null,
-    status
-      ? React.createElement(
-          'div',
-          { style: { marginTop: 8, fontSize: 12, opacity: 0.8 } },
-          status,
-        )
-      : null,
-  )
 }
 
-export function apply(ctx: any): void {
-  const slots = ctx.get?.('slots') ?? ctx.slots
+export function apply(ctx: ClientCtx): void {
+  const slots = ctx.get?.('slots') as SlotsApi | undefined
   if (slots === undefined) return
+
+  // The card speaks the granular dsh-maestro-review settings-rpc surface.
+  const rpcCall: RpcCall = (endpoint, payload, signal) => {
+    const connection = ctx.get?.('connection') as
+      | { rpc: { call(ch: string, ep: string, p?: unknown, s?: AbortSignal): Promise<unknown> } }
+      | undefined
+    if (!connection?.rpc?.call) return Promise.reject(new Error('RPC not available'))
+    return connection.rpc.call(MAESTRO_RPC_CHANNEL, endpoint, payload, signal)
+  }
+
+  // Reversible effects: nav-row marker observer + owned style tag.
+  ctx.effect(() => registerSettingsNavIcon(() => 'Maestro'), 'maestro: settings nav icon')
+  ctx.effect(installNavIconStyle, 'maestro: settings nav css')
+
   slots.inject('settings.section', () =>
     slots.register(
-      { name: 'settings.section', id: 'maestro-config', order: 60, label: 'Maestro Config' },
-      () => React.createElement(MaestroConfigSection, { ctx }),
+      { name: 'settings.section', id: 'maestro', order: 25, label: () => 'Maestro', inject: () => ({ rpcCall }) },
+      MaestroSettingsTab,
     ),
   )
 }
