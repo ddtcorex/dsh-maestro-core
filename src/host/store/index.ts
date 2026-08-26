@@ -133,22 +133,32 @@ const LEGACY_SOURCES = [
   'dsh-maestro-review/config.json',
 ]
 
-const LEGACY_KEY_MAP: Record<string, string> = {
+export const DOMAIN_KEY_MAP: Record<string, string> = {
   gitlabBaseUrl: 'gitlab.baseUrl',
   gitlabToken: 'gitlab.token',
   botUsername: 'gitlab.botUsername',
   webhookSecret: 'gitlab.webhookSecret',
+  webhookPort: 'gitlab.webhookPort',
   projectMappings: 'gitlab.projectMappings',
   autoRereviewOnPush: 'gitlab.autoRereviewOnPush',
   reviewModel: 'review.model',
+  agentTimeoutMs: 'review.agentTimeoutMs',
+  reviewSessionRetentionDays: 'review.sessionRetentionDays',
   tunnelHostname: 'tunnel.hostname',
   tunnelCredentialsFile: 'tunnel.credentialsFile',
   tunnelId: 'tunnel.id',
   tunnelMode: 'tunnel.mode',
+  quickTarget: 'tunnel.quickTarget',
+  proxyPort: 'tunnel.proxyPort',
+  proxyHost: 'tunnel.proxyHost',
+  lanPinEnabled: 'tunnel.lanPinEnabled',
   telegramBotToken: 'notify.telegram.botToken',
   telegramChatId: 'notify.telegram.chatId',
   telegramReviewNotifications: 'notify.policy.reviewNotifications',
 }
+
+/** Machine runtime state — never settings; owning adapters persist these in their own sidecar. */
+export const RUNTIME_KEYS: readonly string[] = ['lastTunnelRunning']
 
 /** Runtime state, not settings — deliberately dropped during migration. */
 const DROPPED_LEGACY_KEYS = new Set(['lastTunnelRunning'])
@@ -193,7 +203,7 @@ async function migrateLegacyIfPresent(storeP: string, dshHome: string): Promise<
     }
     for (const [k, v] of Object.entries(parsed)) {
       if (DROPPED_LEGACY_KEYS.has(k)) continue
-      const target = LEGACY_KEY_MAP[k]
+      const target = DOMAIN_KEY_MAP[k]
       if (target) setIn(domains, target, v)
       else legacyBucket[k] = v
     }
@@ -257,4 +267,53 @@ export async function set(
 /** Names of domains registered via defineDomain (schema owners). */
 export function definedDomains(): string[] {
   return [...domainValidators.keys()]
+}
+
+// ---------------------------------------------------------------------------
+// adapter helpers — one mapping source for consumer config-stores
+// ---------------------------------------------------------------------------
+
+export interface DomainWrite {
+  domain: string
+  patch: Record<string, unknown>
+}
+
+/** Route a flat legacy-keyed patch into per-domain writes; runtime keys are skipped. */
+export function splitLegacyPatch(patch: Record<string, unknown>): DomainWrite[] {
+  const byDomain = new Map<string, Record<string, unknown>>()
+  for (const [key, value] of Object.entries(patch)) {
+    if (RUNTIME_KEYS.includes(key)) continue
+    const dotted = DOMAIN_KEY_MAP[key]
+    if (!dotted) continue
+    const domain = dotted.split('.')[0]
+    const group = byDomain.get(domain) ?? {}
+    setIn(group, dotted.slice(domain.length + 1), value)
+    byDomain.set(domain, group)
+  }
+  return [...byDomain].map(([domain, patch]) => ({ domain, patch }))
+}
+
+/** Write a flat legacy-keyed patch through the domain store (multiple atomic set()s). */
+export async function writeLegacyPatch(
+  patch: Record<string, unknown>,
+  opts?: { dshHome?: string },
+): Promise<void> {
+  for (const { domain, patch: group } of splitLegacyPatch(patch)) {
+    await set(domain, group, opts)
+  }
+}
+
+/** Inverse view: domains flattened back into legacy key names (undefined keys omitted). */
+export async function readFlat(opts?: { dshHome?: string }): Promise<Record<string, unknown>> {
+  const doc = await load(opts)
+  const flat: Record<string, unknown> = {}
+  for (const [key, dotted] of Object.entries(DOMAIN_KEY_MAP)) {
+    let cur: unknown = doc.domains
+    for (const part of dotted.split('.')) {
+      if (cur !== null && typeof cur === 'object') cur = (cur as Record<string, unknown>)[part]
+      else { cur = undefined; break }
+    }
+    if (cur !== undefined) flat[key] = cur
+  }
+  return flat
 }
