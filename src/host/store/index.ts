@@ -202,8 +202,12 @@ async function migrateLegacyIfPresent(storeP: string, dshHome: string): Promise<
   if (consumed.length === 0) return false
   if (Object.keys(legacyBucket).length > 0) domains._legacy = legacyBucket
   await writeDocLocked(storeP, { version: 1, domains })
+  // Snapshot, do NOT rename: the legacy file's owner plugin may not have
+  // adopted this lib yet and still reads the original path (a premature
+  // rename silently broke tunnel auto-restore in production on 2026-08-26).
   for (const src of consumed) {
-    await rename(src, `${src}.bak`).catch(() => {})
+    const snapshot = await readFile(src, 'utf8')
+    await writeFile(`${src}.maestro-migrated.bak`, snapshot, { mode: 0o600 }).catch(() => {})
   }
   return true
 }
