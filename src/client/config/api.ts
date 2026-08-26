@@ -1,7 +1,7 @@
 /**
  * Shared between the Settings card and the host endpoint names. The granular
  * dsh-maestro-review settings-rpc row implements this exact surface on the
- * canonical channel (the '/dsh-maestro-harness' alias is legacy-only).
+ * canonical channel.
  */
 export const MAESTRO_RPC_CHANNEL = '/dsh-maestro-review'
 

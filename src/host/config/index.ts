@@ -25,7 +25,7 @@ function fail(message: string): RpcResult<never> {
       code: 'bad-request',
       message,
       // Synthetic details: app-level validation error shoehorned into DSH's
-      // shared RPC error taxonomy (same approach as dsh-maestro-harness).
+      // shared RPC error taxonomy (same approach across maestro packages).
       details: { issues: [{ message }] } as RpcErrorDetailsMap['bad-request'],
     },
   }
