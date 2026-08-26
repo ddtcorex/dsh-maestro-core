@@ -69,7 +69,12 @@ function MaestroConfigSection({ ctx }: { ctx: any }): React.ReactElement {
     rpc('list', {})
       .then(async (value: unknown) => {
         if (!alive) return
-        const list = Array.isArray(value) ? (value as string[]) : []
+        // Handler wraps as ok({ domains }); tolerate a bare array too.
+        const raw =
+          Array.isArray(value)
+            ? value
+            : (value as { domains?: unknown } | null)?.domains
+        const list = Array.isArray(raw) ? (raw as string[]) : []
         setDomains(list)
         setLoaded(true)
         const first = list[0]
