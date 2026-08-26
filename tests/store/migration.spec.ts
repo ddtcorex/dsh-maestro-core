@@ -8,7 +8,7 @@ let home: string
 beforeEach(async () => { home = await mkdtemp(join(tmpdir(), 'cfgmig-')); resetForTests() })
 afterEach(async () => { await rm(home, { recursive: true, force: true }) })
 
-const LEGACY_DIR = () => join(home, 'dsh-maestro-harness')
+const LEGACY_DIR = () => join(home, 'dsh-maestro-review')
 const LEGACY = () => join(LEGACY_DIR(), 'config.json')
 const STORE = () => join(home, 'maestro', 'settings.json')
 
@@ -98,14 +98,14 @@ describe('legacy migration', () => {
     expect(doc.domains._legacy).toEqual({ someFutureKey: 'x' })
   })
 
-  it('merges multiple legacy sources when present (harness wins conflicts)', async () => {
-    await seedLegacy(LEGACY_15)
+  it('merges multiple legacy sources when present (review, as last source, wins conflicts)', async () => {
     const remoteDir = join(home, 'dsh-maestro-remote')
     await mkdir(remoteDir, { recursive: true })
     await writeFile(join(remoteDir, 'config.json'),
       JSON.stringify({ tunnelHostname: 'remote-wins.example.com' }), 'utf8')
+    await seedLegacy(LEGACY_15) // dsh-maestro-review/config.json — last in LEGACY_SOURCES
     const doc = await load({ dshHome: home })
-    expect((doc.domains.tunnel as any).hostname).toBe('remote-wins.example.com')
+    expect((doc.domains.tunnel as any).hostname).toBe('tunnel.example.com')
   })
 })
 

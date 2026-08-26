@@ -128,7 +128,6 @@ async function writeDocLocked(path: string, doc: SettingsDoc): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const LEGACY_SOURCES = [
-  'dsh-maestro-harness/config.json',
   'dsh-maestro-remote/config.json',
   'dsh-maestro-review/config.json',
 ]
