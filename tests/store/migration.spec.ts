@@ -54,12 +54,15 @@ describe('legacy migration', () => {
     expect(JSON.stringify(doc)).not.toContain('lastTunnelRunning')
   })
 
-  it('renames the legacy file to .bak after a successful migration', async () => {
+  it('keeps the legacy file in place and snapshots a .bak copy (owners may still read it)', async () => {
     await seedLegacy(LEGACY_15)
     await load({ dshHome: home })
-    await expect(access(LEGACY())).rejects.toThrow()
-    const bak = JSON.parse(await readFile(LEGACY() + '.bak', 'utf8'))
-    expect(bak.gitlabToken).toBe('glpat-SECRET')
+    // The legacy OWNER plugin may not have adopted the lib yet — the original
+    // file must stay exactly where it is, byte-identical.
+    const orig = JSON.parse(await readFile(LEGACY(), 'utf8'))
+    expect(orig.gitlabToken).toBe('glpat-SECRET')
+    const bak = JSON.parse(await readFile(LEGACY() + '.maestro-migrated.bak', 'utf8'))
+    expect(bak).toEqual(orig)
   })
 
   it('new store file is created with mode 600', async () => {
