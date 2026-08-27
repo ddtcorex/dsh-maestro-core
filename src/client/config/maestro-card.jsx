@@ -480,7 +480,7 @@ function PublicAccess({ status, pin, showPin, onRevealPin, onHidePin, onRotatePi
   )
 }
 
-export function MaestroSettingsTab({ rpcCall }) {
+export function MaestroSettingsTab({ rpcCall, configRpcCall }) {
   const [status, setStatus] = useState(null)
   const [proxyStatus, setProxyStatus] = useState(null)
   const [config, setConfig] = useState({ tunnelMode: 'quick', projectMappings: [] })
@@ -511,6 +511,16 @@ export function MaestroSettingsTab({ rpcCall }) {
     call(MAESTRO_ENDPOINTS.getConfig, {})
       .then(saved => setConfig(prev => ({ ...prev, ...saved })))
       .catch(() => { /* first run, no config saved yet — keep defaults */ })
+    // Supervisor model may be stored via generic config service when review not installed — try fallback
+    if (configRpcCall) {
+      configRpcCall('get', { domain: 'supervisor' })
+        .then(res => {
+          if (res?.ok && res.value?.model) {
+            setConfig(prev => ({ ...prev, supervisorModel: res.value.model }))
+          }
+        })
+        .catch(() => { /* supervisor domain not yet set or config service unavailable */ })
+    }
     call(MAESTRO_ENDPOINTS.lanPinStatus, {})
       .then(value => { setLanPinEnabled(value.enabled); if (value.enabled) setLanPin(value.pin ?? null) })
       .catch(() => { /* host without the LAN PIN endpoints — keep the row hidden */ })
@@ -596,6 +606,16 @@ export function MaestroSettingsTab({ rpcCall }) {
   const saveField = async (field, value) => {
     setError(null)
     setConfig(prev => ({ ...prev, [field]: value }))
+    // Supervisor model can be saved via generic config service when review not installed (independent install)
+    if (field === 'supervisorModel' && configRpcCall) {
+      try {
+        const res = await configRpcCall('set', { domain: 'supervisor', patch: { model: value } })
+        if (res?.ok) return
+        // Fall through to review RPC if generic set fails
+      } catch (e) {
+        // Fall through to review RPC
+      }
+    }
     try {
       await call(MAESTRO_ENDPOINTS.saveConfig, { [field]: value })
     } catch (err) {
@@ -713,6 +733,19 @@ export function MaestroSettingsTab({ rpcCall }) {
         fallbackLabel: 'Use DSH default',
         onChange: v => saveField('reviewModel', v),
         label: 'Global review model',
+      }),
+    ),
+
+    h('div', { style: sectionStyle },
+      h('h4', { style: headingStyle }, 'Supervisor LLM'),
+      h('p', { style: captionStyle }, 'Model used by the supervisor debug-agent to auto-fix DSH Web crashes. Empty = DSH default (or Review model if set). Uses the same provider catalog as Review.'),
+      h(ReviewModelSelector, {
+        value: config.supervisorModel ?? null,
+        catalog,
+        fallbackValue: catalog?.current ?? null,
+        fallbackLabel: 'Use DSH default',
+        onChange: v => saveField('supervisorModel', v),
+        label: 'Supervisor model',
       }),
     ),
 
