@@ -147,10 +147,35 @@ function ReviewModelSelector({ value, catalog, fallbackValue, fallbackLabel, onC
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
+  const getModelId = (m) => typeof m === 'string' ? m : m.id
+  const getModelName = (m) => typeof m === 'string' ? m : (m.name ?? m.id)
+  const selectedModelInfo = (() => {
+    if (!selectedProvider || !value?.model) return null
+    const raw = (providerGroup?.models ?? []).find(mm => getModelId(mm) === value.model)
+    if (raw === undefined) return null
+    if (typeof raw === 'string') return { id: raw, supportsReasoning: false, reasoningEfforts: [] }
+    return raw
+  })()
+  const supportsReasoning = (() => {
+    if (!selectedModelInfo) return false
+    if (typeof selectedModelInfo.supportsReasoning === 'boolean') return selectedModelInfo.supportsReasoning
+    const efforts = selectedModelInfo.reasoningEfforts ?? selectedModelInfo.reasoning?.efforts?.map(e => e.id) ?? []
+    return efforts.filter(e => e !== 'off').length > 0
+  })()
+  const availableEfforts = (() => {
+    if (!supportsReasoning) return []
+    const efforts = selectedModelInfo?.reasoningEfforts ?? selectedModelInfo?.reasoning?.efforts?.map(e => e.id) ?? []
+    const filtered = efforts.filter(e => e !== 'off' && e !== '')
+    if (filtered.length > 0) return filtered
+    return ['low', 'medium', 'high']
+  })()
+  const warning = selectedEffort !== '' && !supportsReasoning && selectedModelInfo !== null
+    ? `⚠️ This model does not support reasoning effort "${selectedEffort}" — reviews will fail. Clear effort or choose a reasoning-capable model.`
+    : null
   const update = (field, newVal) => {
     if (newVal === '' && field === 'provider') { onChange(null); setOpen(false); setPane('root'); return }
     const next = { provider: value?.provider ?? '', model: value?.model ?? '', ...(value?.reasoningEffort ? { reasoningEffort: value.reasoningEffort } : {}) }
-    if (field === 'provider') { const g = groups.find(x => x.provider === newVal); next.provider = newVal; next.model = g?.models[0] ?? '' }
+    if (field === 'provider') { const g = groups.find(x => x.provider === newVal); const first = g?.models[0]; next.provider = newVal; next.model = first !== undefined ? getModelId(first) : '' }
     else if (field === 'model') { next.model = newVal }
     else if (field === 'reasoningEffort') { if (newVal === '') delete next.reasoningEffort; else next.reasoningEffort = newVal }
     if (!next.provider || !next.model) { onChange(null) } else { onChange(next) }
@@ -235,6 +260,7 @@ function ReviewModelSelector({ value, catalog, fallbackValue, fallbackLabel, onC
         ),
         value && h('p', { style: { ...captionStyle, margin: '8px 4px 2px' } }, `Selected: ${value.provider} / ${value.model}${value.reasoningEffort ? ` (${value.reasoningEffort})` : ''}`),
         !value && effectiveFallback && h('p', { style: { ...captionStyle, margin: '8px 4px 2px' } }, `${effectiveFallbackLabel === 'Use Global' ? 'Using Global' : 'Using DSH default'}: ${effectiveFallback.provider} / ${effectiveFallback.model}${effectiveFallback.reasoningEffort ? ` (${effectiveFallback.reasoningEffort})` : ''}`),
+        warning && h('p', { style: { ...captionStyle, margin: '4px 4px 2px', color: 'var(--dsw-alias-state-error-primary)' } }, warning),
       ),
       pane === 'model' && h('div', null,
         h('button', { type: 'button', style: { ...rowStyle, color: 'var(--dsw-alias-label-secondary)' }, onClick: () => setPane('root') }, h('span', null, '← Back'), h('span', { style: { fontSize: 12 } }, 'Model')),
@@ -247,20 +273,31 @@ function ReviewModelSelector({ value, catalog, fallbackValue, fallbackLabel, onC
               h('div', { style: { fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)', padding: '6px 10px 2px', textTransform: 'uppercase', letterSpacing: 0.4, display: 'flex', alignItems: 'center', gap: 6 } }, h('span', { style: { width: 6, height: 6, borderRadius: 3, background: 'var(--dsw-alias-border-l2)', flex: 'none' } }), g?.name ?? p),
               ms.length === 0 ? h('p', { style: { ...captionStyle, padding: '2px 10px 2px 28px' } }, 'No models') :
               h('div', { style: { marginLeft: 12, borderLeft: '1px solid var(--dsw-alias-border-l2)', paddingLeft: 6, display: 'flex', flexDirection: 'column', gap: 2 } },
-                ms.map(m => h('button', { key: m, type: 'button', style: { ...rowStyle, paddingLeft: 10, background: value?.provider === p && value?.model === m ? 'var(--dsw-alias-bg-layer-2)' : 'transparent' }, onClick: () => { update('model', m); if (value?.provider !== p) update('provider', p); else { const next = { provider: p, model: m, ...(selectedEffort ? { reasoningEffort: selectedEffort } : {}) }; onChange(next); setPane('root') } } }, h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, m), check(value?.provider === p && value?.model === m)))),
+                ms.map(m => {
+                  const mid = getModelId(m)
+                  const mname = getModelName(m)
+                  const active = value?.provider === p && value?.model === mid
+                  return h('button', { key: mid, type: 'button', style: { ...rowStyle, paddingLeft: 10, background: active ? 'var(--dsw-alias-bg-layer-2)' : 'transparent' }, onClick: () => { update('model', mid); if (value?.provider !== p) update('provider', p); else { const next = { provider: p, model: mid, ...(selectedEffort ? { reasoningEffort: selectedEffort } : {}) }; onChange(next); setPane('root') } } }, h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, mname), check(active))
+                })),
             )
           }),
         ),
       ),
       pane === 'effort' && h('div', null,
         h('button', { type: 'button', style: { ...rowStyle, color: 'var(--dsw-alias-label-secondary)' }, onClick: () => setPane('root') }, h('span', null, '← Back'), h('span', { style: { fontSize: 12 } }, 'Effort')),
-        h('div', { style: { marginTop: 4 } },
-          [
-            { id: '', label: 'Default effort' },
-            { id: 'low', label: 'low' },
-            { id: 'medium', label: 'medium' },
-            { id: 'high', label: 'high' },
-          ].map(e => h('button', { key: e.id || 'default', type: 'button', style: { ...rowStyle, background: selectedEffort === e.id ? 'var(--dsw-alias-bg-layer-2)' : 'transparent' }, onClick: () => { update('reasoningEffort', e.id); setPane('root') } }, h('span', null, e.label), check(selectedEffort === e.id))),
+        selectedModelInfo === null ? h('p', { style: { ...captionStyle, margin: '8px 4px 2px' } }, 'Select a model first to configure effort.') :
+        !supportsReasoning ? h('div', null,
+          h('p', { style: { ...captionStyle, margin: '8px 4px 6px' } }, 'This model does not support reasoning effort — using provider default'),
+          h('div', { style: { marginTop: 4 } },
+            [{ id: '', label: 'Default effort' }].map(e => h('button', { key: e.id || 'default', type: 'button', style: { ...rowStyle, background: selectedEffort === e.id ? 'var(--dsw-alias-bg-layer-2)' : 'transparent' }, onClick: () => { update('reasoningEffort', e.id); setPane('root') } }, h('span', null, e.label), check(selectedEffort === e.id))),
+          ),
+          warning && h('p', { style: { ...captionStyle, margin: '8px 4px 2px', color: 'var(--dsw-alias-state-error-primary)' } }, warning),
+        ) :
+        h('div', null,
+          h('div', { style: { marginTop: 4 } },
+            [{ id: '', label: 'Default effort' }, ...availableEfforts.map(id => ({ id, label: id }))].map(e => h('button', { key: e.id || 'default', type: 'button', style: { ...rowStyle, background: selectedEffort === e.id ? 'var(--dsw-alias-bg-layer-2)' : 'transparent' }, onClick: () => { update('reasoningEffort', e.id); setPane('root') } }, h('span', null, e.label), check(selectedEffort === e.id))),
+          ),
+          warning && h('p', { style: { ...captionStyle, margin: '8px 4px 2px', color: 'var(--dsw-alias-state-error-primary)' } }, warning),
         ),
       ),
     ),
