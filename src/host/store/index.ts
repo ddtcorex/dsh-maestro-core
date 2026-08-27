@@ -141,6 +141,7 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
   projectMappings: 'gitlab.projectMappings',
   autoRereviewOnPush: 'gitlab.autoRereviewOnPush',
   reviewModel: 'review.model',
+  supervisorModel: 'supervisor.model',
   agentTimeoutMs: 'review.agentTimeoutMs',
   reviewSessionRetentionDays: 'review.sessionRetentionDays',
   tunnelHostname: 'tunnel.hostname',
