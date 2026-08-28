@@ -1,6 +1,7 @@
-import type {} from '@deepseek-ai/dsh-client-connection'
 import type { Context } from '@deepseek-ai/cordis'
-import type { RpcErrorDetailsMap, RpcResult } from '@deepseek-ai/dsh-host-apiproxy/api'
+
+type RpcResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; details: object } }
+type RpcErrorDetailsMap = { 'bad-request': { issues: object[] } }
 import { createMaestroConfigService, type MaestroConfigService } from './service.ts'
 
 export const name = 'maestro-config'
@@ -11,6 +12,7 @@ const RPC_CHANNEL = '/dsh-maestro-config'
 declare module '@deepseek-ai/cordis' {
   interface Context {
     maestroConfig: MaestroConfigService
+    connection: { rpc: { handle: (channel: string, handler: (endpoint: string, payload: unknown) => Promise<RpcResult<unknown>>, opts?: unknown) => () => void } }
   }
 }
 
