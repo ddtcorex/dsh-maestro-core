@@ -317,3 +317,30 @@ export async function readFlat(opts?: { dshHome?: string }): Promise<Record<stri
   }
   return flat
 }
+
+// --- Shared model validator for review/supervisor (Phase 2) ---
+const _modelValidator: DomainValidator = {
+  parse(value: unknown) {
+    if (value === null || value === undefined) return { ok: true }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return { ok: false, error: 'domain must be object' }
+    const v = value as Record<string, unknown>
+    // domain may contain other keys (e.g., review has agentTimeoutMs) — only validate `model` sub-object if present
+    const m = (v as any).model
+    if (m !== undefined) {
+      // legacy string shorthand (e.g., reviewModel: "deepseek-chat") is still allowed
+      if (typeof m === 'string') {
+        if (!m.trim()) return { ok: false, error: 'model must be non-empty string' }
+        return { ok: true }
+      }
+      if (typeof m !== 'object' || m === null || Array.isArray(m)) return { ok: false, error: 'model must be object or string' }
+      const mm = m as Record<string, unknown>
+      if (typeof mm.provider !== 'string' || !(mm.provider as string).trim()) return { ok: false, error: 'provider must be non-empty string' }
+      if (typeof mm.model !== 'string' || !(mm.model as string).trim()) return { ok: false, error: 'model must be non-empty string' }
+      if (mm.reasoningEffort !== undefined && typeof mm.reasoningEffort !== 'string') return { ok: false, error: 'reasoningEffort must be string' }
+      if (typeof mm.reasoningEffort === 'string' && !(mm.reasoningEffort as string).trim()) return { ok: false, error: 'reasoningEffort must be non-empty when provided' }
+    }
+    return { ok: true }
+  },
+}
+try { defineDomain('supervisor', _modelValidator) } catch {}
+try { defineDomain('review', _modelValidator) } catch {}
