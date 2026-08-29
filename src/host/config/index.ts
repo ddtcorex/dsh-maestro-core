@@ -33,7 +33,13 @@ function fail(message: string): RpcResult<never> {
   }
 }
 
-/** Publish maestroConfig over the shared store + loopback RPC for clients. */
+/**
+ * Publish maestroConfig over the shared store + loopback RPC for clients.
+ * Exposes guard/guardBlacklist/supervisor/notifier domains (Task 1 validators)
+ * via generic get/set — validation is delegated to the lib's domain validators.
+ * Host also handles '/dsh-maestro-config/get' and '/dsh-maestro-config/set'
+ * style calls through the single channel with endpoint dispatch.
+ */
 export function apply(ctx: Context): void {
   const svc = createMaestroConfigService()
   ctx.provide('maestroConfig', svc)
@@ -45,6 +51,7 @@ export function apply(ctx: Context): void {
       }
       if (endpoint === 'get') {
         if (typeof body.domain !== 'string') return fail('domain (string) is required')
+        // guard / guardBlacklist / supervisor / notifier are all valid domains here
         return ok(await svc.get(body.domain))
       }
       if (endpoint === 'set') {

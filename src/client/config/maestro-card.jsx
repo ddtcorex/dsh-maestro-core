@@ -86,6 +86,32 @@ const codeStyle = {
   wordBreak: 'break-all',
 }
 
+const textareaStyle = {
+  ...inputStyle,
+  height: 120,
+  padding: '8px 12px',
+  resize: 'vertical',
+}
+
+const tabBarStyle = {
+  display: 'flex',
+  gap: 8,
+  borderBottom: '1px solid var(--dsw-alias-border-l2)',
+  marginBottom: 16,
+}
+
+const tabButtonStyle = (active) => ({
+  padding: '8px 14px',
+  border: 'none',
+  borderBottom: active ? '2px solid var(--dsw-alias-button-primary-fill)' : '2px solid transparent',
+  background: 'transparent',
+  color: active ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)',
+  font: 'inherit',
+  fontSize: 13,
+  fontWeight: active ? 600 : 400,
+  cursor: 'pointer',
+})
+
 /** QR code centered in a light tile with an even scanner-friendly quiet zone. */
 function QrImage({ url, size = 104 }) {
   const [dataUrl, setDataUrl] = useState(null)
@@ -492,11 +518,72 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }) {
   const [lanPinEnabled, setLanPinEnabled] = useState(false)
   const [lanPin, setLanPin] = useState(null)
   const [showLanPin, setShowLanPin] = useState(false)
+  // Task 3: Guard/Blacklist/Supervisor/Notifier tabs state
+  const [activeTab, setActiveTab] = useState('guard')
+  const [guard, setGuard] = useState({})
+  const [patternsText, setPatternsText] = useState('')
+  const [placeholdersText, setPlaceholdersText] = useState('')
+  const [supervisorCfg, setSupervisorCfg] = useState({})
+  const [notifierCfg, setNotifierCfg] = useState({})
 
   const call = async (endpoint, payload) => {
     const res = await rpcCall(endpoint, payload)
     if (!res?.ok) throw new Error(res?.error?.message ?? 'RPC failed')
     return res.value
+  }
+
+  // Helpers for guard/supervisor/notifier domains via generic config RPC (Task 3)
+  const unwrap = (res) => {
+    if (res && typeof res === 'object' && 'ok' in res) {
+      if (res.ok) return res.value
+      throw new Error(res.error?.message ?? 'RPC failed')
+    }
+    return res
+  }
+  const cfgGet = async (domain) => {
+    if (!configRpcCall) throw new Error('config RPC not available')
+    const res = await configRpcCall('get', { domain })
+    return unwrap(res)
+  }
+  const cfgSet = async (domain, patch) => {
+    if (!configRpcCall) throw new Error('config RPC not available')
+    const res = await configRpcCall('set', { domain, patch })
+    return unwrap(res)
+  }
+  const saveGuard = async (patch) => {
+    setError(null)
+    const next = { ...guard, ...patch }
+    if (patch.gitProtection && guard.gitProtection) next.gitProtection = { ...guard.gitProtection, ...patch.gitProtection }
+    setGuard(next)
+    try { await cfgSet('guard', patch) } catch (e) { setError(e.message ?? String(e)) }
+  }
+  const commitBlacklistPatterns = async (text) => {
+    const patterns = text.split('\n').map(s => s.trim()).filter(Boolean)
+    setError(null)
+    try { await cfgSet('guardBlacklist', { patterns }) } catch (e) { setError(e.message ?? String(e)) }
+  }
+  const commitPlaceholders = async () => {
+    setError(null)
+    let obj = {}
+    try { obj = placeholdersText.trim() ? JSON.parse(placeholdersText) : {}; if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) throw new Error('placeholders must be JSON object') } catch (e) { setError(`placeholders JSON invalid: ${e.message ?? String(e)}`); return }
+    try { await cfgSet('guardBlacklist', { placeholders: obj }) } catch (e) { setError(e.message ?? String(e)) }
+  }
+  const saveSupervisorCfg = async (patch) => {
+    setError(null)
+    setSupervisorCfg(prev => ({ ...prev, ...patch }))
+    try { await cfgSet('supervisor', patch) } catch (e) { setError(e.message ?? String(e)) }
+  }
+  const saveNotifierCfg = async (patch) => {
+    setError(null)
+    setNotifierCfg(prev => {
+      const next = { ...prev }
+      for (const [k, v] of Object.entries(patch)) {
+        if (k === 'telegram' && typeof v === 'object' && v !== null) next.telegram = { ...(prev.telegram ?? {}), ...v }
+        else next[k] = v
+      }
+      return next
+    })
+    try { await cfgSet('notifier', patch) } catch (e) { setError(e.message ?? String(e)) }
   }
 
   const refresh = async () => {
@@ -520,6 +607,21 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }) {
           }
         })
         .catch(() => { /* supervisor domain not yet set or config service unavailable */ })
+      // Task 3: load Guard/Blacklist/Supervisor/Notifier domains
+      Promise.all([
+        cfgGet('guard').catch(() => ({})),
+        cfgGet('guardBlacklist').catch(() => ({ patterns: [], placeholders: {} })),
+        cfgGet('supervisor').catch(() => ({})),
+        cfgGet('notifier').catch(() => ({})),
+      ]).then(([g, bl, sup, not]) => {
+        setGuard(g ?? {})
+        const pats = Array.isArray(bl?.patterns) ? bl.patterns : []
+        const ph = bl?.placeholders && typeof bl.placeholders === 'object' ? bl.placeholders : {}
+        setPatternsText(pats.join('\n'))
+        setPlaceholdersText(JSON.stringify(ph, null, 2))
+        setSupervisorCfg(sup ?? {})
+        setNotifierCfg(not ?? {})
+      }).catch(() => {})
     }
     call(MAESTRO_ENDPOINTS.lanPinStatus, {})
       .then(value => { setLanPinEnabled(value.enabled); if (value.enabled) setLanPin(value.pin ?? null) })
@@ -752,6 +854,129 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }) {
     h('div', { style: sectionStyle },
       h('h4', { style: headingStyle }, 'Projects'),
       h(ProjectMappingsEditor, { mappings: config.projectMappings ?? [], onChange: mappings => saveField('projectMappings', mappings), catalog, globalReviewModel: config.reviewModel ?? null }),
+    ),
+
+    // Task 3: Guard/Blacklist/Supervisor/Notifier tabs — data-driven over guard domains
+    h('div', { style: sectionStyle },
+      h('h4', { style: headingStyle }, 'Guard / Blacklist / Supervisor / Notifier'),
+      h('div', { style: tabBarStyle },
+        h('button', { type: 'button', style: tabButtonStyle(activeTab === 'guard'), onClick: () => setActiveTab('guard') }, 'Guard'),
+        h('button', { type: 'button', style: tabButtonStyle(activeTab === 'blacklist'), onClick: () => setActiveTab('blacklist') }, 'Blacklist'),
+        h('button', { type: 'button', style: tabButtonStyle(activeTab === 'supervisor'), onClick: () => setActiveTab('supervisor') }, 'Supervisor'),
+        h('button', { type: 'button', style: tabButtonStyle(activeTab === 'notifier'), onClick: () => setActiveTab('notifier') }, 'Notifier'),
+      ),
+      activeTab === 'guard' && h('div', { 'data-tab': 'guard' },
+        h('p', { style: captionStyle }, 'Enforce publish block, git protection and cwd containment.'),
+        h(ToggleField, {
+          label: 'publishBlocked',
+          caption: 'Block publish-related commands when enabled.',
+          checked: guard.publishBlocked === true,
+          onChange: v => saveGuard({ publishBlocked: v }),
+        }),
+        h(ToggleField, {
+          label: 'gitProtection.enabled',
+          caption: 'Protect pushes to protected branches.',
+          checked: guard.gitProtection?.enabled === true,
+          onChange: v => saveGuard({ gitProtection: { enabled: v, branches: guard.gitProtection?.branches ?? ['master', 'main'] } }),
+        }),
+        h('label', { style: fieldLabelStyle }, 'gitProtection.branches (comma separated)'),
+        h('input', {
+          style: inputStyle,
+          value: (guard.gitProtection?.branches ?? ['master', 'main']).join(', '),
+          placeholder: 'master, main',
+          onChange: e => {
+            const branches = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+            saveGuard({ gitProtection: { enabled: guard.gitProtection?.enabled ?? true, branches } })
+          },
+        }),
+        h(ToggleField, {
+          label: 'cwdContainment',
+          caption: 'Contain file operations to the session cwd.',
+          checked: guard.cwdContainment === true,
+          onChange: v => saveGuard({ cwdContainment: v }),
+        }),
+        h('label', { style: fieldLabelStyle }, 'credentialPaths (comma separated)'),
+        h('input', {
+          style: inputStyle,
+          value: (guard.credentialPaths ?? []).join(', '),
+          placeholder: '~/.config/credentials.yaml, ~/.config/cloudflared',
+          onChange: e => {
+            const credentialPaths = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+            saveGuard({ credentialPaths })
+          },
+        }),
+      ),
+      activeTab === 'blacklist' && h('div', { 'data-tab': 'blacklist' },
+        h('p', { style: captionStyle }, 'One pattern per line. These are blocked from being committed or published.'),
+        h('label', { style: fieldLabelStyle }, 'patterns (one per line)'),
+        h('textarea', {
+          style: textareaStyle,
+          value: patternsText,
+          placeholder: 'example-project\nacme-shop',
+          onChange: e => setPatternsText(e.target.value),
+          onBlur: e => commitBlacklistPatterns(e.target.value),
+        }),
+        h('label', { style: fieldLabelStyle }, 'placeholders JSON'),
+        h('textarea', {
+          style: { ...textareaStyle, height: 90 },
+          value: placeholdersText,
+          placeholder: '{"example-project":"my-project"}',
+          onChange: e => setPlaceholdersText(e.target.value),
+          onBlur: () => commitPlaceholders(),
+        }),
+        h('p', { style: captionStyle }, 'Map blocked patterns to their placeholder suggestions.'),
+        h('button', { type: 'button', style: { ...secondaryButtonStyle, marginTop: 8 }, onClick: () => { commitBlacklistPatterns(patternsText); commitPlaceholders() } }, 'Save Blacklist'),
+      ),
+      activeTab === 'supervisor' && h('div', { 'data-tab': 'supervisor' },
+        h('p', { style: captionStyle }, 'Background daemon that auto-resumes crashed sessions.'),
+        h('label', { style: fieldLabelStyle }, 'intervalMs'),
+        h('input', {
+          type: 'number',
+          style: inputStyle,
+          value: supervisorCfg.intervalMs ?? '',
+          placeholder: '5000',
+          onChange: e => { const v = e.target.value === '' ? undefined : Number(e.target.value); saveSupervisorCfg({ intervalMs: v }) },
+        }),
+        h('label', { style: fieldLabelStyle }, 'downThreshold'),
+        h('input', {
+          type: 'number',
+          style: inputStyle,
+          value: supervisorCfg.downThreshold ?? '',
+          placeholder: '3',
+          onChange: e => { const v = e.target.value === '' ? undefined : Number(e.target.value); saveSupervisorCfg({ downThreshold: v }) },
+        }),
+        h(ToggleField, {
+          label: 'autoResumeEnabled',
+          caption: 'Automatically resume down sessions.',
+          checked: supervisorCfg.autoResumeEnabled === true,
+          onChange: v => saveSupervisorCfg({ autoResumeEnabled: v }),
+        }),
+      ),
+      activeTab === 'notifier' && h('div', { 'data-tab': 'notifier' },
+        h('p', { style: captionStyle }, 'Telegram notifications for Maestro events.'),
+        h('label', { style: fieldLabelStyle }, 'telegram.botToken'),
+        h('input', {
+          type: 'password',
+          autoComplete: 'off',
+          style: inputStyle,
+          value: notifierCfg.telegram?.botToken ?? '',
+          placeholder: '123456:ABC-DEF...',
+          onChange: e => saveNotifierCfg({ telegram: { botToken: e.target.value } }),
+        }),
+        h('label', { style: fieldLabelStyle }, 'telegram.chatId'),
+        h('input', {
+          style: inputStyle,
+          value: notifierCfg.telegram?.chatId ?? '',
+          placeholder: '-1001234567890',
+          onChange: e => saveNotifierCfg({ telegram: { chatId: e.target.value } }),
+        }),
+        h(ToggleField, {
+          label: 'telegram.reviewNotifications',
+          caption: 'Also notify about finished reviews.',
+          checked: notifierCfg.telegram?.reviewNotifications === true || notifierCfg.policy?.reviewNotifications === true,
+          onChange: v => saveNotifierCfg({ telegram: { reviewNotifications: v } }),
+        }),
+      ),
     ),
 
     error && h('p', { style: errorStyle }, error),
