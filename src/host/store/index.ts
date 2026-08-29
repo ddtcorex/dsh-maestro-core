@@ -344,3 +344,44 @@ const _modelValidator: DomainValidator = {
 }
 try { defineDomain('supervisor', _modelValidator) } catch {}
 try { defineDomain('review', _modelValidator) } catch {}
+const guardValidator: DomainValidator = {
+  parse(v:any) {
+    if (v==null) return {ok:true}
+    if (typeof v!=='object' || Array.isArray(v)) return {ok:false, error:'guard must be object'}
+    if (typeof v.publishBlocked!=='undefined' && typeof v.publishBlocked!=='boolean') return {ok:false, error:'publishBlocked boolean'}
+    if (v.gitProtection) {
+      const gp=v.gitProtection
+      if (typeof gp.enabled!=='boolean') return {ok:false, error:'gitProtection.enabled boolean'}
+      if (!Array.isArray(gp.branches) || gp.branches.some((b:any)=>typeof b!=='string' || !b.trim())) return {ok:false, error:'branches string[]'}
+    }
+    if (v.credentialPaths && (!Array.isArray(v.credentialPaths) || v.credentialPaths.some((p:any)=>typeof p!=='string'))) return {ok:false, error:'credentialPaths string[]'}
+    if (v.cwdContainment!==undefined && typeof v.cwdContainment!=='boolean') return {ok:false, error:'cwdContainment boolean'}
+    return {ok:true}
+  }
+}
+try { defineDomain('guard', guardValidator) } catch {}
+const guardBlacklistValidator: DomainValidator = {
+  parse(v:any) {
+    if (v==null) return {ok:true}
+    if (typeof v!=='object') return {ok:false, error:'guardBlacklist object'}
+    if (v.patterns && !Array.isArray(v.patterns)) return {ok:false, error:'patterns array'}
+    if (v.placeholders && typeof v.placeholders!=='object') return {ok:false, error:'placeholders object'}
+    return {ok:true}
+  }
+}
+try { defineDomain('guardBlacklist', guardBlacklistValidator) } catch {}
+const supervisorValidator: DomainValidator = _modelValidator
+const notifierValidator: DomainValidator = {
+  parse(v:any) {
+    if (v==null) return {ok:true}
+    if (typeof v!=='object' || Array.isArray(v)) return {ok:false, error:'notifier must be object'}
+    if (v.telegram !== undefined) {
+      if (typeof v.telegram !== 'object' || v.telegram === null || Array.isArray(v.telegram)) return {ok:false, error:'telegram must be object'}
+      if (v.telegram.botToken !== undefined && typeof v.telegram.botToken !== 'string') return {ok:false, error:'botToken string'}
+      if (v.telegram.chatId !== undefined && typeof v.telegram.chatId !== 'string') return {ok:false, error:'chatId string'}
+    }
+    return {ok:true}
+  }
+}
+try { defineDomain('notifier', notifierValidator) } catch {}
+export { guardValidator, guardBlacklistValidator, supervisorValidator, notifierValidator }
