@@ -399,26 +399,6 @@ function ToggleField({ label, caption, checked, onChange }) {
   )
 }
 
-/** Newest-first list of recorded review runs from the host's reviews.json. */
-function ReviewHistoryPanel({ rpcCall }) {
-  const [entries, setEntries] = useState(null)
-  useEffect(() => {
-    rpcCall(MAESTRO_ENDPOINTS.reviewsList, {})
-      .then(res => { if (res?.ok) setEntries(res.value ?? []) })
-      .catch(() => setEntries([]))
-  }, [])
-  if (entries === null) return h('p', { style: captionStyle }, 'Loading review history…')
-  if (entries.length === 0) return h('p', { style: captionStyle }, 'No reviews recorded yet.')
-  const icon = entry => entry.status === 'completed' ? '✅' : entry.status === 'failed' ? '⚠️' : '👀'
-  return h('ul', { style: { listStyle: 'none', margin: 0, padding: 0 } },
-    entries.map(entry => h('li', { key: entry.id, style: { padding: '6px 0', borderBottom: '1px solid var(--dsw-alias-separator-default, #333)', fontSize: 13 } },
-      h('span', null, `${icon(entry)} ${entry.projectPath} !${entry.mrIid} · ${entry.mode}${entry.trigger !== 'mention' ? ` · ${entry.trigger}` : ''}`),
-      h('div', { style: captionStyle },
-        `${new Date(entry.startedAt).toLocaleString()}${entry.summary ? ` — ${entry.summary}` : ''}${entry.error ? ` — ${entry.error}` : ''}`),
-    )),
-  )
-}
-
 /** One selectable LAN address chip + the QR of the currently selected URL. */
 function LanAccess({ proxyStatus, lanPin }) {
   const urls = proxyStatus?.lanUrls ?? []
@@ -822,7 +802,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }) {
         checked: config.autoRereviewOnPush,
         onChange: checked => saveField('autoRereviewOnPush', checked),
       }),
-      h(ReviewHistoryPanel, { rpcCall }),
     ),
 
     h('div', { style: sectionStyle },

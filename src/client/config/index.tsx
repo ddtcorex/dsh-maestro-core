@@ -7,12 +7,13 @@ import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-ico
  * DSH 0.1.x gives external settings sections a generic gear and exposes no
  * icon field in the settings.section contract (mirrors dsh-better-sidebar):
  * the marker only claims this plugin's localized row and this CSS paints the
- * Lucide "audio-lines" glyph as a currentColor mask so it follows native nav
- * hover/active colors at the shell's 16px icon rhythm.
+ * Maestro M-logo glyph as a currentColor mask so it follows native nav
+ * hover/active colors at the shell's 16px icon rhythm. The path matches the
+ * sidebar MaestroTrigger (trigger.tsx#MaestroLogo) — M2 11 L5 4 L8 9 L11 4 L14 11.
  */
 const SETTINGS_NAV_CSS = `
 
-/* maestro: replace the settings-nav fallback gear with the maestro glyph */
+/* maestro: replace the settings-nav fallback gear with the Maestro M-logo glyph */
 [${SETTINGS_NAV_MARKER}] > svg:first-child {
   display: none;
 }
@@ -23,8 +24,8 @@ const SETTINGS_NAV_CSS = `
   width: 16px;
   height: 16px;
   background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 10v3'/%3E%3Cpath d='M6 4v16'/%3E%3Cpath d='M10 8v8'/%3E%3Cpath d='M14 4v16'/%3E%3Cpath d='M18 6v12'/%3E%3Cpath d='M22 10v3'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 10v3'/%3E%3Cpath d='M6 4v16'/%3E%3Cpath d='M10 8v8'/%3E%3Cpath d='M14 4v16'/%3E%3Cpath d='M18 6v12'/%3E%3Cpath d='M22 10v3'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 `
 
