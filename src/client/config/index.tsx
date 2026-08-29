@@ -42,6 +42,8 @@ interface ClientCtx {
   effect(fn: () => () => void, label?: string): unknown
 }
 
+export const inject = ['slots', 'connection'] as const
+
 function installNavIconStyle(): () => void {
   const tag = document.createElement('style')
   tag.dataset.plugin = '@ddtcorex/dsh-maestro-config'
