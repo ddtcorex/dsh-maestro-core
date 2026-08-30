@@ -1,5 +1,5 @@
-// Verbatim legacy-card port (fields/styles preserved; see maestro-card.tsx).
-import { MaestroSettingsTab } from './maestro-card.jsx'
+// DSH-native redesign — reuses DSH tokens & primitive geometry maximally (see MaestroSettings.tsx).
+import { MaestroSettingsTab } from './MaestroSettings.js'
 import { MAESTRO_RPC_CHANNEL } from './api.js'
 import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-icon.js'
 
