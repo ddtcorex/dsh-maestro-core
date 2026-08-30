@@ -13,9 +13,10 @@ import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-ico
  */
 const SETTINGS_NAV_CSS = `
 
-/* maestro: replace the settings-nav fallback gear with the Maestro M-logo glyph */
-[${SETTINGS_NAV_MARKER}] > svg:first-child {
-  display: none;
+/* maestro: replace the settings-nav fallback gear with the Maestro M-logo glyph — same mark as sidebar/popup BrandMark */
+[${SETTINGS_NAV_MARKER}] > svg:first-child,
+[${SETTINGS_NAV_MARKER}] > svg.zWKi1a_navIcon {
+  display: none !important;
 }
 
 [${SETTINGS_NAV_MARKER}]::before {
@@ -23,9 +24,10 @@ const SETTINGS_NAV_CSS = `
   flex: none;
   width: 16px;
   height: 16px;
+  display: inline-block;
   background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 `
 

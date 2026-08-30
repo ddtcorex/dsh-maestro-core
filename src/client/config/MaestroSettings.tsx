@@ -1087,7 +1087,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       [data-maestro-tab][data-active="true"]:hover { background:var(--dsw-specific-sidebar-nav-item-active, #EBEEF2); }
       [data-maestro-tab]:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary, #4f6ef7); outline-offset:1px; }
       [data-maestro-panel] { width:100%; min-width:0; box-sizing:border-box; }
-      /* label → input dính nhau fix: flex column gap + full width */
+      /* label/input overlap fix: flex column gap + full width */
       [data-maestro-panel] label { gap:6px !important; }
       [data-maestro-row]:last-child { border-bottom:none !important; }
       [data-maestro-panel] label > span { width:100% !important; box-sizing:border-box !important; }
@@ -1450,10 +1450,17 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
     { 'data-maestro-settings-card': '', style: { display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 640, minWidth:0, boxSizing:'border-box' as any } },
     h(
       'div',
-      { style: { padding: '2px 2px 8px' } },
-      h('div', { style: { fontSize: 15, fontWeight: 600, color: t.labelPrimary as string, lineHeight: '22px' } }, 'Maestro'),
-      h('div', { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px', marginTop: 2 } }, 'Tunnel, access, review & guard — all via the shared Maestro store. Uses the same tokens and primitives as DSH settings.'),
+      { style: { padding: '2px 2px 8px', display: 'flex', gap: 10, alignItems: 'flex-start' } },
+      // Shared BrandBadge — same as dashboard sidebar/popup (BrandMark #0A84FF)
+      h('span', { 'data-maestro-logo': '', style: { width: 28, height: 28, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--dsw-alias-brand-primary, #0A84FF)', backgroundColor: '#0A84FF', color: '#fff', flex: 'none', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 0 0 1px var(--dsw-alias-border-l1)', boxSizing: 'border-box' as any, alignSelf: 'flex-start' as any, marginTop: 2 } } as any,
+        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' } as any, h('path', { d: 'M2 11 L5 4 L8 9 L11 4 L14 11', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as any))
+      ),
+      h('div', { style: { display: 'flex', flexDirection: 'column', minWidth: 0 } },
+        h('div', { style: { fontSize: 15, fontWeight: 600, color: t.labelPrimary as string, lineHeight: '22px' } }, 'Maestro'),
+        h('div', { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px', marginTop: 2 } }, 'Tunnel, access, review & guard — all via the shared Maestro store. Uses the same tokens and primitives as DSH settings.'),
+      )
     ),
+    h('style', {}, '[data-maestro-logo]{background:#0A84FF !important; background-color:#0A84FF !important; color:#fff !important;}'),
     h('div', { 'data-maestro-tabs': '', role:'tablist', 'aria-label':'Maestro settings sections' },
       ...TABS.map(tab => h('button', { key: tab.id, 'data-maestro-tab':'', 'data-active': String(activeTab===tab.id), role:'tab', 'aria-selected': activeTab===tab.id, onClick: () => setActiveTab(tab.id) }, tab.label))
     ),
