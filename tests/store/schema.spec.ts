@@ -71,3 +71,18 @@ describe('definedDomains()', () => {
     expect(names).toContain('beta')
   })
 })
+
+describe('notifier domain schema', () => {
+  it('accepts partial telegram patches and policy.reviewNotifications as boolean', async () => {
+    await set('notifier', { telegram: { botToken: 'b' } }, { dshHome: home })
+    await set('notifier', { policy: { reviewNotifications: true } }, { dshHome: home })
+    const doc = await load({ dshHome: home })
+    expect(doc.domains.notifier).toEqual({ telegram: { botToken: 'b' }, policy: { reviewNotifications: true } })
+  })
+
+  it('rejects a non-boolean reviewNotifications', async () => {
+    await expect(
+      set('notifier', { policy: { reviewNotifications: 'yes' } }, { dshHome: home }),
+    ).rejects.toThrow(/validation failed for 'notifier'.*reviewNotifications boolean/)
+  })
+})

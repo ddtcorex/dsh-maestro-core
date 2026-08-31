@@ -152,9 +152,9 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
   proxyPort: 'tunnel.proxyPort',
   proxyHost: 'tunnel.proxyHost',
   lanPinEnabled: 'tunnel.lanPinEnabled',
-  telegramBotToken: 'notify.telegram.botToken',
-  telegramChatId: 'notify.telegram.chatId',
-  telegramReviewNotifications: 'notify.policy.reviewNotifications',
+  telegramBotToken: 'notifier.telegram.botToken',
+  telegramChatId: 'notifier.telegram.chatId',
+  telegramReviewNotifications: 'notifier.policy.reviewNotifications',
 }
 
 /** Machine runtime state — never settings; owning adapters persist these in their own sidecar. */
@@ -222,6 +222,50 @@ async function migrateLegacyIfPresent(storeP: string, dshHome: string): Promise<
   return true
 }
 
+function hasFullTelegramPair(domain: unknown): boolean {
+  if (typeof domain !== 'object' || domain === null) return false
+  const telegram = (domain as Record<string, unknown>).telegram
+  if (typeof telegram !== 'object' || telegram === null) return false
+  const t = telegram as Record<string, unknown>
+  return typeof t.botToken === 'string' && t.botToken !== '' &&
+         typeof t.chatId === 'string' && t.chatId !== ''
+}
+
+/**
+ * One-shot non-destructive in-store migration: copy `notify.telegram` /
+ * `notify.policy` into the `notifier` domain, snapshot the pre-migration file
+ * to *.maestro-notify-migrated.bak, then drop `notify`. Runs at most once
+ * (`notify` no longer exists afterwards); skips when `notifier` already holds
+ * a full telegram pair; never touches the file when there is nothing to copy.
+ * Lock-free probe + check-under-lock write so load() stays lock-free in the
+ * common case (change callbacks may call load() inside a set()'s lock).
+ */
+async function migrateNotifyIntoNotifier(path: string): Promise<SettingsDoc> {
+  let doc: SettingsDoc
+  try {
+    doc = await readDoc(path)
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return { ...EMPTY_DOC, domains: {} }
+    throw err
+  }
+  if (doc.domains.notify === undefined || hasFullTelegramPair(doc.domains.notifier)) return doc
+  return withLock(path, async () => {
+    const fresh = await readDoc(path)
+    if (fresh.domains.notify === undefined || hasFullTelegramPair(fresh.domains.notifier)) return fresh
+    const n = fresh.domains.notify as Record<string, unknown>
+    const telegram = n.telegram
+    if (typeof telegram !== 'object' || telegram === null) return fresh
+    await writeFile(`${path}.maestro-notify-migrated.bak`, JSON.stringify(fresh, null, 2) + '\n', { mode: 0o600 })
+    const next: SettingsDoc = { version: 1, domains: { ...fresh.domains } }
+    const copy: Record<string, unknown> = { telegram: { ...(telegram as Record<string, unknown>) } }
+    if (n.policy && typeof n.policy === 'object') copy.policy = { ...(n.policy as Record<string, unknown>) }
+    next.domains.notifier = deepMerge(fresh.domains.notifier ?? {}, copy)
+    delete next.domains.notify
+    await writeDocLocked(path, next)
+    return next
+  })
+}
+
 // ---------------------------------------------------------------------------
 // public API
 // ---------------------------------------------------------------------------
@@ -232,7 +276,7 @@ export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
   const migrated = await migrateLegacyIfPresent(path, homeKey)
   if (migrated) cached = null // the store file changed on disk — drop any memoized doc
   if (cached && cached.key === homeKey) return cached.doc
-  const doc = await readDoc(path)
+  const doc = await migrateNotifyIntoNotifier(path)
   cached = { key: homeKey, doc }
   return doc
 }
@@ -379,6 +423,10 @@ const notifierValidator: DomainValidator = {
       if (typeof v.telegram !== 'object' || v.telegram === null || Array.isArray(v.telegram)) return {ok:false, error:'telegram must be object'}
       if (v.telegram.botToken !== undefined && typeof v.telegram.botToken !== 'string') return {ok:false, error:'botToken string'}
       if (v.telegram.chatId !== undefined && typeof v.telegram.chatId !== 'string') return {ok:false, error:'chatId string'}
+    }
+    if (v.policy !== undefined) {
+      if (typeof v.policy !== 'object' || v.policy === null || Array.isArray(v.policy)) return {ok:false, error:'policy must be object'}
+      if (v.policy.reviewNotifications !== undefined && typeof v.policy.reviewNotifications !== 'boolean') return {ok:false, error:'reviewNotifications boolean'}
     }
     return {ok:true}
   }
