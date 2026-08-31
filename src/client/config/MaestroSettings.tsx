@@ -1196,6 +1196,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       const next = { ...prev }
       for (const [k, v] of Object.entries(patch)) {
         if (k === 'telegram' && typeof v === 'object' && v !== null) (next as any).telegram = { ...((prev as any).telegram ?? {}), ...(v as any) }
+        else if (k === 'policy' && typeof v === 'object' && v !== null) (next as any).policy = { ...((prev as any).policy ?? {}), ...(v as any) }
         else (next as any)[k] = v
       }
       return next
@@ -1351,7 +1352,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
   // Nested tabs like plugin marketplace — pill bar + single panel (market catsWrap catsRow pattern)
   const TABS = [
     { id: 'tunnel', label: 'Tunnel' },
-    { id: 'notify', label: 'Notify' },
     { id: 'gitlab', label: 'GitLab' },
     { id: 'review', label: 'Review' },
     { id: 'guard', label: 'Guard' },
@@ -1376,14 +1376,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' as const, padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, status?.running ? h(Button as any, { variant: 'outline', size: 'md', disabled: busy, onClick: stopTunnel }, 'Stop tunnel') : h(Button as any, { variant: 'primary', size: 'md', disabled: busy, onClick: startTunnel }, 'Start tunnel')),
         h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Remote access — LAN'), h(LanAccess as any, { proxyStatus, lanPin: lanPinEnabled === null ? null : { enabled: lanPinEnabled, pin: lanPin, show: showLanPin, onShow: revealLanPin, onHide: () => setShowLanPin(false), onRotate: rotateLanPin, onToggle: toggleLanPin } })),
         h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Public access'), h(PublicAccess as any, { status, pin, showPin, onRevealPin: revealPin, onHidePin: () => setShowPin(false), onRotatePin: rotatePin })),
-      ),
-    notify: h(
-        'div',
-        { style: { display: 'flex', flexDirection: 'column' } },
-        h('div', { style: { padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, h('p', { style: captionStyle }, 'Sends one protected startup update with the current public-access PIN to a single chat. Leave either credential blank to disable.')),
-        h(SettingRow as any, { title: 'Bot token', description: 'Telegram bot token from @BotFather.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(FieldInput as any, { placeholder: '123456:ABC-DEF...', type: 'password', autoComplete: 'off', value: config.hasTelegramBotToken ? '••••••••' : '', onChange: (e: any) => saveField('telegramBotToken', e.target.value), style: { width: 220 } as any }), config.hasTelegramBotToken ? h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveField('telegramBotToken', '') }, 'Clear') : null) }),
-        h(SettingRow as any, { title: 'Chat ID', description: 'Target chat, e.g. -1001234567890.', control: h(FieldInput as any, { placeholder: '-1001234567890', value: config.telegramChatId ?? '', onChange: (e: any) => saveField('telegramChatId', e.target.value), style: { width: 220 } as any }) }),
-        h(ToggleRow as any, { title: 'Also notify about reviews', description: 'One message per review run with its outcome.', checked: config.telegramReviewNotifications === true, onChange: (v: boolean) => saveField('telegramReviewNotifications', v) }),
       ),
     gitlab: h(
         'div',
@@ -1439,9 +1431,10 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
     notifier: h(
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
-        h(SettingRow as any, { title: 'Bot token', description: 'Telegram bot token from @BotFather.', control: h(FieldInput as any, { type: 'password', autoComplete: 'off', value: notifierCfg.telegram?.botToken ?? '', placeholder: '123456:ABC-DEF...', onChange: (e: any) => saveNotifierCfg({ telegram: { botToken: e.target.value } }), style: { width: 260 } as any }) }),
-        h(SettingRow as any, { title: 'Chat ID', description: 'Target chat, e.g. -1001234567890.', control: h(FieldInput as any, { value: notifierCfg.telegram?.chatId ?? '', placeholder: '-1001234567890', onChange: (e: any) => saveNotifierCfg({ telegram: { chatId: e.target.value } }), style: { width: 260 } as any }) }),
-        h(ToggleRow as any, { title: 'Review notifications', description: 'Also notify about finished reviews.', checked: notifierCfg.telegram?.reviewNotifications === true || notifierCfg.policy?.reviewNotifications === true, onChange: (v: boolean) => saveNotifierCfg({ telegram: { reviewNotifications: v } }) }),
+        h('div', { style: { padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, h('p', { style: captionStyle }, 'Telegram bot settings for notifications: startup PIN, review digests, PIN rotation. Leave blank to disable.')),
+        h(SettingRow as any, { title: 'Bot token', description: 'Telegram bot token from @BotFather.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(FieldInput as any, { type: 'password', autoComplete: 'off', value: notifierCfg.telegram?.botToken ?? '', placeholder: '123456:ABC-DEF...', onChange: (e: any) => saveNotifierCfg({ telegram: { botToken: e.target.value } }), style: { width: 220 } as any }), notifierCfg.telegram?.botToken ? h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveNotifierCfg({ telegram: { botToken: '' } }) }, 'Clear') : null) }),
+        h(SettingRow as any, { title: 'Chat ID', description: 'Target chat, e.g. -1001234567890.', control: h(FieldInput as any, { value: notifierCfg.telegram?.chatId ?? '', placeholder: '-1001234567890', onChange: (e: any) => saveNotifierCfg({ telegram: { chatId: e.target.value } }), style: { width: 220 } as any }) }),
+        h(ToggleRow as any, { title: 'Review notifications', description: 'Also notify about finished reviews.', checked: notifierCfg.policy?.reviewNotifications === true, onChange: (v: boolean) => saveNotifierCfg({ policy: { reviewNotifications: v } }) }),
       ),
   }
 
