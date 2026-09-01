@@ -1055,6 +1055,84 @@ function NamedTunnelSetupNote() {
 }
 
 // ---------------------------------------------------------------------------
+// PlaceholderMappingsEditor — row-based "blocked pattern → suggestion" mappings
+// (same interaction as ProjectMappingsEditor; no JSON editing for users)
+// ---------------------------------------------------------------------------
+function PlaceholderMappingsEditor({ rows, onChange }: { rows: { pattern: string; suggestion: string }[]; onChange: (rows: { pattern: string; suggestion: string }[]) => void }) {
+  const updateRow = (index: number, field: 'pattern' | 'suggestion', value: string) => {
+    onChange(rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+  }
+  const removeRow = (index: number) => onChange(rows.filter((_, i) => i !== index))
+  const addRow = () => onChange([...rows, { pattern: '', suggestion: '' }])
+  return h(
+    'div',
+    { 'data-maestro-placeholders': '', style: { display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 8 } },
+    // Header — count + primary Add
+    h(
+      'div',
+      { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '4px 0' } },
+      h(
+        'div',
+        { style: { flex: 1, minWidth: 0 } },
+        h('div', { style: { fontSize: 14, fontWeight: 600, color: t.labelPrimary as string, lineHeight: '20px' } }, `Placeholder mappings — ${rows.length} mapped`),
+        h('div', { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px', marginTop: 2 } }, 'Blocked pattern → placeholder suggestion, one mapping per row'),
+      ),
+      h(Button as any, { variant: 'primary', size: 'md', onClick: addRow }, '+ Add mapping'),
+    ),
+    rows.length === 0
+      ? h(
+          'div',
+          {
+            'data-maestro-placeholders-empty': '',
+            style: {
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
+              padding: '20px 16px',
+              borderRadius: 12,
+              border: `1px dashed ${t.borderL2}`,
+              background: 'transparent',
+              textAlign: 'center' as const,
+            },
+          },
+          h('div', { style: { fontSize: 13, color: t.labelSecondary as string, lineHeight: '18px' } }, 'No placeholder mappings yet — add your first mapping'),
+          h(Button as any, { variant: 'outline', size: 'md', onClick: addRow }, '+ Add mapping'),
+        )
+      : h(
+          'div',
+          { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+          ...rows.map((row, i) =>
+            h(
+              'div',
+              {
+                key: i,
+                'data-maestro-mapping-row': '',
+                style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const },
+              },
+              h(FieldInput as any, {
+                value: row.pattern,
+                placeholder: 'example-project',
+                onChange: (e: any) => updateRow(i, 'pattern', e.target.value),
+                'aria-label': `Blocked pattern ${i + 1}`,
+                style: { flex: '1 1 200px', minWidth: 0 } as any,
+              }),
+              h('span', { 'aria-hidden': true, style: { color: t.labelTertiary as string, flex: 'none', fontSize: 13 } }, '→'),
+              h(FieldInput as any, {
+                value: row.suggestion,
+                placeholder: 'my-project',
+                onChange: (e: any) => updateRow(i, 'suggestion', e.target.value),
+                'aria-label': `Placeholder suggestion ${i + 1}`,
+                style: { flex: '1 1 200px', minWidth: 0 } as any,
+              }),
+              h(Button as any, { variant: 'outline', size: 'sm', onClick: () => removeRow(i), 'aria-label': `Remove mapping ${i + 1}`, title: 'Remove mapping' }, '✕'),
+            ),
+          ),
+        ),
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main — DSH-native grouped settings (DisclosureRow per domain)
 // ---------------------------------------------------------------------------
 export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; configRpcCall?: any }) {
@@ -1071,7 +1149,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
   const [showLanPin, setShowLanPin] = useState(false)
   const [guard, setGuard] = useState<any>({})
   const [patternsText, setPatternsText] = useState('')
-  const [placeholdersText, setPlaceholdersText] = useState('')
+  const [placeholderRows, setPlaceholderRows] = useState<{ pattern: string; suggestion: string }[]>([])
   const [supervisorCfg, setSupervisorCfg] = useState<any>({})
   const [notifierCfg, setNotifierCfg] = useState<any>({})
   const [activeTab, setActiveTab] = useState('tunnel')
@@ -1165,15 +1243,13 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       setError(e.message ?? String(e))
     }
   }
-  const commitPlaceholders = async () => {
+  const commitPlaceholders = async (rows: { pattern: string; suggestion: string }[]) => {
     setError(null)
-    let obj: any = {}
-    try {
-      obj = placeholdersText.trim() ? JSON.parse(placeholdersText) : {}
-      if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) throw new Error('placeholders must be JSON object')
-    } catch (e: any) {
-      setError(`placeholders JSON invalid: ${e.message ?? String(e)}`)
-      return
+    const obj: Record<string, string> = {}
+    for (const row of rows) {
+      const pattern = (row.pattern ?? '').trim()
+      if (!pattern) continue
+      obj[pattern] = (row.suggestion ?? '').trim()
     }
     try {
       await cfgSet('guardBlacklist', { placeholders: obj })
@@ -1231,7 +1307,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
           const pats = Array.isArray((bl as any)?.patterns) ? (bl as any).patterns : []
           const ph = (bl as any)?.placeholders && typeof (bl as any).placeholders === 'object' ? (bl as any).placeholders : {}
           setPatternsText(pats.join('\n'))
-          setPlaceholdersText(JSON.stringify(ph, null, 2))
+          setPlaceholderRows(Object.entries(ph).map(([pattern, suggestion]) => ({ pattern, suggestion: String(suggestion) })))
           setSupervisorCfg(sup ?? {})
           setNotifierCfg(not ?? {})
         })
@@ -1416,9 +1492,15 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         ),
         h('div', { style: { ...rowStyle, flexDirection:'column', alignItems:'stretch', gap: 8, borderBottom:'none' } as any },
           h('div', { style: rowTitleStyle }, 'Placeholder mappings'),
-          h('div', { style: rowDescStyle }, 'JSON object mapping blocked patterns to placeholder suggestions.'),
-          h(TextareaField as any, { value: placeholdersText, placeholder: '{"example-project":"my-project"}', onChange: (e: any) => setPlaceholdersText(e.target.value), onBlur: () => commitPlaceholders(), style: { minHeight: 80 } as any }),
-          h('div', { style: { marginTop: 8 } }, h(Button as any, { variant: 'outline', size: 'sm', onClick: () => { commitBlacklistPatterns(patternsText); commitPlaceholders() } }, 'Save Blacklist')),
+          h('div', { style: rowDescStyle }, 'Blocked pattern → placeholder suggestion. One mapping per row — no JSON needed.'),
+          h(PlaceholderMappingsEditor as any, {
+            rows: placeholderRows,
+            onChange: (rows: any) => {
+              setPlaceholderRows(rows)
+              commitPlaceholders(rows)
+            },
+          }),
+          h('div', { style: { marginTop: 8 } }, h(Button as any, { variant: 'outline', size: 'sm', onClick: () => { commitBlacklistPatterns(patternsText); commitPlaceholders(placeholderRows) } }, 'Save Blacklist')),
         ),
       ),
     supervisor: h(
