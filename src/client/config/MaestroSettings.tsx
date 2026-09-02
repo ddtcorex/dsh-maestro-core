@@ -38,6 +38,26 @@ const t = {
 }
 
 // ---------------------------------------------------------------------------
+// Nested pill tabs — unified with dsh-maestro-jobs (maestro-design: Minimalism & Swiss)
+// Shared geometry: 40px min-height (44px jobs → 40px unified, touch-friendly ≥24px WCAG),
+// 14px icon + 13px label gap 6, pill 999, border-l1, #EBEEF2 active, hover, focus ring.
+// Icons: lucide-style 14px SVG, stroke 1.8, currentColor.
+// ---------------------------------------------------------------------------
+type TabIcon = 'globe' | 'git' | 'search' | 'shield' | 'ban' | 'cpu' | 'bell'
+const TAB_ICON_PATHS: Record<TabIcon, string> = {
+  globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10A15 15 0 0 1 12 2z',
+  git: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5 0-1.2-.4-2.3-1-3 0-1 0-2 0-3s-1 0-2 1a11 11 0 0 0-6 0c-1-1-2-1-2-1 0 1 0 2 0 3-.6.7-1 1.8-1 3 0 3.5 3 5.5 6 5.5-.4.3-.7.7-.9 1.2-.2.5-.3 1-.3 1.5V22',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-3.5-3.5',
+  shield: 'M12 2l7 4v5c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-4z',
+  ban: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM4 12h16',
+  cpu: 'M5 12H2a2 2 0 0 1 2-2h2M12 5V2a2 2 0 0 1 2 2v2M19 12h2a2 2 0 0 1-2 2h-2M12 19v2a2 2 0 0 1-2-2v-2M8 8h8v8H8z',
+  bell: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
+}
+function TabIcon({ name, size = 14 }: { name: TabIcon; size?: number }) {
+  return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true', style: { flex: 'none' } }, h('path', { d: TAB_ICON_PATHS[name] }))
+}
+
+// ---------------------------------------------------------------------------
 // Lightweight DSH primitive mirrors (geometry + tokens identical to host)
 // Usage is identical to @deepseek-ai/dsh-client-ui-primitives at runtime.
 // ---------------------------------------------------------------------------
@@ -533,14 +553,15 @@ function ReviewModelSelector({
     position: 'absolute',
     top: 'calc(100% + 8px)',
     left: '0',
-    minWidth: '300px',
-    maxWidth: '360px',
+    minWidth: 'min(300px, calc(100vw - 32px))',
+    maxWidth: 'min(360px, calc(100vw - 24px))',
     background: t.bgLayer2 as string,
     border: `1px solid ${t.borderL2}`,
     borderRadius: '12px',
     boxShadow: t.shadowLv3 as string,
     zIndex: '20',
     padding: '6px',
+    boxSizing: 'border-box' as string,
   }
   const rowStyle: Record<string, any> = {
     width: '100%',
@@ -567,7 +588,7 @@ function ReviewModelSelector({
   const modelLabel = selectedProvider === '' ? 'Select model' : (value?.model ?? 'Select model')
   return h(
     'div',
-    { ref: rootRef as any, 'data-maestro-trigger-wrap': '', style: { position: 'relative', display: 'inline-block', maxWidth: '100%' } },
+    { ref: rootRef as any, 'data-maestro-trigger-wrap': '', style: { position: 'relative', display: 'inline-block', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' as string } },
     label ? h('span', { style: fieldLabelStyle }, label) : null,
     h(
       'button',
@@ -586,8 +607,10 @@ function ReviewModelSelector({
           alignItems: 'center',
           gap: 8,
           cursor: 'pointer',
-          maxWidth: 320,
+          maxWidth: 'min(320px, 100%)',
+          minWidth: 0,
           whiteSpace: 'nowrap',
+          boxSizing: 'border-box' as string,
         },
         onClick: () => {
           setOpen((v) => !v)
@@ -1067,17 +1090,17 @@ function PlaceholderMappingsEditor({ rows, onChange }: { rows: { pattern: string
   return h(
     'div',
     { 'data-maestro-placeholders': '', style: { display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 8 } },
-    // Header — count + primary Add
+    // Header — count + primary Add (stacks on mobile via CSS)
     h(
       'div',
-      { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '4px 0' } },
+      { 'data-maestro-placeholders-header': '', style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '4px 0' } },
       h(
         'div',
         { style: { flex: 1, minWidth: 0 } },
         h('div', { style: { fontSize: 14, fontWeight: 600, color: t.labelPrimary as string, lineHeight: '20px' } }, `Placeholder mappings — ${rows.length} mapped`),
         h('div', { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px', marginTop: 2 } }, 'Blocked pattern → placeholder suggestion, one mapping per row'),
       ),
-      h(Button as any, { variant: 'primary', size: 'md', onClick: addRow }, '+ Add mapping'),
+      h(Button as any, { variant: 'primary', size: 'md', onClick: addRow, 'data-maestro-placeholders-add': '' }, '+ Add mapping'),
     ),
     rows.length === 0
       ? h(
@@ -1101,31 +1124,97 @@ function PlaceholderMappingsEditor({ rows, onChange }: { rows: { pattern: string
         )
       : h(
           'div',
-          { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+          { 'data-maestro-placeholders-list': '', style: { display: 'flex', flexDirection: 'column', gap: 12 } },
           ...rows.map((row, i) =>
             h(
               'div',
               {
                 key: i,
-                'data-maestro-mapping-row': '',
-                style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const },
+                'data-maestro-mapping-card': '',
+                style: {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: `1px solid ${t.borderL2}`,
+                  background: t.bgLayer1 as string,
+                  boxSizing: 'border-box' as const,
+                },
               },
-              h(FieldInput as any, {
-                value: row.pattern,
-                placeholder: 'example-project',
-                onChange: (e: any) => updateRow(i, 'pattern', e.target.value),
-                'aria-label': `Blocked pattern ${i + 1}`,
-                style: { flex: '1 1 200px', minWidth: 0 } as any,
-              }),
-              h('span', { 'aria-hidden': true, style: { color: t.labelTertiary as string, flex: 'none', fontSize: 13 } }, '→'),
-              h(FieldInput as any, {
-                value: row.suggestion,
-                placeholder: 'my-project',
-                onChange: (e: any) => updateRow(i, 'suggestion', e.target.value),
-                'aria-label': `Placeholder suggestion ${i + 1}`,
-                style: { flex: '1 1 200px', minWidth: 0 } as any,
-              }),
-              h(Button as any, { variant: 'outline', size: 'sm', onClick: () => removeRow(i), 'aria-label': `Remove mapping ${i + 1}`, title: 'Remove mapping' }, '✕'),
+              // Card header: index badge + preview + X (same as Review's project card header)
+              h(
+                'div',
+                { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 } },
+                h(
+                  'div',
+                  { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 } },
+                  h(
+                    'span',
+                    {
+                      style: {
+                        flex: 'none',
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        background: 'var(--dsw-alias-bg-module-platform, #F5F6F7)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: t.labelSecondary as string,
+                      },
+                    },
+                    String(i + 1),
+                  ),
+                  h(
+                    'span',
+                    {
+                      style: {
+                        fontSize: 12,
+                        fontFamily: 'ui-monospace, monospace',
+                        color: row.pattern ? (t.labelPrimary as string) : (t.labelTertiary as string),
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        minWidth: 0,
+                      },
+                    },
+                    row.pattern ? (row.suggestion ? `${row.pattern} → ${row.suggestion}` : `${row.pattern} → …`) : 'New mapping',
+                  ),
+                ),
+                h(Button as any, { variant: 'outline', size: 'sm', onClick: () => removeRow(i), 'aria-label': `Remove mapping ${i + 1}`, title: 'Remove mapping' }, '✕'),
+              ),
+              // Fields grid — 2-col desktop, 1-col mobile (same as Review's project grid)
+              h(
+                'div',
+                { 'data-maestro-mapping-grid': '', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+                h(
+                  'label',
+                  { style: fieldLabelStyle, 'data-maestro-field': '' },
+                  'Blocked pattern',
+                  h(FieldInput as any, {
+                    value: row.pattern,
+                    placeholder: 'example-project',
+                    onChange: (e: any) => updateRow(i, 'pattern', e.target.value),
+                    'aria-label': `Blocked pattern ${i + 1}`,
+                    style: { width: '100%' } as any,
+                  }),
+                ),
+                h(
+                  'label',
+                  { style: fieldLabelStyle, 'data-maestro-field': '' },
+                  'Placeholder',
+                  h(FieldInput as any, {
+                    value: row.suggestion,
+                    placeholder: 'my-project',
+                    onChange: (e: any) => updateRow(i, 'suggestion', e.target.value),
+                    'aria-label': `Placeholder suggestion ${i + 1}`,
+                    style: { width: '100%' } as any,
+                  }),
+                ),
+              ),
             ),
           ),
         ),
@@ -1156,28 +1245,43 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
   // Mobile: inject responsive overrides once (mirrors dsh-maestro-mobile settings-sheet pill pattern + market catsWrap)
   useEffect(() => {
     const css = `
-      /* Maestro nested tabs — market-like pill bar + mobile fixes */
-      [data-maestro-tabs] { display:flex; gap:6px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; touch-action:pan-x; padding-bottom:6px; margin-bottom:10px; border-bottom:1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
+      /* Model override dropdown — prevent right-edge overlap */
+      [data-maestro-control] [data-maestro-menu] { left:auto !important; right:0 !important; }
+      [data-maestro-project-card] [data-maestro-menu] { left:auto !important; right:0 !important; }
+      [data-maestro-trigger-wrap] { min-width:0; }
+      /* Maestro nested tabs — unified with dsh-maestro-jobs (maestro-design pill bar) */
+      [data-maestro-tabs] { display:flex; gap:6px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain; touch-action:pan-x; padding:2px 2px 8px; margin:0 -2px 4px; border-bottom:1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.08)); }
       [data-maestro-tabs]::-webkit-scrollbar { display:none; width:0; height:0; }
-      [data-maestro-tab] { flex:none; height:32px; min-width:fit-content; padding:0 14px; border-radius:999px; border:1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background:transparent; color:var(--dsw-alias-label-primary); font-size:13px; line-height:20px; white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; font-family:inherit; -webkit-tap-highlight-color:transparent; }
-      [data-maestro-tab][data-active="true"] { background:var(--dsw-specific-sidebar-nav-item-active, #EBEEF2); border-color:var(--dsw-specific-sidebar-nav-item-active, #EBEEF2); color:var(--dsw-alias-label-primary); }
+      [data-maestro-tab] { flex:none; min-width:fit-content; min-height:40px; padding:0 14px; border-radius:999px; border:1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background:transparent; color:var(--dsw-alias-label-secondary); font-size:13px; line-height:20px; font-weight:500; font-family:inherit; white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; -webkit-tap-highlight-color:transparent; transition: background 150ms ease, color 150ms ease, border-color 150ms ease; touch-action:manipulation; }
+      [data-maestro-tab][data-active="true"] { background:var(--dsw-specific-sidebar-nav-item-active, #EBEEF2); border-color:var(--dsw-specific-sidebar-nav-item-active, #EBEEF2); color:var(--dsw-alias-label-primary); font-weight:600; }
       [data-maestro-tab]:hover { background:var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.06)); }
       [data-maestro-tab][data-active="true"]:hover { background:var(--dsw-specific-sidebar-nav-item-active, #EBEEF2); }
       [data-maestro-tab]:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary, #4f6ef7); outline-offset:1px; }
+      [data-maestro-tab]:active { transform: scale(.97); }
       [data-maestro-panel] { width:100%; min-width:0; box-sizing:border-box; }
       /* label/input overlap fix: flex column gap + full width */
       [data-maestro-panel] label { gap:6px !important; }
       [data-maestro-row]:last-child { border-bottom:none !important; }
       [data-maestro-panel] label > span { width:100% !important; box-sizing:border-box !important; }
+      @media (prefers-reduced-motion: reduce) {
+        [data-maestro-tab] { transition: none !important; }
+        [data-maestro-tab]:active { transform: none !important; }
+      }
       @media (max-width: 640px) {
         [data-maestro-settings-card] { max-width:100% !important; gap:6px !important; padding:0 2px !important; }
-        [data-maestro-tabs] { gap:6px !important; padding:0 0 6px !important; margin:0 -2px 10px !important; }
-        [data-maestro-tab] { height:32px !important; padding:0 12px !important; font-size:13px !important; }
-        [data-maestro-mapping-row] { flex-direction:column !important; align-items:stretch !important; gap:8px !important; }
-        [data-maestro-mapping-row] > * { flex:1 1 100% !important; width:100% !important; max-width:100% !important; }
+        [data-maestro-tabs] { gap:6px !important; padding:2px 2px 8px !important; margin:0 -2px 8px !important; }
+        [data-maestro-tab] { min-height:40px !important; height:auto !important; padding:0 12px !important; font-size:13px !important; }
+        /* Placeholder mappings — card design unified with Review project cards (header X, grid fields) */
+        [data-maestro-placeholders-header] { flex-direction: column !important; align-items: stretch !important; }
+        [data-maestro-placeholders-header] [data-maestro-placeholders-add] { width: 100% !important; justify-content: center !important; }
+        [data-maestro-placeholders-list] { gap: 12px !important; }
+        [data-maestro-mapping-card] { padding:10px !important; }
+        [data-maestro-mapping-grid] { grid-template-columns:1fr !important; gap:12px !important; }
         [data-maestro-qr-row] { flex-direction:column !important; align-items:flex-start !important; }
         [data-maestro-trigger-wrap] { max-width:100% !important; }
         [data-maestro-menu] { min-width:0 !important; max-width:calc(100vw - 32px) !important; left:0 !important; right:auto !important; }
+        [data-maestro-control] [data-maestro-menu] { left:0 !important; right:auto !important; }
+        [data-maestro-project-card] [data-maestro-menu] { left:0 !important; right:auto !important; }
         [data-maestro-panel] label { gap:8px !important; }
         div[data-maestro-row] { flex-direction:column !important; align-items:stretch !important; padding:12px 0 !important; }
         [data-maestro-row-text] { padding-right:0 !important; }
@@ -1190,7 +1294,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         [data-maestro-project-profile-row] > label { flex:1 1 100% !important; width:100% !important; }
       }
       @media (max-width: 390px) {
-        [data-maestro-tab] { height:30px !important; padding:0 10px !important; font-size:12px !important; }
+        [data-maestro-tab] { min-height:38px !important; height:auto !important; padding:0 10px !important; font-size:12px !important; }
       }
     `
     const tag = document.createElement('style')
@@ -1425,16 +1529,16 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
     }
   }
 
-  // Nested tabs like plugin marketplace — pill bar + single panel (market catsWrap catsRow pattern)
-  const TABS = [
-    { id: 'tunnel', label: 'Tunnel' },
-    { id: 'gitlab', label: 'GitLab' },
-    { id: 'review', label: 'Review' },
-    { id: 'guard', label: 'Guard' },
-    { id: 'blacklist', label: 'Blacklist' },
-    { id: 'supervisor', label: 'Supervisor' },
-    { id: 'notifier', label: 'Notifier' },
-  ] as const
+  // Nested tabs — unified pill bar with icons (maestro-design, matches dsh-maestro-jobs)
+  const TABS: Array<{ id: string; label: string; icon: TabIcon }> = [
+    { id: 'tunnel', label: 'Tunnel', icon: 'globe' },
+    { id: 'gitlab', label: 'GitLab', icon: 'git' },
+    { id: 'review', label: 'Review', icon: 'search' },
+    { id: 'guard', label: 'Guard', icon: 'shield' },
+    { id: 'blacklist', label: 'Blacklist', icon: 'ban' },
+    { id: 'supervisor', label: 'Supervisor', icon: 'cpu' },
+    { id: 'notifier', label: 'Notifier', icon: 'bell' },
+  ]
 
   const tabContents: Record<string, unknown> = {
     tunnel: h(
@@ -1537,7 +1641,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
     ),
     h('style', {}, '[data-maestro-logo]{background:#0A84FF !important; background-color:#0A84FF !important; color:#fff !important;}'),
     h('div', { 'data-maestro-tabs': '', role:'tablist', 'aria-label':'Maestro settings sections' },
-      ...TABS.map(tab => h('button', { key: tab.id, 'data-maestro-tab':'', 'data-active': String(activeTab===tab.id), role:'tab', 'aria-selected': activeTab===tab.id, onClick: () => setActiveTab(tab.id) }, tab.label))
+      ...TABS.map(tab => h('button', { key: tab.id, 'data-maestro-tab':'', 'data-active': String(activeTab===tab.id), role:'tab', 'aria-selected': activeTab===tab.id, onClick: (e: any) => { setActiveTab(tab.id); try { e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }) } catch {} } }, h(TabIcon as any, { name: tab.icon }), tab.label))
     ),
     h('div', { 'data-maestro-panel': activeTab, style: { display:'flex', flexDirection:'column', gap:10, minWidth:0 } }, tabContents[activeTab] as any),
     error ? h('p', { style: { color: t.stateError as string, fontSize: 12, margin: '8px 0 0', padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent)', border: `1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent)` } }, error) : null,
