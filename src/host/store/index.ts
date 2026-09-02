@@ -152,6 +152,8 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
   proxyPort: 'tunnel.proxyPort',
   proxyHost: 'tunnel.proxyHost',
   lanPinEnabled: 'tunnel.lanPinEnabled',
+  lanPort: 'tunnel.lanPort',
+  lanHost: 'tunnel.lanHost',
   telegramBotToken: 'notifier.telegram.botToken',
   telegramChatId: 'notifier.telegram.chatId',
   telegramReviewNotifications: 'notifier.policy.reviewNotifications',

@@ -18,7 +18,8 @@ describe('single-source key map', () => {
       'projectMappings', 'autoRereviewOnPush', 'reviewModel', 'agentTimeoutMs',
       'reviewSessionRetentionDays', 'tunnelMode', 'quickTarget', 'tunnelId',
       'tunnelCredentialsFile', 'tunnelHostname', 'proxyPort', 'proxyHost',
-      'lanPinEnabled', 'telegramBotToken', 'telegramChatId', 'telegramReviewNotifications',
+      'lanPinEnabled', 'lanPort', 'lanHost', 'telegramBotToken', 'telegramChatId',
+      'telegramReviewNotifications',
     ]) expect(DOMAIN_KEY_MAP[k], k).toBeTruthy()
     expect(RUNTIME_KEYS).toEqual(['lastTunnelRunning'])
     expect(DOMAIN_KEY_MAP.lastTunnelRunning).toBeUndefined()
@@ -32,6 +33,8 @@ describe('splitLegacyPatch / writeLegacyPatch / readFlat round-trip', () => {
       gitlabToken: 'tok',
       reviewModel: { provider: 'openai', model: 'gpt-x' },
       tunnelHostname: 'h.example.com',
+      lanPort: 3080,
+      lanHost: '0.0.0.0',
       telegramChatId: '42',
       webhookPort: 3000,
     }, { dshHome: home })
@@ -40,6 +43,8 @@ describe('splitLegacyPatch / writeLegacyPatch / readFlat round-trip', () => {
     expect(flat.gitlabToken).toBe('tok')
     expect(flat.reviewModel).toEqual({ provider: 'openai', model: 'gpt-x' })
     expect(flat.tunnelHostname).toBe('h.example.com')
+    expect(flat.lanPort).toBe(3080)
+    expect(flat.lanHost).toBe('0.0.0.0')
     expect(flat.telegramChatId).toBe('42')
     expect(flat.webhookPort).toBe(3000)
   })
