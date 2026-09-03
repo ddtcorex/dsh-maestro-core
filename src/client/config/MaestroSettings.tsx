@@ -1400,11 +1400,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       .then((saved) => setConfig((prev: any) => ({ ...prev, ...saved })))
       .catch(() => {})
     if (configRpcCall) {
-      configRpcCall('get', { domain: 'supervisor' })
-        .then((res: any) => {
-          if (res?.ok && res.value?.model) setConfig((prev: any) => ({ ...prev, supervisorModel: res.value.model }))
-        })
-        .catch(() => {})
       Promise.all([cfgGet('guard').catch(() => ({})), cfgGet('guardBlacklist').catch(() => ({ patterns: [], placeholders: {} })), cfgGet('supervisor').catch(() => ({})), cfgGet('notifier').catch(() => ({}))])
         .then(([g, bl, sup, not]) => {
           setGuard(g ?? {})
@@ -1516,12 +1511,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
   const saveField = async (field: string, value: unknown) => {
     setError(null)
     setConfig((prev: any) => ({ ...prev, [field]: value }))
-    if (field === 'supervisorModel' && configRpcCall) {
-      try {
-        const res = await configRpcCall('set', { domain: 'supervisor', patch: { model: value } })
-        if (res?.ok) return
-      } catch {}
-    }
     try {
       await call(MAESTRO_ENDPOINTS.saveConfig, { [field]: value })
     } catch (err: any) {
@@ -1574,7 +1563,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         { style: { display: 'flex', flexDirection: 'column' } },
         h(ToggleRow as any, { title: 'Re-review on push', description: 'When new commits are pushed, trigger an automatic re-review.', checked: config.autoRereviewOnPush === true, onChange: (v: boolean) => saveField('autoRereviewOnPush', v) }),
         h(SettingRow as any, { title: 'Global review model', description: 'Model for automated reviews. Empty = DSH default.', control: h(ReviewModelSelector as any, { value: config.reviewModel ?? null, catalog, fallbackValue: catalog?.current ?? null, fallbackLabel: 'Use DSH default', onChange: (v: any) => saveField('reviewModel', v), label: null }) }),
-        h(SettingRow as any, { title: 'Supervisor model', description: 'Model for auto-fixing DSH Web crashes.', control: h(ReviewModelSelector as any, { value: config.supervisorModel ?? null, catalog, fallbackValue: catalog?.current ?? null, fallbackLabel: 'Use DSH default', onChange: (v: any) => saveField('supervisorModel', v), label: null }) }),
         h(ProjectMappingsEditor as any, { mappings: config.projectMappings ?? [], onChange: (mappings: any) => saveField('projectMappings', mappings), catalog, globalReviewModel: config.reviewModel ?? null }),
       ),
     guard: h(
