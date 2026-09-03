@@ -947,33 +947,37 @@ function ProjectMappingsEditor({ mappings, onChange, catalog, globalReviewModel 
   )
 }
 
-function SecretInput({ label, placeholder, hasSaved, onSave }: { label: string; placeholder: string; hasSaved?: boolean; onSave: (v: string) => void }) {
+// SecretField — control-sized secret input for SettingRow controls (no label).
+// The server never echoes secrets back (getConfig masks them to has* flags),
+// so the field stays EMPTY and commits a typed draft on blur / Enter; an
+// untouched field keeps the stored secret and Clear writes '' to erase it.
+// Never render mask bullets ('••••') as the input value: a controlled input
+// locked to a constant string swallows keystrokes and saves bullet-contaminated
+// text on the first change (the GitLab-token-not-editable regression).
+function SecretField({ placeholder, hasSaved, onSave, width }: { placeholder: string; hasSaved?: boolean; onSave: (v: string) => void; width?: number }) {
   const [draft, setDraft] = useState('')
-  const clear = () => {
-    setDraft('')
-    onSave('')
+  useEffect(() => {
+    if (!hasSaved) setDraft('')
+  }, [hasSaved])
+  const commit = () => {
+    if (draft !== '') {
+      onSave(draft)
+      setDraft('')
+    }
   }
-  return h(
-    'div',
-    null,
-    h('label', { style: fieldLabelStyle }, label),
-    h(
-      'div',
-      { style: { display: 'flex', gap: 8 } },
-      h(FieldInput as any, {
-        placeholder: hasSaved === true ? 'saved — leave blank to keep' : placeholder,
-        type: 'password',
-        autoComplete: 'off',
-        value: draft,
-        onChange: (e: any) => setDraft(e.target.value),
-        onBlur: () => {
-          if (draft !== '') onSave(draft)
-        },
-        style: { flex: 1 } as any,
-      }),
-      hasSaved === true ? h(Button as any, { variant: 'outline', size: 'sm', onClick: clear }, 'Clear') : null,
-    ),
-  )
+  return h(FieldInput as any, {
+    placeholder: hasSaved === true ? 'saved — type new value to replace' : placeholder,
+    type: 'password',
+    autoComplete: 'off',
+    value: draft,
+    onChange: (e: any) => setDraft(e.target.value),
+    onBlur: commit,
+    onKeyDown: (e: any) => {
+      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+    },
+    'aria-label': placeholder,
+    style: { width: width ?? 200 } as any,
+  })
 }
 
 function ToggleField({ label, caption, checked, onChange }: { label: string; caption?: string; checked?: boolean; onChange: (v: boolean) => void }) {
@@ -1508,11 +1512,32 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       setBusy(false)
     }
   }
+  const SECRET_SAVE_FLAGS: Record<string, string> = { gitlabToken: 'hasGitlabToken', webhookSecret: 'hasWebhookSecret' }
   const saveField = async (field: string, value: unknown) => {
     setError(null)
-    setConfig((prev: any) => ({ ...prev, [field]: value }))
+    // Optimistic update — for secrets only flip the has* presence flag, never
+    // stash the raw secret in state (the server never echoes it back).
+    setConfig((prev: any) => {
+      const next = { ...prev, [field]: value }
+      const flag = SECRET_SAVE_FLAGS[field]
+      if (flag) {
+        delete next[field]
+        next[flag] = value !== ''
+      }
+      return next
+    })
     try {
-      await call(MAESTRO_ENDPOINTS.saveConfig, { [field]: value })
+      // saveConfig returns the masked config — merge it so has* flags (and a
+      // cleared secret) sync without waiting for a reload.
+      const saved = await call(MAESTRO_ENDPOINTS.saveConfig, { [field]: value })
+      if (saved && typeof saved === 'object') {
+        setConfig((prev: any) => {
+          const next = { ...prev, ...(saved as object) }
+          const flag = SECRET_SAVE_FLAGS[field]
+          if (flag) delete next[field]
+          return next
+        })
+      }
     } catch (err: any) {
       setError(err.message)
     }
@@ -1550,9 +1575,9 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
         h(SettingRow as any, { title: 'GitLab base URL', description: 'e.g. https://gitlab.example.com', control: h(FieldInput as any, { placeholder: 'https://gitlab.example.com', value: config.gitlabBaseUrl ?? '', onChange: (e: any) => saveField('gitlabBaseUrl', e.target.value), style: { width: 260 } as any }) }),
-        h(SettingRow as any, { title: 'GitLab token', description: 'Personal access token with api scope.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(FieldInput as any, { type: 'password', autoComplete: 'off', value: config.hasGitlabToken ? '••••••••' : '', placeholder: 'GitLab token', onChange: (e: any) => saveField('gitlabToken', e.target.value), style: { width: 200 } as any }), config.hasGitlabToken ? h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveField('gitlabToken', '') }, 'Clear') : null) }),
+        h(SettingRow as any, { title: 'GitLab token', description: 'Personal access token with api scope.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(SecretField as any, { placeholder: 'GitLab token', hasSaved: config.hasGitlabToken === true, width: 200, onSave: (v: string) => saveField('gitlabToken', v) }), config.hasGitlabToken ? h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveField('gitlabToken', '') }, 'Clear') : null) }),
         h(SettingRow as any, { title: 'Bot username', description: 'Username of the bot that posts reviews.', control: h(FieldInput as any, { placeholder: 'maestro-bot', value: config.botUsername ?? '', onChange: (e: any) => saveField('botUsername', e.target.value), style: { width: 220 } as any }) }),
-        h(SettingRow as any, { title: 'Webhook secret', description: 'Secret token for GitLab webhooks.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(FieldInput as any, { type: 'password', autoComplete: 'off', value: config.hasWebhookSecret ? '••••••••' : '', placeholder: 'Webhook secret', onChange: (e: any) => saveField('webhookSecret', e.target.value), style: { width: 200 } as any }), h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveField('webhookSecret', generateWebhookSecret()) }, 'Generate')) }),
+        h(SettingRow as any, { title: 'Webhook secret', description: 'Secret token for GitLab webhooks.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(SecretField as any, { placeholder: 'Webhook secret', hasSaved: config.hasWebhookSecret === true, width: 200, onSave: (v: string) => saveField('webhookSecret', v) }), h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveField('webhookSecret', generateWebhookSecret()) }, 'Generate')) }),
         h('div', { style: { padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 6 } },
           h('p', { style: captionStyle }, 'In GitLab: Settings → Webhooks, Secret token = this value, enable Merge request events. Webhook URL:'),
           h('div', { style: { fontFamily: 'ui-monospace, monospace', fontSize: 12, color: t.labelPrimary as string, wordBreak: 'break-all', padding: '10px 12px', borderRadius: 8, background: t.bgLayer3 as string, border: `1px solid ${t.borderL2}`, overflowWrap:'anywhere' as any } }, gitlabWebhookUrl(config.tunnelHostname)),
@@ -1606,7 +1631,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
         h('div', { style: { padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, h('p', { style: captionStyle }, 'Telegram bot settings for notifications: startup PIN, review digests, PIN rotation. Leave blank to disable.')),
-        h(SettingRow as any, { title: 'Bot token', description: 'Telegram bot token from @BotFather.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(FieldInput as any, { type: 'password', autoComplete: 'off', value: notifierCfg.telegram?.botToken ?? '', placeholder: '123456:ABC-DEF...', onChange: (e: any) => saveNotifierCfg({ telegram: { botToken: e.target.value } }), style: { width: 220 } as any }), notifierCfg.telegram?.botToken ? h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveNotifierCfg({ telegram: { botToken: '' } }) }, 'Clear') : null) }),
+        h(SettingRow as any, { title: 'Bot token', description: 'Telegram bot token from @BotFather.', control: h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } }, h(SecretField as any, { placeholder: '123456:ABC-DEF...', hasSaved: (notifierCfg.telegram?.botToken ?? '') !== '', width: 220, onSave: (v: string) => saveNotifierCfg({ telegram: { botToken: v } }) }), notifierCfg.telegram?.botToken ? h(Button as any, { variant: 'outline', size: 'md', onClick: () => saveNotifierCfg({ telegram: { botToken: '' } }) }, 'Clear') : null) }),
         h(SettingRow as any, { title: 'Chat ID', description: 'Target chat, e.g. -1001234567890.', control: h(FieldInput as any, { value: notifierCfg.telegram?.chatId ?? '', placeholder: '-1001234567890', onChange: (e: any) => saveNotifierCfg({ telegram: { chatId: e.target.value } }), style: { width: 220 } as any }) }),
         h(ToggleRow as any, { title: 'Review notifications', description: 'Also notify about finished reviews.', checked: notifierCfg.policy?.reviewNotifications === true, onChange: (v: boolean) => saveNotifierCfg({ policy: { reviewNotifications: v } }) }),
       ),

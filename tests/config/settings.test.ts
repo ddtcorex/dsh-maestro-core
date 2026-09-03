@@ -7,13 +7,13 @@ const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../src/clien
 const read = (f: string) => readFileSync(resolve(clientDir, f), 'utf8')
 
 describe('Task 3: Settings UI tabs', () => {
-  it('maestro-card.jsx exists and renders Guard tab', () => {
-    const src = read('maestro-card.jsx')
+  it('live settings card renders Guard tab', () => {
+    const src = read('MaestroSettings.tsx')
     expect(src).toContain('Guard')
   })
 
   it('Settings has 4 tabs: Guard | Blacklist | Supervisor | Notifier', () => {
-    const src = read('maestro-card.jsx')
+    const src = read('MaestroSettings.tsx')
     expect(src).toContain('Guard')
     expect(src).toContain('Blacklist')
     expect(src).toContain('Supervisor')
@@ -21,26 +21,26 @@ describe('Task 3: Settings UI tabs', () => {
   })
 
   it('Guard tab has toggles for publishBlocked, gitProtection.enabled, cwdContainment', () => {
-    const src = read('maestro-card.jsx')
+    const src = read('MaestroSettings.tsx')
     expect(src).toContain('publishBlocked')
     expect(src).toContain('gitProtection')
     expect(src).toContain('cwdContainment')
   })
 
   it('Blacklist tab has textarea for patterns (one per line) plus placeholders JSON', () => {
-    const src = read('maestro-card.jsx')
+    const src = read('MaestroSettings.tsx')
     expect(src).toMatch(/textarea/i)
     expect(src).toContain('patterns')
     expect(src).toContain('placeholders')
   })
 
   it('Supervisor tab has intervalMs etc', () => {
-    const src = read('maestro-card.jsx')
+    const src = read('MaestroSettings.tsx')
     expect(src).toContain('intervalMs')
   })
 
   it('Notifier tab has telegram fields', () => {
-    const src = read('maestro-card.jsx')
+    const src = read('MaestroSettings.tsx')
     expect(src).toContain('telegram')
   })
 
