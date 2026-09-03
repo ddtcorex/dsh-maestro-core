@@ -141,7 +141,6 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
   projectMappings: 'gitlab.projectMappings',
   autoRereviewOnPush: 'gitlab.autoRereviewOnPush',
   reviewModel: 'review.model',
-  supervisorModel: 'supervisor.model',
   agentTimeoutMs: 'review.agentTimeoutMs',
   reviewSessionRetentionDays: 'review.sessionRetentionDays',
   tunnelHostname: 'tunnel.hostname',
@@ -364,7 +363,7 @@ export async function readFlat(opts?: { dshHome?: string }): Promise<Record<stri
   return flat
 }
 
-// --- Shared model validator for review/supervisor (Phase 2) ---
+// --- Shared model validator for review (Phase 2) ---
 const _modelValidator: DomainValidator = {
   parse(value: unknown) {
     if (value === null || value === undefined) return { ok: true }
@@ -388,7 +387,6 @@ const _modelValidator: DomainValidator = {
     return { ok: true }
   },
 }
-try { defineDomain('supervisor', _modelValidator) } catch {}
 try { defineDomain('review', _modelValidator) } catch {}
 const guardValidator: DomainValidator = {
   parse(v:any) {
@@ -416,7 +414,6 @@ const guardBlacklistValidator: DomainValidator = {
   }
 }
 try { defineDomain('guardBlacklist', guardBlacklistValidator) } catch {}
-const supervisorValidator: DomainValidator = _modelValidator
 const notifierValidator: DomainValidator = {
   parse(v:any) {
     if (v==null) return {ok:true}
@@ -434,4 +431,4 @@ const notifierValidator: DomainValidator = {
   }
 }
 try { defineDomain('notifier', notifierValidator) } catch {}
-export { guardValidator, guardBlacklistValidator, supervisorValidator, notifierValidator }
+export { guardValidator, guardBlacklistValidator, notifierValidator }
