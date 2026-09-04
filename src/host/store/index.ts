@@ -140,6 +140,7 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
   webhookPort: 'gitlab.webhookPort',
   projectMappings: 'gitlab.projectMappings',
   autoRereviewOnPush: 'gitlab.autoRereviewOnPush',
+  autoReviewOnAssign: 'gitlab.autoReviewOnAssign',
   reviewModel: 'review.model',
   agentTimeoutMs: 'review.agentTimeoutMs',
   reviewSessionRetentionDays: 'review.sessionRetentionDays',

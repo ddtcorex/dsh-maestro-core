@@ -15,7 +15,7 @@ describe('single-source key map', () => {
   it('covers the full MaestroUserConfig surface minus runtime keys', () => {
     for (const k of [
       'gitlabBaseUrl', 'gitlabToken', 'botUsername', 'webhookSecret', 'webhookPort',
-      'projectMappings', 'autoRereviewOnPush', 'reviewModel', 'agentTimeoutMs',
+      'projectMappings', 'autoRereviewOnPush', 'autoReviewOnAssign', 'reviewModel', 'agentTimeoutMs',
       'reviewSessionRetentionDays', 'tunnelMode', 'quickTarget', 'tunnelId',
       'tunnelCredentialsFile', 'tunnelHostname', 'proxyPort', 'proxyHost',
       'lanPinEnabled', 'lanPort', 'lanHost', 'telegramBotToken', 'telegramChatId',
