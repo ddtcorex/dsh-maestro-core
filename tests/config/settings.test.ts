@@ -56,4 +56,17 @@ describe('Task 3: Settings UI tabs', () => {
     expect(entry).toContain('configRpcCall')
     expect(entry).toContain('/dsh-maestro-config')
   })
+
+  it('review section has the global Review-on-assign toggle', () => {
+    const src = read('MaestroSettings.tsx')
+    expect(src).toContain('Review on assign')
+    expect(src).toContain('autoReviewOnAssign')
+  })
+
+  it('project rows have per-project push/assign tri-state overrides', () => {
+    const src = read('MaestroSettings.tsx')
+    expect(src).toContain('rereviewOnPush')
+    expect(src).toContain('reviewOnAssign')
+    expect(src).toContain('Inherit (global)')
+  })
 })
