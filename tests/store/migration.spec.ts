@@ -10,7 +10,7 @@ afterEach(async () => { await rm(home, { recursive: true, force: true }) })
 
 const LEGACY_DIR = () => join(home, 'dsh-maestro-review')
 const LEGACY = () => join(LEGACY_DIR(), 'config.json')
-const STORE = () => join(home, 'maestro', 'settings.json')
+const STORE = () => join(home, 'dsh-maestro-config', 'settings.json')
 
 const LEGACY_15 = {
   gitlabBaseUrl: 'https://gitlab.example.com',
@@ -75,7 +75,7 @@ describe('legacy migration', () => {
   })
 
   it('skips migration when the new store already exists', async () => {
-    await mkdir(join(home, 'maestro'), { recursive: true })
+    await mkdir(join(home, 'dsh-maestro-config'), { recursive: true })
     await writeFile(STORE(), JSON.stringify({ version: 1, domains: { mine: { a: 1 } } }), { mode: 0o600 })
     await seedLegacy(LEGACY_15)
     const doc = await load({ dshHome: home })
@@ -125,7 +125,7 @@ describe('cache invalidation after late migration', () => {
 
 describe('notify -> notifier domain migration', () => {
   async function seedStore(doc: unknown): Promise<void> {
-    await mkdir(join(home, 'maestro'), { recursive: true })
+    await mkdir(join(home, 'dsh-maestro-config'), { recursive: true })
     await writeFile(STORE(), JSON.stringify(doc), { mode: 0o600 })
   }
 

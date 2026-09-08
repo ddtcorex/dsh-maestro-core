@@ -33,13 +33,13 @@ describe('out-of-band freshness', () => {
   })
 })
 
-const storePath = () => join(home, 'maestro', 'settings.json')
+const storePath = () => join(home, 'dsh-maestro-config', 'settings.json')
 
 describe('config-lib store basics', () => {
   it('load on empty dir returns an empty v1 doc and creates nothing on disk', async () => {
     const doc = await load({ dshHome: home })
     expect(doc).toEqual({ version: 1, domains: {} })
-    await expect(readdir(join(home, 'maestro'))).rejects.toThrow()
+    await expect(readdir(join(home, 'dsh-maestro-config'))).rejects.toThrow()
   })
 
   it('set() writes atomically with mode 600 and no temp leftovers', async () => {
@@ -49,7 +49,7 @@ describe('config-lib store basics', () => {
     expect(raw.domains.tunnel).toEqual({ hostname: 'x.example.com' })
     const st = await stat(storePath())
     expect(st.mode & 0o777).toBe(0o600)
-    const dirFiles = await readdir(join(home, 'maestro'))
+    const dirFiles = await readdir(join(home, 'dsh-maestro-config'))
     expect(dirFiles.filter((f) => f !== 'settings.json')).toEqual([])
   })
 
@@ -90,7 +90,7 @@ describe('config-lib store basics', () => {
     process.env.DSH_HOME = join(home, 'env-home')
     try {
       await set('memory', { k: 1 }) // no explicit dshHome → env-home
-      const raw = JSON.parse(await readFile(join(home, 'env-home', 'maestro', 'settings.json'), 'utf8'))
+      const raw = JSON.parse(await readFile(join(home, 'env-home', 'dsh-maestro-config', 'settings.json'), 'utf8'))
       expect(raw.domains.memory).toEqual({ k: 1 })
     } finally {
       delete process.env.DSH_HOME

@@ -8,7 +8,7 @@ let home: string
 beforeEach(async () => { home = await mkdtemp(join(tmpdir(), 'cfgschema-')); resetForTests() })
 afterEach(async () => { await rm(home, { recursive: true, force: true }) })
 
-const storePath = () => join(home, 'maestro', 'settings.json')
+const storePath = () => join(home, 'dsh-maestro-config', 'settings.json')
 
 /** Minimal validator factory: checks known keys' types, tolerates extra keys. */
 function typeValidator(rules: Record<string, string>) {

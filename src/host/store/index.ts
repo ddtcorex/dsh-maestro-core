@@ -24,7 +24,7 @@ function resolveDshHome(explicit?: string): string {
 }
 
 function storePath(opts?: { dshHome?: string }): string {
-  return join(resolveDshHome(opts?.dshHome), 'maestro', 'settings.json')
+  return join(resolveDshHome(opts?.dshHome), 'dsh-maestro-config', 'settings.json')
 }
 
 /** Register a validator for a domain you own. Writes to it are validated on every set(). */
