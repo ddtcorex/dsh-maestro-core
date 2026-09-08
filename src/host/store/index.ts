@@ -17,7 +17,7 @@ const EMPTY_DOC: SettingsDoc = { version: 1, domains: {} }
 const domainValidators = new Map<string, DomainValidator>()
 const changeCbs = new Set<(domain: string) => void>()
 
-let cached: { key: string; doc: SettingsDoc } | null = null
+let cached: { key: string; doc: SettingsDoc; mtimeMs: number } | null = null
 
 function resolveDshHome(explicit?: string): string {
   return explicit ?? process.env.DSH_HOME ?? join(homedir(), '.dsh')
@@ -277,9 +277,20 @@ export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
   const homeKey = resolveDshHome(opts?.dshHome)
   const migrated = await migrateLegacyIfPresent(path, homeKey)
   if (migrated) cached = null // the store file changed on disk — drop any memoized doc
-  if (cached && cached.key === homeKey) return cached.doc
+  if (cached && cached.key === homeKey) {
+    // One stat per load: out-of-band edits (other processes) must surface
+    // without a restart.
+    try {
+      const st = await stat(path)
+      if (st.mtimeMs === cached.mtimeMs) return cached.doc
+    } catch {
+      return cached.doc // stat failed (vanished/locked) — serve stale, never break boot
+    }
+  }
   const doc = await migrateNotifyIntoNotifier(path)
-  cached = { key: homeKey, doc }
+  let mtimeMs = 0
+  try { mtimeMs = (await stat(path)).mtimeMs } catch {}
+  cached = { key: homeKey, doc, mtimeMs }
   return doc
 }
 
@@ -305,7 +316,9 @@ export async function set(
     }
     doc.domains[domain] = merged
     await writeDocLocked(path, doc)
-    cached = { key, doc }
+    let mtimeMs = 0
+    try { mtimeMs = (await stat(path)).mtimeMs } catch {}
+    cached = { key, doc, mtimeMs }
   })
   for (const cb of changeCbs) cb(domain)
 }

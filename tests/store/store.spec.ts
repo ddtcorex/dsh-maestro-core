@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm, stat, readFile, readdir } from 'node:fs/promises'
+import { mkdtemp, rm, stat, readFile, readdir, writeFile, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { load, get, set, onChange, resetForTests } from '../src/index.ts'
@@ -11,6 +11,27 @@ beforeEach(async () => {
   resetForTests()
 })
 afterEach(async () => { await rm(home, { recursive: true, force: true }) })
+
+describe('out-of-band freshness', () => {
+  it('sees a store edit made behind its back (direct fs write, not set())', async () => {
+    await set('tunnel', { hostname: 'a.example.com' }, { dshHome: home })
+    expect(await get('tunnel', { dshHome: home })).toEqual({ hostname: 'a.example.com' })
+    // Another process edits the file: rewrite it directly, bypassing set().
+    const raw = JSON.parse(await readFile(storePath(), 'utf8'))
+    raw.domains.tunnel.hostname = 'b.example.com'
+    await writeFile(storePath(), JSON.stringify(raw))
+    // mtime granularity: filesystems vary — force a distinct mtime when equal.
+    const after = await stat(storePath())
+    await utimes(storePath(), after.atime, new Date(after.mtimeMs + 2000))
+    expect(await get('tunnel', { dshHome: home })).toEqual({ hostname: 'b.example.com' })
+  })
+
+  it('serves the memoized doc when the store file vanishes mid-run', async () => {
+    await set('tunnel', { hostname: 'x.example.com' }, { dshHome: home })
+    await rm(storePath(), { force: true })
+    expect(await get('tunnel', { dshHome: home })).toEqual({ hostname: 'x.example.com' })
+  })
+})
 
 const storePath = () => join(home, 'maestro', 'settings.json')
 
