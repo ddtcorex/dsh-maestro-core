@@ -154,6 +154,8 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
   lanPinEnabled: 'tunnel.lanPinEnabled',
   lanPort: 'tunnel.lanPort',
   lanHost: 'tunnel.lanHost',
+  /** Login-cookie lifetime in hours for the remote PIN gate (0 = session cookie). */
+  pinSessionTtlHours: 'tunnel.pinSessionTtlHours',
   telegramBotToken: 'notifier.telegram.botToken',
   telegramChatId: 'notifier.telegram.chatId',
   telegramReviewNotifications: 'notifier.policy.reviewNotifications',

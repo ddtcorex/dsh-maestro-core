@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -18,7 +18,7 @@ describe('single-source key map', () => {
       'projectMappings', 'autoRereviewOnPush', 'autoReviewOnAssign', 'reviewModel', 'agentTimeoutMs',
       'reviewSessionRetentionDays', 'tunnelMode', 'quickTarget', 'tunnelId',
       'tunnelCredentialsFile', 'tunnelHostname', 'proxyPort', 'proxyHost',
-      'lanPinEnabled', 'lanPort', 'lanHost', 'telegramBotToken', 'telegramChatId',
+      'lanPinEnabled', 'lanPort', 'lanHost', 'pinSessionTtlHours', 'telegramBotToken', 'telegramChatId',
       'telegramReviewNotifications',
     ]) expect(DOMAIN_KEY_MAP[k], k).toBeTruthy()
     expect(RUNTIME_KEYS).toEqual(['lastTunnelRunning'])
@@ -58,5 +58,14 @@ describe('splitLegacyPatch / writeLegacyPatch / readFlat round-trip', () => {
   it('ignores runtime keys entirely (adapters own them)', async () => {
     await writeLegacyPatch({ lastTunnelRunning: true } as Record<string, unknown>, { dshHome: home })
     expect(await readFlat({ dshHome: home })).toEqual({})
+  })
+
+  it('round-trips pinSessionTtlHours into the tunnel domain', async () => {
+    await writeLegacyPatch({ pinSessionTtlHours: 12 }, { dshHome: home })
+    expect((await readFlat({ dshHome: home })).pinSessionTtlHours).toBe(12)
+    // The domain file is the contract other plugins read: prove it really landed
+    // in `tunnel`, not merely in the flat view.
+    const raw = JSON.parse(await readFile(join(home, 'dsh-maestro-config', 'settings.json'), 'utf8'))
+    expect(raw.domains.tunnel.pinSessionTtlHours).toBe(12)
   })
 })
