@@ -1056,6 +1056,17 @@ function LanAccess({ proxyStatus, lanPin }: { proxyStatus: any; lanPin: any }) {
   if (!proxyStatus?.running) {
     return h('p', { style: { color: t.stateError as string, fontSize: 12, margin: '8px 0 0' } }, proxyStatus?.errorMessage ?? 'Proxy not running')
   }
+  if (urls.length === 0) {
+    // Without a LAN listener there is no LAN entry to advertise. Saying "no PIN
+    // needed" next to the reader's own reachable-but-public URL would promise
+    // access this card cannot deliver, so point at the setting instead.
+    return h(
+      'div',
+      null,
+      h('p', { style: captionStyle }, 'No LAN listener is configured — set a LAN port under Tunnel to expose one.'),
+      lanPin !== null ? h(LanPinRow as any, { lanPin }) : null,
+    )
+  }
   return h(
     'div',
     null,
@@ -1688,8 +1699,8 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
             )
           : null,
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' as const, padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, status?.running ? h(Button as any, { variant: 'outline', size: 'md', disabled: busy, onClick: stopTunnel }, 'Stop tunnel') : h(Button as any, { variant: 'primary', size: 'md', disabled: busy, onClick: startTunnel }, 'Start tunnel')),
-        h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Remote access — LAN'), h(LanAccess as any, { proxyStatus, lanPin: lanPinEnabled === null ? null : { enabled: lanPinEnabled, pin: lanPin, show: showLanPin, onShow: revealLanPin, onHide: () => setShowLanPin(false), onRotate: rotateLanPin, onToggle: toggleLanPin } })),
         h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Public access'), h(PublicAccess as any, { status, pin, showPin, onRevealPin: revealPin, onHidePin: () => setShowPin(false), onRotatePin: rotatePin, pinTtlHours: config.pinSessionTtlHours, onSavePinTtl: (value: number) => saveField('pinSessionTtlHours', value) })),
+        h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Remote access — LAN'), h(LanAccess as any, { proxyStatus, lanPin: lanPinEnabled === null ? null : { enabled: lanPinEnabled, pin: lanPin, show: showLanPin, onShow: revealLanPin, onHide: () => setShowLanPin(false), onRotate: rotateLanPin, onToggle: toggleLanPin } })),
       ),
     gitlab: h(
         'div',

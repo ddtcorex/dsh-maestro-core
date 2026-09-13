@@ -60,4 +60,22 @@ describe('settings section registration contract', () => {
     expect(live).toContain('PIN session duration')
     expect(read('pin-ttl.ts')).toContain('PIN_TTL_PRESETS')
   })
+
+  it('says so when there is no LAN listener instead of promising no-PIN access', () => {
+    const live = read('MaestroSettings.tsx')
+    expect(live).toContain('No LAN listener is configured')
+    // The "no PIN needed" copy may only be reached with a real LAN URL list.
+    expect(live).toMatch(/urls\.length === 0[\s\S]{0,400}No LAN listener is configured/)
+  })
+
+  it('renders Public access above the LAN card', () => {
+    // The public tunnel is the entry most visitors arrive through, so its card
+    // leads; the LAN card stays directly below it.
+    const live = read('MaestroSettings.tsx')
+    const publicAt = live.indexOf("}, 'Public access')")
+    const lanAt = live.indexOf("}, 'Remote access — LAN')")
+    expect(publicAt).toBeGreaterThan(-1)
+    expect(lanAt).toBeGreaterThan(-1)
+    expect(publicAt).toBeLessThan(lanAt)
+  })
 })
