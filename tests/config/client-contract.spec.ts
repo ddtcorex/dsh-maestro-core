@@ -51,4 +51,13 @@ describe('settings section registration contract', () => {
     expect(card + entry).toContain('data:image/svg+xml')
     expect(read('settings-nav-icon.ts')).toContain('data-maestro-settings-nav')
   })
+
+  it('exposes the PIN session duration control wired to the settings RPC', () => {
+    const live = read('MaestroSettings.tsx')
+    expect(live).toContain('data-maestro-pin-ttl-select')
+    expect(live).toContain('data-maestro-pin-ttl-custom')
+    expect(live).toContain("saveField('pinSessionTtlHours'")
+    expect(live).toContain('PIN session duration')
+    expect(read('pin-ttl.ts')).toContain('PIN_TTL_PRESETS')
+  })
 })

@@ -13,6 +13,7 @@ import { createElement as h, useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { MAESTRO_ENDPOINTS } from './api.js'
 import { generateWebhookSecret, gitlabWebhookUrl } from './webhook-secret.js'
+import { PIN_TTL_PRESETS, MAX_PIN_TTL_HOURS, presetForTtlHours } from './pin-ttl.js'
 
 // ---------------------------------------------------------------------------
 // DSH tokens — single source, no custom hex (except QR quiet zone #fff)
@@ -1103,7 +1104,59 @@ function LanPinRow({ lanPin }: { lanPin: any }) {
   )
 }
 
-function PublicAccess({ status, pin, showPin, onRevealPin, onHidePin, onRotatePin }: { status: any; pin: string | null; showPin: boolean; onRevealPin: () => void; onHidePin: () => void; onRotatePin: () => void }) {
+/**
+ * Login-cookie lifetime. Presets cover the common choices; "Custom…" reveals a
+ * free hours input saved on blur/Enter — never per keystroke, so a half-typed
+ * number is not persisted. The host resolver and the settings RPC own the
+ * authoritative bounds; the input's min/max are an affordance only.
+ */
+function PinSessionTtl({ hours, onSave }: { hours: number | undefined; onSave: (hours: number) => void }) {
+  const selected = presetForTtlHours(hours)
+  const [custom, setCustom] = useState(false)
+  const [draft, setDraft] = useState('')
+  const customActive = custom || selected === null
+  const commit = () => {
+    const parsed = Number(draft)
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_PIN_TTL_HOURS) return
+    onSave(parsed)
+  }
+  return h(
+    'div',
+    { 'data-maestro-pin-ttl': '', style: { display: 'flex', flexDirection: 'column' as const, gap: 6, alignItems: 'flex-end' } },
+    h(
+      'select',
+      {
+        'data-maestro-pin-ttl-select': '',
+        value: customActive ? 'custom' : String(selected),
+        onChange: (e: any) => {
+          const next = e.target.value
+          if (next === 'custom') { setCustom(true); setDraft(String(hours ?? 24)); return }
+          setCustom(false)
+          onSave(Number(next))
+        },
+        style: { height: 36, padding: '0 12px', border: `1px solid ${t.borderL2}`, borderRadius: 18, background: 'var(--dsw-alias-bg-module-platform, #F5F6F7)' as string, color: t.labelPrimary as string, font: 'inherit', fontSize: 13 },
+      },
+      ...PIN_TTL_PRESETS.map((preset) => h('option', { key: preset.hours, value: String(preset.hours) }, preset.label)),
+      h('option', { key: 'custom', value: 'custom' }, 'Custom…'),
+    ),
+    customActive
+      ? h(FieldInput as any, {
+          'data-maestro-pin-ttl-custom': '',
+          inputMode: 'numeric',
+          placeholder: 'hours',
+          value: draft,
+          min: 1,
+          max: MAX_PIN_TTL_HOURS,
+          onChange: (e: any) => setDraft(e.target.value),
+          onBlur: commit,
+          onKeyDown: (e: any) => { if (e.key === 'Enter') commit() },
+          style: { width: 120 } as any,
+        })
+      : null,
+  )
+}
+
+function PublicAccess({ status, pin, showPin, onRevealPin, onHidePin, onRotatePin, pinTtlHours, onSavePinTtl }: { status: any; pin: string | null; showPin: boolean; onRevealPin: () => void; onHidePin: () => void; onRotatePin: () => void; pinTtlHours: number | undefined; onSavePinTtl: (hours: number) => void }) {
   return h(
     'div',
     null,
@@ -1128,6 +1181,14 @@ function PublicAccess({ status, pin, showPin, onRevealPin, onHidePin, onRotatePi
       h(Button as any, { variant: 'outline', size: 'sm', onClick: onRotatePin }, 'Rotate'),
     ),
     h('p', { style: captionStyle }, 'Stays the same across tunnel and DSH restarts; use Rotate when you need a new PIN.'),
+    h(SettingRow as any, {
+      title: 'PIN session duration',
+      // The caption lives in the description column on purpose: a long caption
+      // inside the control column claims its intrinsic width (min-width: auto)
+      // and squeezes the title/description to a few characters per line.
+      description: 'How long a browser stays signed in after entering the PIN. Applies to the next login; covers the public tunnel and LAN access.',
+      control: h(PinSessionTtl as any, { hours: pinTtlHours, onSave: onSavePinTtl }),
+    }),
   )
 }
 
@@ -1628,7 +1689,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
           : null,
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' as const, padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, status?.running ? h(Button as any, { variant: 'outline', size: 'md', disabled: busy, onClick: stopTunnel }, 'Stop tunnel') : h(Button as any, { variant: 'primary', size: 'md', disabled: busy, onClick: startTunnel }, 'Start tunnel')),
         h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Remote access — LAN'), h(LanAccess as any, { proxyStatus, lanPin: lanPinEnabled === null ? null : { enabled: lanPinEnabled, pin: lanPin, show: showLanPin, onShow: revealLanPin, onHide: () => setShowLanPin(false), onRotate: rotateLanPin, onToggle: toggleLanPin } })),
-        h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Public access'), h(PublicAccess as any, { status, pin, showPin, onRevealPin: revealPin, onHidePin: () => setShowPin(false), onRotatePin: rotatePin })),
+        h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Public access'), h(PublicAccess as any, { status, pin, showPin, onRevealPin: revealPin, onHidePin: () => setShowPin(false), onRotatePin: rotatePin, pinTtlHours: config.pinSessionTtlHours, onSavePinTtl: (value: number) => saveField('pinSessionTtlHours', value) })),
       ),
     gitlab: h(
         'div',
