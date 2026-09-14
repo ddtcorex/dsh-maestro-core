@@ -124,13 +124,8 @@ async function writeDocLocked(path: string, doc: SettingsDoc): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// legacy migration (one-shot, non-destructive)
+// flat-key adapter map (live: remote/review/supervisor read through readFlat)
 // ---------------------------------------------------------------------------
-
-const LEGACY_SOURCES = [
-  'dsh-maestro-remote/config.json',
-  'dsh-maestro-review/config.json',
-]
 
 export const DOMAIN_KEY_MAP: Record<string, string> = {
   gitlabBaseUrl: 'gitlab.baseUrl',
@@ -164,9 +159,6 @@ export const DOMAIN_KEY_MAP: Record<string, string> = {
 /** Machine runtime state — never settings; owning adapters persist these in their own sidecar. */
 export const RUNTIME_KEYS: readonly string[] = ['lastTunnelRunning']
 
-/** Runtime state, not settings — deliberately dropped during migration. */
-const DROPPED_LEGACY_KEYS = new Set(['lastTunnelRunning'])
-
 function setIn(obj: Record<string, unknown>, dotted: string, value: unknown): void {
   const parts = dotted.split('.')
   let cur = obj
@@ -177,99 +169,6 @@ function setIn(obj: Record<string, unknown>, dotted: string, value: unknown): vo
   cur[parts[parts.length - 1]] = value
 }
 
-/**
- * If the new store does not exist yet and any legacy per-package config.json is
- * present, transform them into one namespaced store (later sources override
- * earlier ones), rename every CONSUMED source to `.bak`, and report true.
- * Corrupt sources are skipped untouched; the function never deletes anything.
- */
-async function migrateLegacyIfPresent(storeP: string, dshHome: string): Promise<boolean> {
-  try {
-    await stat(storeP)
-    return false // modern store already exists — never migrate over it
-  } catch (err: any) {
-    if (err?.code !== 'ENOENT') throw err
-  }
-  const domains: Record<string, unknown> = {}
-  const legacyBucket: Record<string, unknown> = {}
-  const consumed: string[] = []
-  for (const rel of LEGACY_SOURCES) {
-    const src = join(resolveDshHome(dshHome), rel)
-    let raw: string
-    let parsed: Record<string, unknown>
-    try {
-      raw = await readFile(src, 'utf8')
-      parsed = JSON.parse(raw) as Record<string, unknown>
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('not an object')
-    } catch (err: any) {
-      if (err?.code === 'ENOENT') continue
-      continue // corrupt or wrong shape — leave it alone, never destructive
-    }
-    for (const [k, v] of Object.entries(parsed)) {
-      if (DROPPED_LEGACY_KEYS.has(k)) continue
-      const target = DOMAIN_KEY_MAP[k]
-      if (target) setIn(domains, target, v)
-      else legacyBucket[k] = v
-    }
-    consumed.push(src)
-  }
-  if (consumed.length === 0) return false
-  if (Object.keys(legacyBucket).length > 0) domains._legacy = legacyBucket
-  await writeDocLocked(storeP, { version: 1, domains })
-  // Snapshot, do NOT rename: the legacy file's owner plugin may not have
-  // adopted this lib yet and still reads the original path (a premature
-  // rename silently broke tunnel auto-restore in production on 2026-08-26).
-  for (const src of consumed) {
-    const snapshot = await readFile(src, 'utf8')
-    await writeFile(`${src}.maestro-migrated.bak`, snapshot, { mode: 0o600 }).catch(() => {})
-  }
-  return true
-}
-
-function hasFullTelegramPair(domain: unknown): boolean {
-  if (typeof domain !== 'object' || domain === null) return false
-  const telegram = (domain as Record<string, unknown>).telegram
-  if (typeof telegram !== 'object' || telegram === null) return false
-  const t = telegram as Record<string, unknown>
-  return typeof t.botToken === 'string' && t.botToken !== '' &&
-         typeof t.chatId === 'string' && t.chatId !== ''
-}
-
-/**
- * One-shot non-destructive in-store migration: copy `notify.telegram` /
- * `notify.policy` into the `notifier` domain, snapshot the pre-migration file
- * to *.maestro-notify-migrated.bak, then drop `notify`. Runs at most once
- * (`notify` no longer exists afterwards); skips when `notifier` already holds
- * a full telegram pair; never touches the file when there is nothing to copy.
- * Lock-free probe + check-under-lock write so load() stays lock-free in the
- * common case (change callbacks may call load() inside a set()'s lock).
- */
-async function migrateNotifyIntoNotifier(path: string): Promise<SettingsDoc> {
-  let doc: SettingsDoc
-  try {
-    doc = await readDoc(path)
-  } catch (err: any) {
-    if (err?.code === 'ENOENT') return { ...EMPTY_DOC, domains: {} }
-    throw err
-  }
-  if (doc.domains.notify === undefined || hasFullTelegramPair(doc.domains.notifier)) return doc
-  return withLock(path, async () => {
-    const fresh = await readDoc(path)
-    if (fresh.domains.notify === undefined || hasFullTelegramPair(fresh.domains.notifier)) return fresh
-    const n = fresh.domains.notify as Record<string, unknown>
-    const telegram = n.telegram
-    if (typeof telegram !== 'object' || telegram === null) return fresh
-    await writeFile(`${path}.maestro-notify-migrated.bak`, JSON.stringify(fresh, null, 2) + '\n', { mode: 0o600 })
-    const next: SettingsDoc = { version: 1, domains: { ...fresh.domains } }
-    const copy: Record<string, unknown> = { telegram: { ...(telegram as Record<string, unknown>) } }
-    if (n.policy && typeof n.policy === 'object') copy.policy = { ...(n.policy as Record<string, unknown>) }
-    next.domains.notifier = deepMerge(fresh.domains.notifier ?? {}, copy)
-    delete next.domains.notify
-    await writeDocLocked(path, next)
-    return next
-  })
-}
-
 // ---------------------------------------------------------------------------
 // public API
 // ---------------------------------------------------------------------------
@@ -277,8 +176,6 @@ async function migrateNotifyIntoNotifier(path: string): Promise<SettingsDoc> {
 export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
   const path = storePath(opts)
   const homeKey = resolveDshHome(opts?.dshHome)
-  const migrated = await migrateLegacyIfPresent(path, homeKey)
-  if (migrated) cached = null // the store file changed on disk — drop any memoized doc
   if (cached && cached.key === homeKey) {
     // One stat per load: out-of-band edits (other processes) must surface
     // without a restart.
@@ -289,7 +186,7 @@ export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
       return cached.doc // stat failed (vanished/locked) — serve stale, never break boot
     }
   }
-  const doc = await migrateNotifyIntoNotifier(path)
+  const doc = await readDoc(path)
   let mtimeMs = 0
   try { mtimeMs = (await stat(path)).mtimeMs } catch {}
   cached = { key: homeKey, doc, mtimeMs }
@@ -323,6 +220,47 @@ export async function set(
     cached = { key, doc, mtimeMs }
   })
   for (const cb of changeCbs) cb(domain)
+}
+
+/**
+ * Delete one TOP-LEVEL key of a domain — the delete operation `set()` cannot
+ * express (a merge patch has no delete signal: `null` persists as null).
+ * Dotted paths are rejected to keep the semantics exactly one key. No-op
+ * (`false`, no write, no callbacks) when the domain is absent/not an object
+ * or the key is absent. Otherwise the resulting domain is validated like a
+ * `set()` before the atomic write; `true` means the key is gone.
+ */
+export async function unset(
+  domain: string,
+  key: string,
+  opts?: { dshHome?: string },
+): Promise<boolean> {
+  if (typeof key !== 'string' || key === '' || key.includes('.')) {
+    throw new Error(`config-lib: unset key must be a top-level name, got ${JSON.stringify(key)}`)
+  }
+  const path = storePath(opts)
+  const homeKey = resolveDshHome(opts?.dshHome)
+  const deleted = await withLock(path, async () => {
+    const doc = await readDoc(path)
+    const bucket = doc.domains[domain]
+    if (typeof bucket !== 'object' || bucket === null || Array.isArray(bucket)) return false
+    if (!(key in bucket)) return false
+    const next = { ...(bucket as Record<string, unknown>) }
+    delete next[key]
+    const validator = domainValidators.get(domain)
+    if (validator) {
+      const res = validator.parse(next)
+      if (!res.ok) throw new Error(`config-lib: validation failed for '${domain}': ${res.error}`)
+    }
+    doc.domains[domain] = next
+    await writeDocLocked(path, doc)
+    let mtimeMs = 0
+    try { mtimeMs = (await stat(path)).mtimeMs } catch {}
+    cached = { key: homeKey, doc, mtimeMs }
+    return true
+  })
+  if (deleted) for (const cb of changeCbs) cb(domain)
+  return deleted
 }
 
 /** Names of domains registered via defineDomain (schema owners). */
