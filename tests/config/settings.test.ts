@@ -27,11 +27,14 @@ describe('Task 3: Settings UI tabs', () => {
     expect(src).toContain('cwdContainment')
   })
 
-  it('Blacklist tab has textarea for patterns (one per line) plus placeholders JSON', () => {
+  it('Blacklist tab has a textarea for patterns (one per line)', () => {
     const src = read('MaestroSettings.tsx')
     expect(src).toMatch(/textarea/i)
     expect(src).toContain('patterns')
-    expect(src).toContain('placeholders')
+    // The placeholders half of this tab was removed 2026-09-14: nothing read
+    // `guardBlacklist.placeholders` — not the guard runtime, not even
+    // check-public-blacklist.mjs, its sibling field's one consumer.
+    expect(src).not.toContain('placeholders')
   })
 
   it('Supervisor tab has intervalMs etc', () => {

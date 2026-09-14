@@ -79,3 +79,66 @@ describe('settings section registration contract', () => {
     expect(publicAt).toBeLessThan(lanAt)
   })
 })
+
+/**
+ * Cross-repo Settings UI remediation (2026-09-14). Each case pins a defect the
+ * audit found on a live install, so a refactor breaks a test instead of
+ * silently restoring the defect.
+ */
+describe('settings UI remediation pins', () => {
+  const live = read('MaestroSettings.tsx')
+  const entry = read('index.tsx')
+
+  it('removes the dead guardBlacklist.placeholders field entirely', () => {
+    // Nothing reads placeholders (not even check-public-blacklist.mjs), so the
+    // editor, its state, its writer and its CSS must all be gone.
+    expect(live).not.toContain('PlaceholderMappingsEditor')
+    expect(live).not.toContain('commitPlaceholders')
+    expect(live).not.toContain('placeholderRows')
+    expect(live).not.toContain('data-maestro-placeholders')
+    expect(live).not.toMatch(/cfgSet\('guardBlacklist',\s*\{\s*placeholders/)
+  })
+
+  it('locks the auto-resume toggle when the install pins it', () => {
+    // The supervisor answers `autoResumePinned` on its status endpoint; a pinned
+    // value outranks this store, so an interactive toggle would silently no-op.
+    expect(entry).toContain("'/dsh-maestro-supervisor-resume'")
+    expect(entry).toMatch(/supervisorRpcCall/)
+    expect(live).toContain("supervisorRpcCall('status'")
+    expect(live).toContain('const autoResumePinned = supervisorStatus?.autoResumePinned === true')
+    expect(live).toContain('disabled: autoResumePinned')
+    // The row renders the EFFECTIVE value the plugin reports (store, env and
+    // defaults folded together) whenever it answers — a fresh install's
+    // documented default is ON, and a store-only read would wrongly show OFF.
+    expect(live).toContain('const autoResumeChecked = typeof supervisorStatus?.autoResumeEnabled')
+    expect(live).toContain('checked: autoResumeChecked')
+    // An explicit write keeps that view in step until the next status fetch.
+    expect(live).toMatch(/setSupervisorStatus\(\(prev: any\) => \(prev \? \{ \.\.\.prev, autoResumeEnabled/)
+  })
+
+  it('renders the LAN-PIN restart notice from the host requiresRestart flag', () => {
+    expect(live).toContain("saved?.requiresRestart === true")
+    expect(live).toContain('data-maestro-lan-restart-notice')
+    expect(live).toContain('Restart the tunnel')
+  })
+
+  it('says the blacklist list does not gate live tool calls', () => {
+    expect(live).toContain('do NOT gate any live tool call')
+    expect(live).toContain('check-public-blacklist.mjs')
+  })
+
+  it('explains the supervisor interval/threshold rows belong to the standalone daemon', () => {
+    expect(live).toContain('standalone dsh-web-supervisor daemon')
+  })
+
+  it('explains publishBlocked is deny-vs-journal and credentialPaths is additive', () => {
+    expect(live).toContain('only journaled for review')
+    expect(live).toContain('cannot be removed from here')
+  })
+
+  it('ToggleRow supports a disabled (locked) state', () => {
+    expect(live).toMatch(/function ToggleRow\([^)]*disabled/)
+    expect(live).toContain("'data-maestro-locked'")
+    expect(live).toContain('aria-disabled')
+  })
+})

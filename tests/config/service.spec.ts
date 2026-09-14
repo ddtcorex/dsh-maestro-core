@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createMaestroConfigService } from '../src/host/service.ts'
@@ -58,5 +58,42 @@ describe('maestroConfig service', () => {
     await a.set('only-a', { v: 1 })
     expect(await b.get('only-a')).toBeUndefined()
     expect(await a.get('only-a')).toEqual({ v: 1 })
+  })
+
+  /**
+   * Regression pin for the 2026-09-14 "Settings fields are empty" report.
+   *
+   * The service delegates the store location to
+   * `@ddtcorex/dsh-maestro-config-lib`, whose path moved from the retired
+   * `~/.dsh/maestro/settings.json` to `~/.dsh/dsh-maestro-config/settings.json`
+   * in config-lib 0.2.0. This package declared `^0.1.2`, so it kept resolving a
+   * config-lib from the 0.1.x line and read the RETIRED file — every Guard /
+   * Blacklist / Supervisor / Notifier field came back empty while every sibling
+   * package (which links the workspace copy) read the right one.
+   *
+   * Both files are pre-seeded with DIFFERENT content and neither is written
+   * through the lib, so this asserts the store location itself rather than a
+   * self-consistent set/get round-trip (which cannot catch a wrong path).
+   */
+  it('reads the shared store, never the retired ~/.dsh/maestro/settings.json', async () => {
+    await mkdir(join(homeA, 'dsh-maestro-config'), { recursive: true })
+    await writeFile(
+      join(homeA, 'dsh-maestro-config', 'settings.json'),
+      JSON.stringify({ version: 1, domains: { guard: { cwdContainment: false }, gitlab: { baseUrl: 'https://real.example.com' } } }),
+      { mode: 0o600 },
+    )
+    await mkdir(join(homeA, 'maestro'), { recursive: true })
+    await writeFile(
+      join(homeA, 'maestro', 'settings.json'),
+      JSON.stringify({ version: 1, domains: { supervisor: { autoResumeEnabled: true } } }),
+      { mode: 0o600 },
+    )
+
+    const svc = createMaestroConfigService({ dshHome: homeA })
+    // A field present in the shared store must surface…
+    expect(await svc.get('guard')).toEqual({ cwdContainment: false })
+    expect(await svc.get('gitlab')).toEqual({ baseUrl: 'https://real.example.com' })
+    // …and the retired path must not be read at all.
+    expect(await svc.get('supervisor')).toBeUndefined()
   })
 })

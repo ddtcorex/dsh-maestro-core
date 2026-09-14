@@ -403,11 +403,24 @@ function SettingRow({ title, description, control }: { title: string; descriptio
     h('div', { 'data-maestro-control': '', style: { flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minHeight: '36px' } }, control as any),
   )
 }
-function ToggleRow({ title, description, checked, onChange }: { title: string; description?: string; checked?: boolean; onChange: (v: boolean) => void }) {
+/**
+ * A boolean settings row.
+ *
+ * `disabled` exists for one honest case: a value that an install-supplied
+ * Cordis `config:` block pins at a higher precedence than this store, so the
+ * checkbox would look interactive and silently do nothing. A locked row still
+ * shows the *effective* value (not the store's shadowed one) and says why.
+ */
+function ToggleRow({ title, description, checked, onChange, disabled }: { title: string; description?: string; checked?: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  const locked = disabled === true
   return h(
     'label',
-    { 'data-maestro-row': '', style: { ...rowStyle, cursor: 'pointer', alignItems: 'flex-start' } },
-    h('input', { type: 'checkbox', checked: checked === true, onChange: (e: any) => onChange(e.target.checked), style: { width: 16, height: 16, accentColor: t.primaryFill as string, marginTop: 4, flex: 'none' } }),
+    {
+      'data-maestro-row': '',
+      'data-maestro-locked': locked ? 'true' : undefined,
+      style: { ...rowStyle, cursor: locked ? 'default' : 'pointer', alignItems: 'flex-start', opacity: locked ? 0.65 : 1 },
+    },
+    h('input', { type: 'checkbox', checked: checked === true, disabled: locked, 'aria-disabled': locked ? 'true' : undefined, onChange: (e: any) => { if (!locked) onChange(e.target.checked) }, style: { width: 16, height: 16, accentColor: t.primaryFill as string, marginTop: 4, flex: 'none' } }),
     h('div', { 'data-maestro-row-text': '', style: { ...rowTextStyle, paddingRight: '0' } }, h('div', { style: rowTitleStyle }, title), description ? h('div', { style: rowDescStyle }, description) : null),
   )
 }
@@ -1212,154 +1225,11 @@ function NamedTunnelSetupNote() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// PlaceholderMappingsEditor — row-based "blocked pattern → suggestion" mappings
-// (same interaction as ProjectMappingsEditor; no JSON editing for users)
-// ---------------------------------------------------------------------------
-function PlaceholderMappingsEditor({ rows, onChange }: { rows: { pattern: string; suggestion: string }[]; onChange: (rows: { pattern: string; suggestion: string }[]) => void }) {
-  const updateRow = (index: number, field: 'pattern' | 'suggestion', value: string) => {
-    onChange(rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
-  }
-  const removeRow = (index: number) => onChange(rows.filter((_, i) => i !== index))
-  const addRow = () => onChange([...rows, { pattern: '', suggestion: '' }])
-  return h(
-    'div',
-    { 'data-maestro-placeholders': '', style: { display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 8 } },
-    // Header — count + primary Add (stacks on mobile via CSS)
-    h(
-      'div',
-      { 'data-maestro-placeholders-header': '', style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '4px 0' } },
-      h(
-        'div',
-        { style: { flex: 1, minWidth: 0 } },
-        h('div', { style: { fontSize: 14, fontWeight: 600, color: t.labelPrimary as string, lineHeight: '20px' } }, `Placeholder mappings — ${rows.length} mapped`),
-        h('div', { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px', marginTop: 2 } }, 'Blocked pattern → placeholder suggestion, one mapping per row'),
-      ),
-      h(Button as any, { variant: 'primary', size: 'md', onClick: addRow, 'data-maestro-placeholders-add': '' }, '+ Add mapping'),
-    ),
-    rows.length === 0
-      ? h(
-          'div',
-          {
-            'data-maestro-placeholders-empty': '',
-            style: {
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 10,
-              padding: '20px 16px',
-              borderRadius: 12,
-              border: `1px dashed ${t.borderL2}`,
-              background: 'transparent',
-              textAlign: 'center' as const,
-            },
-          },
-          h('div', { style: { fontSize: 13, color: t.labelSecondary as string, lineHeight: '18px' } }, 'No placeholder mappings yet — add your first mapping'),
-          h(Button as any, { variant: 'outline', size: 'md', onClick: addRow }, '+ Add mapping'),
-        )
-      : h(
-          'div',
-          { 'data-maestro-placeholders-list': '', style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-          ...rows.map((row, i) =>
-            h(
-              'div',
-              {
-                key: i,
-                'data-maestro-mapping-card': '',
-                style: {
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                  padding: 12,
-                  borderRadius: 12,
-                  border: `1px solid ${t.borderL2}`,
-                  background: t.bgLayer1 as string,
-                  boxSizing: 'border-box' as const,
-                },
-              },
-              // Card header: index badge + preview + X (same as Review's project card header)
-              h(
-                'div',
-                { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 } },
-                h(
-                  'div',
-                  { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 } },
-                  h(
-                    'span',
-                    {
-                      style: {
-                        flex: 'none',
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
-                        background: 'var(--dsw-alias-bg-module-platform, #F5F6F7)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: t.labelSecondary as string,
-                      },
-                    },
-                    String(i + 1),
-                  ),
-                  h(
-                    'span',
-                    {
-                      style: {
-                        fontSize: 12,
-                        fontFamily: 'ui-monospace, monospace',
-                        color: row.pattern ? (t.labelPrimary as string) : (t.labelTertiary as string),
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        minWidth: 0,
-                      },
-                    },
-                    row.pattern ? (row.suggestion ? `${row.pattern} → ${row.suggestion}` : `${row.pattern} → …`) : 'New mapping',
-                  ),
-                ),
-                h(Button as any, { variant: 'outline', size: 'sm', onClick: () => removeRow(i), 'aria-label': `Remove mapping ${i + 1}`, title: 'Remove mapping' }, '✕'),
-              ),
-              // Fields grid — 2-col desktop, 1-col mobile (same as Review's project grid)
-              h(
-                'div',
-                { 'data-maestro-mapping-grid': '', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
-                h(
-                  'label',
-                  { style: fieldLabelStyle, 'data-maestro-field': '' },
-                  'Blocked pattern',
-                  h(FieldInput as any, {
-                    value: row.pattern,
-                    placeholder: 'example-project',
-                    onChange: (e: any) => updateRow(i, 'pattern', e.target.value),
-                    'aria-label': `Blocked pattern ${i + 1}`,
-                    style: { width: '100%' } as any,
-                  }),
-                ),
-                h(
-                  'label',
-                  { style: fieldLabelStyle, 'data-maestro-field': '' },
-                  'Placeholder',
-                  h(FieldInput as any, {
-                    value: row.suggestion,
-                    placeholder: 'my-project',
-                    onChange: (e: any) => updateRow(i, 'suggestion', e.target.value),
-                    'aria-label': `Placeholder suggestion ${i + 1}`,
-                    style: { width: '100%' } as any,
-                  }),
-                ),
-              ),
-            ),
-          ),
-        ),
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Main — DSH-native grouped settings (DisclosureRow per domain)
 // ---------------------------------------------------------------------------
-export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; configRpcCall?: any }) {
+export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }: { rpcCall: any; configRpcCall?: any; supervisorRpcCall?: any }) {
   const [status, setStatus] = useState<any>(null)
   const [proxyStatus, setProxyStatus] = useState<any>(null)
   const [config, setConfig] = useState<any>({ tunnelMode: 'quick', projectMappings: [] })
@@ -1373,8 +1243,15 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
   const [showLanPin, setShowLanPin] = useState(false)
   const [guard, setGuard] = useState<any>({})
   const [patternsText, setPatternsText] = useState('')
-  const [placeholderRows, setPlaceholderRows] = useState<{ pattern: string; suggestion: string }[]>([])
+  // Effective auto-resume state reported by the in-tree supervisor plugin
+  // (`/dsh-maestro-supervisor-resume` → `status`). null = supervisor not
+  // installed or not answering yet — the toggle then renders unlocked, which
+  // is the pre-existing behavior.
+  const [supervisorStatus, setSupervisorStatus] = useState<any>(null)
   const [supervisorCfg, setSupervisorCfg] = useState<any>({})
+  // Set when a save returned requiresRestart (LAN PIN gate): the listener was
+  // reconfigured and the new gate may not be live until the tunnel restarts.
+  const [lanRestartNotice, setLanRestartNotice] = useState<string | null>(null)
   const [notifierCfg, setNotifierCfg] = useState<any>({})
   const [activeTab, setActiveTab] = useState('tunnel')
   // Mobile: inject responsive overrides once (mirrors dsh-maestro-mobile settings-sheet pill pattern + market catsWrap)
@@ -1406,12 +1283,6 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
         [data-maestro-settings-card] { max-width:100% !important; gap:6px !important; padding:0 2px !important; }
         [data-maestro-tabs] { gap:6px !important; padding:2px 2px 8px !important; margin:0 -2px 8px !important; }
         [data-maestro-tab] { min-height:40px !important; height:auto !important; padding:0 12px !important; font-size:13px !important; }
-        /* Placeholder mappings — card design unified with Review project cards (header X, grid fields) */
-        [data-maestro-placeholders-header] { flex-direction: column !important; align-items: stretch !important; }
-        [data-maestro-placeholders-header] [data-maestro-placeholders-add] { width: 100% !important; justify-content: center !important; }
-        [data-maestro-placeholders-list] { gap: 12px !important; }
-        [data-maestro-mapping-card] { padding:10px !important; }
-        [data-maestro-mapping-grid] { grid-template-columns:1fr !important; gap:12px !important; }
         [data-maestro-qr-row] { flex-direction:column !important; align-items:flex-start !important; }
         [data-maestro-trigger-wrap] { max-width:100% !important; }
         [data-maestro-menu] { min-width:0 !important; max-width:calc(100vw - 32px) !important; left:0 !important; right:auto !important; }
@@ -1497,23 +1368,15 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       setError(e.message ?? String(e))
     }
   }
-  const commitPlaceholders = async (rows: { pattern: string; suggestion: string }[]) => {
-    setError(null)
-    const obj: Record<string, string> = {}
-    for (const row of rows) {
-      const pattern = (row.pattern ?? '').trim()
-      if (!pattern) continue
-      obj[pattern] = (row.suggestion ?? '').trim()
-    }
-    try {
-      await cfgSet('guardBlacklist', { placeholders: obj })
-    } catch (e: any) {
-      setError(e.message ?? String(e))
-    }
-  }
   const saveSupervisorCfg = async (patch: any) => {
     setError(null)
     setSupervisorCfg((prev: any) => ({ ...prev, ...patch }))
+    // Keep the effective-state view in step with an explicit write: without
+    // this the toggle would snap back to the plugin's last-reported value
+    // until the next status fetch.
+    if (typeof patch?.autoResumeEnabled === 'boolean') {
+      setSupervisorStatus((prev: any) => (prev ? { ...prev, autoResumeEnabled: patch.autoResumeEnabled } : prev))
+    }
     try {
       await cfgSet('supervisor', patch)
     } catch (e: any) {
@@ -1550,16 +1413,23 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
       .then((saved) => setConfig((prev: any) => ({ ...prev, ...saved })))
       .catch(() => {})
     if (configRpcCall) {
-      Promise.all([cfgGet('guard').catch(() => ({})), cfgGet('guardBlacklist').catch(() => ({ patterns: [], placeholders: {} })), cfgGet('supervisor').catch(() => ({})), cfgGet('notifier').catch(() => ({}))])
+      Promise.all([cfgGet('guard').catch(() => ({})), cfgGet('guardBlacklist').catch(() => ({ patterns: [] })), cfgGet('supervisor').catch(() => ({})), cfgGet('notifier').catch(() => ({}))])
         .then(([g, bl, sup, not]) => {
           setGuard(g ?? {})
           const pats = Array.isArray((bl as any)?.patterns) ? (bl as any).patterns : []
-          const ph = (bl as any)?.placeholders && typeof (bl as any).placeholders === 'object' ? (bl as any).placeholders : {}
           setPatternsText(pats.join('\n'))
-          setPlaceholderRows(Object.entries(ph).map(([pattern, suggestion]) => ({ pattern, suggestion: String(suggestion) })))
           setSupervisorCfg(sup ?? {})
           setNotifierCfg(not ?? {})
         })
+        .catch(() => {})
+    }
+    // Ask the supervisor for the EFFECTIVE auto-resume state: `autoResumePinned`
+    // is true when an install-supplied Cordis `config:` block outranks this
+    // store, so the toggle must render locked rather than lie. Absent service
+    // (not installed) leaves the toggle interactive.
+    if (supervisorRpcCall) {
+      supervisorRpcCall('status', {})
+        .then((res: any) => setSupervisorStatus(unwrap(res)))
         .catch(() => {})
     }
     call(MAESTRO_ENDPOINTS.lanPinStatus, {})
@@ -1599,10 +1469,22 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
   }
   const toggleLanPin = async (enabled: boolean) => {
     setError(null)
+    setLanRestartNotice(null)
     const previous = lanPinEnabled
     setLanPinEnabled(enabled)
     try {
-      await call(MAESTRO_ENDPOINTS.lanPinSetEnabled, { enabled })
+      const saved: any = await call(MAESTRO_ENDPOINTS.lanPinSetEnabled, { enabled })
+      // The LAN gate lives in the proxy listener, not in this store: the host
+      // reports requiresRestart when the change only takes effect after the
+      // listener is re-created. Say so here instead of leaving it to a source
+      // comment.
+      if (saved?.requiresRestart === true) {
+        setLanRestartNotice(
+          enabled
+            ? 'LAN gate saved. Restart the tunnel so the listener requires the PIN.'
+            : 'LAN gate removed. Restart the tunnel so the listener stops requiring the PIN.',
+        )
+      }
       if (enabled) {
         const value = await call(MAESTRO_ENDPOINTS.lanPinStatus, {})
         setLanPin(value.pin ?? null)
@@ -1689,6 +1571,18 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
     }
   }
 
+  // A pin means an install-supplied Cordis `config:` block outranks this store,
+  // so a write here would be shadowed. Only claimed when the supervisor
+  // actually answered — an absent/unresponsive service keeps the toggle live.
+  const autoResumePinned = supervisorStatus?.autoResumePinned === true
+  // When the plugin answers, its value is the EFFECTIVE one (store, env,
+  // supervisor file and defaults folded together). Showing the raw store value
+  // instead would render a fresh install's toggle as OFF while the documented
+  // default keeps auto-resume ON.
+  const autoResumeChecked = typeof supervisorStatus?.autoResumeEnabled === 'boolean'
+    ? supervisorStatus.autoResumeEnabled === true
+    : supervisorCfg.autoResumeEnabled === true
+
   // Nested tabs — unified pill bar with icons (maestro-design, matches dsh-maestro-jobs)
   const TABS: Array<{ id: string; label: string; icon: TabIcon }> = [
     { id: 'tunnel', label: 'Tunnel', icon: 'globe' },
@@ -1715,7 +1609,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
           : null,
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' as const, padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, status?.running ? h(Button as any, { variant: 'outline', size: 'md', disabled: busy, onClick: stopTunnel }, 'Stop tunnel') : h(Button as any, { variant: 'primary', size: 'md', disabled: busy, onClick: startTunnel }, 'Start tunnel')),
         h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Public access'), h(PublicAccess as any, { status, pin, showPin, onRevealPin: revealPin, onHidePin: () => setShowPin(false), onRotatePin: rotatePin, pinTtlHours: config.pinSessionTtlHours, onSavePinTtl: (value: number) => saveField('pinSessionTtlHours', value) })),
-        h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Remote access — LAN'), h(LanAccess as any, { proxyStatus, lanPin: lanPinEnabled === null ? null : { enabled: lanPinEnabled, pin: lanPin, show: showLanPin, onShow: revealLanPin, onHide: () => setShowLanPin(false), onRotate: rotateLanPin, onToggle: toggleLanPin } })),
+        h('div', { style: { ...cardInsetStyle, marginTop: '12px' } }, h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Remote access — LAN'), h(LanAccess as any, { proxyStatus, lanPin: lanPinEnabled === null ? null : { enabled: lanPinEnabled, pin: lanPin, show: showLanPin, onShow: revealLanPin, onHide: () => setShowLanPin(false), onRotate: rotateLanPin, onToggle: toggleLanPin } }), lanRestartNotice ? h('p', { role: 'status', 'data-maestro-lan-restart-notice': '', style: { ...captionStyle, marginTop: 8, color: t.labelPrimary as string } }, lanRestartNotice) : null),
       ),
     gitlab: h(
         'div',
@@ -1740,39 +1634,38 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall }: { rpcCall: any; c
     guard: h(
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
-        h(ToggleRow as any, { title: 'Block publish commands', description: 'Prevent publish-related commands when enabled.', checked: guard.publishBlocked === true, onChange: (v: boolean) => saveGuard({ publishBlocked: v }) }),
+        h(ToggleRow as any, { title: 'Block publish commands', description: 'On: publish commands (pnpm/npm publish, gh release, tag pushes) are denied. Off: they are only journaled for review — the legacy behaviour — not silently approved.', checked: guard.publishBlocked === true, onChange: (v: boolean) => saveGuard({ publishBlocked: v }) }),
         h(ToggleRow as any, { title: 'Protect git branches', description: 'Block direct pushes to protected branches.', checked: guard.gitProtection?.enabled === true, onChange: (v: boolean) => saveGuard({ gitProtection: { enabled: v, branches: guard.gitProtection?.branches ?? ['master', 'main'] } }) }),
         h(SettingRow as any, { title: 'Protected branches', description: 'Comma-separated list, e.g. master, main.', control: h(FieldInput as any, { value: (guard.gitProtection?.branches ?? ['master', 'main']).join(', '), placeholder: 'master, main', onChange: (e: any) => saveGuard({ gitProtection: { enabled: guard.gitProtection?.enabled ?? true, branches: e.target.value.split(',').map((s: any) => s.trim()).filter(Boolean) } }), style: { width: 260 } as any }) }),
         h(ToggleRow as any, { title: 'Contain working directory', description: 'Restrict file operations to the session working directory.', checked: guard.cwdContainment === true, onChange: (v: boolean) => saveGuard({ cwdContainment: v }) }),
-        h(SettingRow as any, { title: 'Credential file paths', description: 'Comma-separated paths to credential files.', control: h(FieldInput as any, { value: (guard.credentialPaths ?? []).join(', '), placeholder: '~/.config/credentials.yaml', onChange: (e: any) => saveGuard({ credentialPaths: e.target.value.split(',').map((s: any) => s.trim()).filter(Boolean) }), style: { width: 260 } as any }) }),
+        h(SettingRow as any, { title: 'Credential file paths', description: 'Extra paths treated as secrets. These add to the built-in protected list — the defaults cannot be removed from here.', control: h(FieldInput as any, { value: (guard.credentialPaths ?? []).join(', '), placeholder: '~/.config/credentials.yaml', onChange: (e: any) => saveGuard({ credentialPaths: e.target.value.split(',').map((s: any) => s.trim()).filter(Boolean) }), style: { width: 260 } as any }) }),
       ),
     blacklist: h(
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
-        h('div', { style: { ...rowStyle, flexDirection:'column', alignItems:'stretch', gap: 8 } as any },
-          h('div', { style: rowTitleStyle }, 'Blacklist patterns'),
-          h('div', { style: rowDescStyle }, 'One pattern per line. Matching files are blocked from commit.'),
-          h(TextareaField as any, { value: patternsText, placeholder: 'example-project\nacme-shop', onChange: (e: any) => setPatternsText(e.target.value), onBlur: (e: any) => commitBlacklistPatterns(e.target.value) }),
-        ),
         h('div', { style: { ...rowStyle, flexDirection:'column', alignItems:'stretch', gap: 8, borderBottom:'none' } as any },
-          h('div', { style: rowTitleStyle }, 'Placeholder mappings'),
-          h('div', { style: rowDescStyle }, 'Blocked pattern → placeholder suggestion. One mapping per row — no JSON needed.'),
-          h(PlaceholderMappingsEditor as any, {
-            rows: placeholderRows,
-            onChange: (rows: any) => {
-              setPlaceholderRows(rows)
-              commitPlaceholders(rows)
-            },
-          }),
-          h('div', { style: { marginTop: 8 } }, h(Button as any, { variant: 'outline', size: 'sm', onClick: () => { commitBlacklistPatterns(patternsText); commitPlaceholders(placeholderRows) } }, 'Save Blacklist')),
+          h('div', { style: rowTitleStyle }, 'Blacklist patterns'),
+          h('div', { style: rowDescStyle }, 'One pattern per line. These do NOT gate any live tool call — the guard runtime never reads this list. It only feeds the offline scan a human runs by hand: node scripts/check-public-blacklist.mjs. Matching files are reported there, not blocked at runtime.'),
+          h(TextareaField as any, { value: patternsText, placeholder: 'example-project\nacme-shop', onChange: (e: any) => setPatternsText(e.target.value), onBlur: (e: any) => commitBlacklistPatterns(e.target.value) }),
+          h('div', { style: { marginTop: 8 } }, h(Button as any, { variant: 'outline', size: 'sm', onClick: () => commitBlacklistPatterns(patternsText) }, 'Save Blacklist')),
         ),
       ),
     supervisor: h(
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
+        h('div', { style: { padding: '12px 0', borderBottom: `1px solid ${t.borderL2}` } }, h('p', { style: captionStyle }, 'Check interval and Down threshold belong to the standalone dsh-web-supervisor daemon (systemd). They have no effect on the in-tree auto-resume plugin below unless that daemon is installed and running.')),
         h(SettingRow as any, { title: 'Check interval', description: 'Milliseconds between supervisor checks. Default 5000.', control: h(FieldInput as any, { type: 'number', value: supervisorCfg.intervalMs ?? '', placeholder: '5000', onChange: (e: any) => { const v = e.target.value === '' ? undefined : Number(e.target.value); saveSupervisorCfg({ intervalMs: v }) }, style: { width: 160 } as any }) }),
         h(SettingRow as any, { title: 'Down threshold', description: 'Consecutive failures before marking a session as down.', control: h(FieldInput as any, { type: 'number', value: supervisorCfg.downThreshold ?? '', placeholder: '3', onChange: (e: any) => { const v = e.target.value === '' ? undefined : Number(e.target.value); saveSupervisorCfg({ downThreshold: v }) }, style: { width: 160 } as any }) }),
-        h(ToggleRow as any, { title: 'Auto-resume sessions', description: 'Automatically resume sessions marked as down.', checked: supervisorCfg.autoResumeEnabled === true, onChange: (v: boolean) => saveSupervisorCfg({ autoResumeEnabled: v }) }),
+        h(ToggleRow as any, {
+          title: 'Auto-resume sessions',
+          description: autoResumePinned
+            ? 'Locked: this install pins auto-resume through its Cordis plugin config, which outranks this store. Change it where the supervisor row is mounted, not here.'
+            : 'Automatically resume sessions interrupted by a DSH restart within the resume window. Shown as the supervisor reports it — plugin config, environment, and defaults folded together.',
+          // Effective value from the plugin, not the (possibly shadowed) store.
+          checked: autoResumeChecked,
+          onChange: (v: boolean) => saveSupervisorCfg({ autoResumeEnabled: v }),
+          disabled: autoResumePinned,
+        }),
       ),
     notifier: h(
         'div',

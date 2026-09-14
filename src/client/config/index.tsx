@@ -78,6 +78,17 @@ export function apply(ctx: ClientCtx): void {
     if (!connection?.rpc?.call) return Promise.reject(new Error('RPC not available'))
     return connection.rpc.call('/dsh-maestro-config', endpoint, payload, signal)
   }
+  // Supervisor's own loopback channel — used only to read the EFFECTIVE
+  // auto-resume state (`status`), so the toggle can render locked when an
+  // install-supplied Cordis config pins the value. Absent plugin → absent
+  // service → the caller falls back to the unlocked toggle.
+  const supervisorRpcCall: RpcCall = (endpoint, payload, signal) => {
+    const connection = ctx.get?.('connection') as
+      | { rpc: { call(ch: string, ep: string, p?: unknown, s?: AbortSignal): Promise<unknown> } }
+      | undefined
+    if (!connection?.rpc?.call) return Promise.reject(new Error('RPC not available'))
+    return connection.rpc.call('/dsh-maestro-supervisor-resume', endpoint, payload, signal)
+  }
 
   // Reversible effects: nav-row marker observer + owned style tag.
   ctx.effect(() => registerSettingsNavIcon(() => 'Maestro'), 'maestro: settings nav icon')
@@ -85,7 +96,7 @@ export function apply(ctx: ClientCtx): void {
 
   slots.inject('settings.section', () =>
     slots.register(
-      { name: 'settings.section', id: 'maestro', order: 25, label: () => 'Maestro', inject: () => ({ rpcCall, configRpcCall }) },
+      { name: 'settings.section', id: 'maestro', order: 25, label: () => 'Maestro', inject: () => ({ rpcCall, configRpcCall, supervisorRpcCall }) },
       MaestroSettingsTab as unknown as (props: { rpcCall: RpcCall }) => unknown,
     ),
   )
