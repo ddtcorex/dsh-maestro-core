@@ -61,6 +61,17 @@ export function apply(ctx: Context): void {
         await svc.set(body.domain, body.patch)
         return ok(null)
       }
+      if (endpoint === 'unset') {
+        const key = (payload ?? {}) as { key?: unknown }
+        if (typeof body.domain !== 'string' || typeof key.key !== 'string') {
+          return fail('domain (string) and key (string) are required')
+        }
+        try {
+          return ok({ deleted: await svc.unset(body.domain, key.key) })
+        } catch (e: any) {
+          return fail(e?.message ?? String(e))
+        }
+      }
       return fail(`unknown endpoint: ${String(endpoint)}`)
     }, { authority: 'loopback' })
   )

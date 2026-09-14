@@ -12,6 +12,8 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { MAESTRO_ENDPOINTS } from './api.js'
+import { RULE_META, effectiveGuardView, ruleTierPatch } from './guard-view.js'
+import type { GuardTier } from './guard-view.js'
 import { generateWebhookSecret, gitlabWebhookUrl } from './webhook-secret.js'
 import { PIN_TTL_PRESETS, MAX_PIN_TTL_HOURS, presetForTtlHours } from './pin-ttl.js'
 
@@ -44,13 +46,12 @@ const t = {
 // 14px icon + 13px label gap 6, pill 999, border-l1, #EBEEF2 active, hover, focus ring.
 // Icons: lucide-style 14px SVG, stroke 1.8, currentColor.
 // ---------------------------------------------------------------------------
-type TabIcon = 'globe' | 'git' | 'search' | 'shield' | 'ban' | 'cpu' | 'bell'
+type TabIcon = 'globe' | 'git' | 'search' | 'shield' | 'cpu' | 'bell'
 const TAB_ICON_PATHS: Record<TabIcon, string> = {
   globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10A15 15 0 0 1 12 2z',
   git: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5 0-1.2-.4-2.3-1-3 0-1 0-2 0-3s-1 0-2 1a11 11 0 0 0-6 0c-1-1-2-1-2-1 0 1 0 2 0 3-.6.7-1 1.8-1 3 0 3.5 3 5.5 6 5.5-.4.3-.7.7-.9 1.2-.2.5-.3 1-.3 1.5V22',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-3.5-3.5',
   shield: 'M12 2l7 4v5c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-4z',
-  ban: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM4 12h16',
   cpu: 'M5 12H2a2 2 0 0 1 2-2h2M12 5V2a2 2 0 0 1 2 2v2M19 12h2a2 2 0 0 1-2 2h-2M12 19v2a2 2 0 0 1-2-2v-2M8 8h8v8H8z',
   bell: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
 }
@@ -188,37 +189,6 @@ function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement> & { icon?
       },
     }),
   )
-}
-
-function TextareaField(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const [focused, setFocused] = useState(false)
-  return h('textarea', {
-    ...(props as any),
-    onFocus: (e: any) => {
-      setFocused(true)
-      ;(props as any).onFocus?.(e)
-    },
-    onBlur: (e: any) => {
-      setFocused(false)
-      ;(props as any).onBlur?.(e)
-    },
-    style: {
-      width: '100%',
-      minHeight: 96,
-      padding: '8px 10px',
-      border: `1px solid ${focused ? t.brand : t.borderL2}`,
-      borderRadius: 8,
-      background: t.bgLayer1,
-      color: t.labelPrimary,
-      fontFamily: 'inherit',
-      fontSize: 13,
-      lineHeight: '18px',
-      resize: 'vertical' as const,
-      boxSizing: 'border-box' as const,
-      outline: 'none',
-      ...(props as any).style,
-    },
-  })
 }
 
 // DSH DisclosureRow — 24px row, 14px glyph, hover chevron swap, same semantics as host
@@ -1053,6 +1023,101 @@ function SecretField({ placeholder, hasSaved, onSave, width }: { placeholder: st
   })
 }
 
+function deepMergeGuard(base: any, patch: any): any {
+  if (typeof base !== 'object' || base === null || Array.isArray(base)) return patch
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) return patch
+  const out: any = { ...base }
+  for (const key of Object.keys(patch)) out[key] = key in out ? deepMergeGuard(out[key], patch[key]) : patch[key]
+  return out
+}
+
+// CommitField — a text input with a local draft committed on blur / Enter.
+// Same no-per-keystroke contract as SecretField, for plain (non-secret)
+// values: the store never sees a half-typed string.
+function CommitField({ value, placeholder, onCommit, width, ariaLabel }: { value: string; placeholder: string; onCommit: (v: string) => void; width?: number; ariaLabel?: string }) {
+  const [draft, setDraft] = useState(value)
+  const [focused, setFocused] = useState(false)
+  useEffect(() => {
+    if (!focused) setDraft(value)
+  }, [value, focused])
+  return h(FieldInput as any, {
+    value: draft,
+    placeholder,
+    onChange: (e: any) => setDraft(e.target.value),
+    onFocus: () => setFocused(true),
+    onBlur: (e: any) => {
+      setFocused(false)
+      if (e.target.value !== value) onCommit(e.target.value)
+    },
+    onKeyDown: (e: any) => {
+      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+    },
+    'aria-label': ariaLabel ?? placeholder,
+    style: { width: width ?? 260 } as any,
+  })
+}
+
+// ListEditor — one input row per value with add/remove, for multi-value
+// fields (branches, paths). A comma-joined single input would split a path
+// that legitimately contains a comma or spaces, and gives no per-item
+// affordance; rows commit the whole list at once, never per keystroke.
+function ListEditor({ values, placeholder, onCommit, ariaLabel, emptyHint }: { values: string[]; placeholder: string; onCommit: (v: string[]) => void; ariaLabel: string; emptyHint?: string }) {
+  const [drafts, setDrafts] = useState(values)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!editing) setDrafts(values)
+  }, [values, editing])
+  const keyOf = (ds: string[]) => ds.join('\n')
+  const commitRows = (rows: string[]) => {
+    const cleaned = rows.map((s) => s.trim()).filter((s) => s !== '')
+    if (keyOf(cleaned) !== keyOf(values)) onCommit(cleaned)
+    setDrafts(cleaned.length > 0 ? cleaned : [])
+    setEditing(false)
+  }
+  return h(
+    'div',
+    { 'data-maestro-list': '', style: { display: 'flex', flexDirection: 'column', gap: 8, width: '100%', minWidth: 0 } },
+    drafts.length === 0
+      ? h('p', { style: { ...captionStyle, margin: 0 } }, emptyHint ?? 'No entries.')
+      : null,
+    ...drafts.map((draft, i) =>
+      h(
+        'div',
+        { key: `${i}`, style: { display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 } },
+        h(FieldInput as any, {
+          value: draft,
+          placeholder,
+          onChange: (e: any) => {
+            setEditing(true)
+            setDrafts((prev: string[]) => prev.map((d, j) => (j === i ? e.target.value : d)))
+          },
+          onFocus: () => setEditing(true),
+          onBlur: () => commitRows(drafts),
+          onKeyDown: (e: any) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          },
+          'aria-label': `${ariaLabel} ${i + 1}`,
+          style: { flex: '1 1 auto', minWidth: 0 } as any,
+        }),
+        h(
+          Button as any,
+          {
+            variant: 'outline', size: 'sm',
+            onClick: () => commitRows(drafts.filter((_, j) => j !== i)),
+            'aria-label': `Remove ${ariaLabel} ${i + 1}`, title: 'Remove entry',
+          },
+          '✕',
+        ),
+      ),
+    ),
+    h(
+      'div',
+      null,
+      h(Button as any, { variant: 'outline', size: 'sm', onClick: () => { setEditing(true); setDrafts((prev: string[]) => [...prev, '']) } }, '+ Add entry'),
+    ),
+  )
+}
+
 function ToggleField({ label, caption, checked, onChange }: { label: string; caption?: string; checked?: boolean; onChange: (v: boolean) => void }) {
   return h(
     'label',
@@ -1242,7 +1307,7 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
   const [lanPin, setLanPin] = useState<string | null>(null)
   const [showLanPin, setShowLanPin] = useState(false)
   const [guard, setGuard] = useState<any>({})
-  const [patternsText, setPatternsText] = useState('')
+  const [patterns, setPatterns] = useState<string[]>([])
   // Effective auto-resume state reported by the in-tree supervisor plugin
   // (`/dsh-maestro-supervisor-resume` → `status`). null = supervisor not
   // installed or not answering yet — the toggle then renders unlocked, which
@@ -1281,6 +1346,11 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
       }
       @media (max-width: 640px) {
         [data-maestro-settings-card] { max-width:100% !important; gap:6px !important; padding:0 2px !important; }
+        /* Guard status card: stack the summary above the Reset button — the
+           DSH shell keeps its nav column beside the content on phones, so the
+           panel is ~200px wide and a side-by-side row wraps the button. */
+        [data-maestro-guard-status] { flex-direction:column !important; align-items:stretch !important; gap:8px !important; }
+        [data-maestro-guard-status] button { align-self:stretch !important; white-space:normal !important; max-width:100% !important; box-sizing:border-box !important; }
         [data-maestro-tabs] { gap:6px !important; padding:2px 2px 8px !important; margin:0 -2px 8px !important; }
         [data-maestro-tab] { min-height:40px !important; height:auto !important; padding:0 12px !important; font-size:13px !important; }
         [data-maestro-qr-row] { flex-direction:column !important; align-items:flex-start !important; }
@@ -1350,22 +1420,49 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
     const res = await configRpcCall('set', { domain, patch })
     return unwrap(res)
   }
+  // Deep-merge a guard patch into the local raw document (arrays replace, like
+  // the store's own deepMerge). Text fields commit on blur/Enter through
+  // CommitField below — never per keystroke, so a half-typed value is not
+  // persisted and the RPC is not spammed.
   const saveGuard = async (patch: any) => {
     setError(null)
-    const next = { ...guard, ...patch }
-    if (patch.gitProtection && guard.gitProtection) next.gitProtection = { ...guard.gitProtection, ...patch.gitProtection }
-    setGuard(next)
+    setGuard((prev: any) => deepMergeGuard(prev ?? {}, patch))
     try {
       await cfgSet('guard', patch)
     } catch (e: any) {
       setError(e.message ?? String(e))
     }
   }
-  const commitBlacklistPatterns = async (text: string) => {
-    const patterns = text.split('\n').map((s) => s.trim()).filter(Boolean)
+  // One rule's tier. 'default' unsets the override (null patch — see
+  // ruleTierPatch) so the row truly returns to the built-in tier instead of
+  // storing an echo that would render "customized" forever.
+  const saveGuardRule = async (ruleId: string, tier: GuardTier | 'default') => {
+    await saveGuard({ rules: ruleTierPatch(ruleId, tier) })
+  }
+  // Reset everything the tab owns to the built-in behaviour. Deep-merge cannot
+  // delete keys, so rule overrides are nulled (the runtime drops non-string
+  // tiers at merge) and legacy booleans are neutralised to their inert values
+  // (only `false` ever migrated).
+  const resetGuardDefaults = async () => {
+    const rules: Record<string, GuardTier | null> = {}
+    for (const meta of RULE_META) rules[meta.id] = null
+    await saveGuard({
+      gitProtection: { enabled: true, branches: ['master', 'main'] },
+      publishBlocked: true,
+      cwdContainment: true,
+      credentialPaths: [],
+      rules,
+      protectedBranches: ['master', 'main'],
+      protectedPaths: [],
+      workingDirContainment: { enabled: true, spillReads: true },
+      journal: { enabled: true, allowCounters: true, retainDays: 30, retainFiles: 14 },
+    })
+  }
+  const commitBlacklistPatterns = async (list: string[]) => {
     setError(null)
+    setPatterns(list)
     try {
-      await cfgSet('guardBlacklist', { patterns })
+      await cfgSet('guardBlacklist', { patterns: list })
     } catch (e: any) {
       setError(e.message ?? String(e))
     }
@@ -1418,8 +1515,8 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
       Promise.all([cfgGet('guard').catch(() => ({})), cfgGet('guardBlacklist').catch(() => ({ patterns: [] })), cfgGet('supervisor').catch(() => ({})), cfgGet('notifier').catch(() => ({}))])
         .then(([g, bl, sup, not]) => {
           setGuard(g ?? {})
-          const pats = Array.isArray((bl as any)?.patterns) ? (bl as any).patterns : []
-          setPatternsText(pats.join('\n'))
+          const pats = Array.isArray((bl as any)?.patterns) ? (bl as any).patterns.filter((p: any) => typeof p === 'string') : []
+          setPatterns(pats)
           setSupervisorCfg(sup ?? {})
           setNotifierCfg(not ?? {})
         })
@@ -1585,16 +1682,22 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
     ? supervisorStatus.autoResumeEnabled === true
     : supervisorCfg.autoResumeEnabled === true
 
-  // Nested tabs — unified pill bar with icons (maestro-design, matches dsh-maestro-jobs)
+  // Nested tabs — unified pill bar with icons (maestro-design, matches dsh-maestro-jobs).
+  // Blacklist has no pill of its own: it is an offline scan list, so it lives
+  // as a section at the bottom of the Guard tab instead of beside it.
   const TABS: Array<{ id: string; label: string; icon: TabIcon }> = [
     { id: 'tunnel', label: 'Tunnel', icon: 'globe' },
     { id: 'gitlab', label: 'GitLab', icon: 'git' },
     { id: 'review', label: 'Review', icon: 'search' },
     { id: 'guard', label: 'Guard', icon: 'shield' },
-    { id: 'blacklist', label: 'Blacklist', icon: 'ban' },
     { id: 'supervisor', label: 'Supervisor', icon: 'cpu' },
     { id: 'notifier', label: 'Notifier', icon: 'bell' },
   ]
+
+  // Effective guard state: the stored document may still carry legacy v1 keys,
+  // so the tab renders through the same precedence the runtime enforces.
+  const guardView = effectiveGuardView(guard)
+  const guardCustomCount = guardView.rules.filter((r) => r.source !== 'default').length
 
   const tabContents: Record<string, unknown> = {
     tunnel: h(
@@ -1636,20 +1739,143 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
     guard: h(
         'div',
         { style: { display: 'flex', flexDirection: 'column' } },
-        h(ToggleRow as any, { title: 'Block publish commands', description: 'On: publish commands (pnpm/npm publish, gh release, tag pushes) are denied. Off: they are only journaled for review — the legacy behaviour — not silently approved.', checked: guard.publishBlocked === true, onChange: (v: boolean) => saveGuard({ publishBlocked: v }) }),
-        h(ToggleRow as any, { title: 'Protect git branches', description: 'Block direct pushes to protected branches.', checked: guard.gitProtection?.enabled === true, onChange: (v: boolean) => saveGuard({ gitProtection: { enabled: v, branches: guard.gitProtection?.branches ?? ['master', 'main'] } }) }),
-        h(SettingRow as any, { title: 'Protected branches', description: 'Comma-separated list, e.g. master, main.', control: h(FieldInput as any, { value: (guard.gitProtection?.branches ?? ['master', 'main']).join(', '), placeholder: 'master, main', onChange: (e: any) => saveGuard({ gitProtection: { enabled: guard.gitProtection?.enabled ?? true, branches: e.target.value.split(',').map((s: any) => s.trim()).filter(Boolean) } }), style: { width: 260 } as any }) }),
-        h(ToggleRow as any, { title: 'Contain working directory', description: 'Restrict file operations to the session working directory.', checked: guard.cwdContainment === true, onChange: (v: boolean) => saveGuard({ cwdContainment: v }) }),
-        h(SettingRow as any, { title: 'Credential file paths', description: 'Extra paths treated as secrets. These add to the built-in protected list — the defaults cannot be removed from here.', control: h(FieldInput as any, { value: (guard.credentialPaths ?? []).join(', '), placeholder: '~/.config/credentials.yaml', onChange: (e: any) => saveGuard({ credentialPaths: e.target.value.split(',').map((s: any) => s.trim()).filter(Boolean) }), style: { width: 260 } as any }) }),
-      ),
-    blacklist: h(
-        'div',
-        { style: { display: 'flex', flexDirection: 'column' } },
-        h('div', { style: { ...rowStyle, flexDirection:'column', alignItems:'stretch', gap: 8, borderBottom:'none' } as any },
+        // Status summary — what the stored document amounts to, in one line.
+        h(
+          'div',
+          { style: { ...cardInsetStyle, marginTop: '12px' } },
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string } }, 'Protection status'),
+          h(
+            'div',
+            { 'data-maestro-guard-status': '', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' as const, marginTop: 4 } },
+            h(
+              'div',
+              { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px' } },
+              `${guardCustomCount} of ${guardView.rules.length} rules customized · branches: ${guardView.protectedBranches.join(', ') || 'defaults'} · journal ${guardView.journal.enabled ? `on (${guardView.journal.retainDays}d / ${guardView.journal.retainFiles} files)` : 'off'}`,
+            ),
+            h(Button as any, { variant: 'outline', size: 'sm', onClick: resetGuardDefaults }, 'Reset to defaults'),
+          ),
+        ),
+        // Per-rule tiers, grouped by boundary. The select writes one rule id;
+        // 'Default' restores the built-in tier for that rule.
+        ...(['Git', 'Publish', 'Filesystem', 'Network', 'Self-protection'] as const).map((group) =>
+          h(
+            'div',
+            { key: group, style: { display: 'flex', flexDirection: 'column' } },
+            h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string, padding: '12px 0 4px' } }, group),
+            ...RULE_META.filter((meta) => meta.group === group).map((meta) => {
+              const current = guardView.rules.find((r) => r.id === meta.id) ?? { ...meta, tier: meta.defaultTier, source: 'default' as const }
+              const stateNote =
+                current.source === 'stored' ? ' Currently customized.' : current.source === 'legacy' ? ' Currently from an older setting.' : ` Default: ${meta.defaultTier}.`
+              return h(SettingRow as any, {
+                title: meta.label,
+                description: `${meta.hint}${stateNote}${meta.locked ? ' Locked: the guard never allows lowering this one.' : ''}`,
+                control: h(
+                  'select',
+                  {
+                    value: current.source === 'default' ? 'default' : current.tier,
+                    disabled: meta.locked === true,
+                    onChange: (e: any) => {
+                      const next = e.target.value
+                      void saveGuardRule(meta.id, next as GuardTier | 'default')
+                    },
+                    'aria-label': meta.label,
+                    style: {
+                      height: 36, padding: '0 12px', border: `1px solid ${t.borderL2}`, borderRadius: 18,
+                      background: 'var(--dsw-alias-bg-module-platform, #F5F6F7)' as string, color: t.labelPrimary as string, font: 'inherit', fontSize: 13,
+                    },
+                  },
+                  h('option', { value: 'default' }, `Default (${meta.defaultTier})`),
+                  ...(meta.locked === true
+                    ? [h('option', { value: 'deny' }, 'Deny')]
+                    : [h('option', { value: 'allow' }, 'Allow — run silently'), h('option', { value: 'journal' }, 'Journal — run + record'), h('option', { value: 'ask' }, 'Ask — prompt first'), h('option', { value: 'deny' }, 'Deny — refuse')]),
+                ),
+              })
+            }),
+          ),
+        ),
+        // Lists + containment: live as soon as the next tool call runs.
+        h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string, padding: '12px 0 4px' } }, 'Scope'),
+        h('div', { style: { padding: '12px 0', borderBottom: `1px solid ${t.borderL2}`, display: 'flex', flexDirection: 'column', gap: 8 } },
+          h('div', { style: rowTitleStyle }, 'Protected branches'),
+          h('div', { style: rowDescStyle }, 'One branch per row. Empty restores the defaults (master, main). Each row commits on blur or Enter — never per keystroke.'),
+          h(ListEditor as any, {
+            values: guardView.protectedBranches, placeholder: 'main', ariaLabel: 'Protected branch',
+            emptyHint: 'No branches listed — the defaults (master, main) apply.',
+            onCommit: (list: string[]) => { void saveGuard({ protectedBranches: list }) },
+          }),
+        ),
+        h('div', { style: { padding: '12px 0', borderBottom: `1px solid ${t.borderL2}`, display: 'flex', flexDirection: 'column', gap: 8 } },
+          h('div', { style: rowTitleStyle }, 'Extra protected paths'),
+          h('div', { style: rowDescStyle }, 'One path per row — paths may contain commas or spaces. These add to the built-in protected list — the defaults cannot be removed from here.'),
+          h(ListEditor as any, {
+            values: guardView.protectedPaths, placeholder: '~/.config/credentials.yaml', ariaLabel: 'Protected path',
+            emptyHint: 'No extra paths — only the built-in list applies.',
+            onCommit: (list: string[]) => { void saveGuard({ protectedPaths: list }) },
+          }),
+        ),
+        h(ToggleRow as any, {
+          title: 'Enforce working-directory containment',
+          description: 'Keep file writes inside the session working directory (the OS temp dir stays exempt). Off turns the outside-writes rule off entirely.',
+          checked: guardView.containment.enabled === true,
+          onChange: (v: boolean) => { void saveGuard({ workingDirContainment: { ...guardView.containment, enabled: v } }) },
+        }),
+        h(ToggleRow as any, {
+          title: 'Exempt runtime spill reads',
+          description: 'Let agents read back their own oversized tool results from the OS temp dir — blocking those reads breaks the retrieval flow.',
+          checked: guardView.containment.spillReads === true,
+          onChange: (v: boolean) => { void saveGuard({ workingDirContainment: { ...guardView.containment, spillReads: v } }) },
+        }),
+        // Journal: boot-time knobs — the guard reads them once at startup.
+        h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string, padding: '12px 0 4px' } }, 'Journal'),
+        h('p', { style: { ...captionStyle, margin: '0 0 4px' } }, 'Journal settings apply after a host restart — the guard reads them once at boot, unlike the rules above.'),
+        h(ToggleRow as any, {
+          title: 'Keep a decision journal',
+          description: 'Off stops all journal writes; the guard status tools go empty.',
+          checked: guardView.journal.enabled === true,
+          onChange: (v: boolean) => { void saveGuard({ journal: { ...guardView.journal, enabled: v } }) },
+        }),
+        h(ToggleRow as any, {
+          title: 'Count silent allows',
+          description: 'Fold allow decisions into one periodic aggregate line instead of dropping them.',
+          checked: guardView.journal.allowCounters === true,
+          onChange: (v: boolean) => { void saveGuard({ journal: { ...guardView.journal, allowCounters: v } }) },
+        }),
+        h(SettingRow as any, {
+          title: 'Retain days',
+          description: 'Keep journal archives newer than this many days.',
+          control: h(CommitField as any, {
+            value: String(guardView.journal.retainDays), placeholder: '30', width: 160, ariaLabel: 'Retain days',
+            onCommit: (text: string) => {
+              const n = Number(text)
+              if (!Number.isInteger(n) || n <= 0) { setError('Retention must be a positive whole number.'); return }
+              void saveGuard({ journal: { ...guardView.journal, retainDays: n } })
+            },
+          }),
+        }),
+        h(SettingRow as any, {
+          title: 'Retain files',
+          description: 'Keep at least this many newest archive files.',
+          control: h(CommitField as any, {
+            value: String(guardView.journal.retainFiles), placeholder: '14', width: 160, ariaLabel: 'Retain files',
+            onCommit: (text: string) => {
+              const n = Number(text)
+              if (!Number.isInteger(n) || n <= 0) { setError('Retention must be a positive whole number.'); return }
+              void saveGuard({ journal: { ...guardView.journal, retainFiles: n } })
+            },
+          }),
+        }),
+        // Merged from the former Blacklist pill: an offline scan list, not a
+        // live gate — it belongs with the guard it is always confused with,
+        // labelled for what it actually is.
+        h('div', { style: { fontSize: 13, fontWeight: 600, color: t.labelPrimary as string, padding: '12px 0 4px' } }, 'Publish scan list (offline)'),
+        h('div', { style: { ...rowStyle, flexDirection: 'column', alignItems: 'stretch', gap: 8, borderBottom: 'none' } as any },
           h('div', { style: rowTitleStyle }, 'Blacklist patterns'),
-          h('div', { style: rowDescStyle }, 'One pattern per line. These do NOT gate any live tool call — the guard runtime never reads this list. It only feeds the offline scan a human runs by hand: node scripts/check-public-blacklist.mjs. Matching files are reported there, not blocked at runtime.'),
-          h(TextareaField as any, { value: patternsText, placeholder: 'example-project\nacme-shop', onChange: (e: any) => setPatternsText(e.target.value), onBlur: (e: any) => commitBlacklistPatterns(e.target.value) }),
-          h('div', { style: { marginTop: 8 } }, h(Button as any, { variant: 'outline', size: 'sm', onClick: () => commitBlacklistPatterns(patternsText) }, 'Save Blacklist')),
+          h('div', { style: rowDescStyle }, 'One pattern per row. These do NOT gate any live tool call — the guard runtime never reads this list. It only feeds the offline scan a human runs by hand: node scripts/check-public-blacklist.mjs. Matching files are reported there, not blocked at runtime.'),
+          h(ListEditor as any, {
+            values: patterns, placeholder: 'example-project', ariaLabel: 'Blacklist pattern',
+            emptyHint: 'No patterns — the offline scan reports nothing.',
+            onCommit: (list: string[]) => { void commitBlacklistPatterns(list) },
+          }),
         ),
       ),
     supervisor: h(

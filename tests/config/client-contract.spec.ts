@@ -131,9 +131,17 @@ describe('settings UI remediation pins', () => {
     expect(live).toContain('standalone dsh-web-supervisor daemon')
   })
 
-  it('explains publishBlocked is deny-vs-journal and credentialPaths is additive', () => {
-    expect(live).toContain('only journaled for review')
+  it('guard tab explains tiers, the locked tamper rule and the additive paths list', () => {
+    const live = read('MaestroSettings.tsx')
+    // Per-rule Default/Allow/Journal/Ask/Deny selector with the built-in tier
+    // named, so a user can tell a default from a customization.
+    expect(live).toContain('Default (')
+    // guard.tamper is a structural floor: the selector offers no downgrade.
+    expect(live).toContain('Locked: the guard never allows lowering this one.')
+    // Extra paths add to the built-in list; the defaults stay put.
     expect(live).toContain('cannot be removed from here')
+    // Journal knobs are boot-time: the tab must say a restart is required.
+    expect(live).toContain('once at boot')
   })
 
   it('ToggleRow supports a disabled (locked) state', () => {

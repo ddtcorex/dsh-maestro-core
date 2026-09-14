@@ -52,6 +52,14 @@ describe('maestroConfig service', () => {
     expect(seen).toEqual(['notify'])
   })
 
+  it('unset deletes one key and reports whether anything was deleted', async () => {
+    const svc = createMaestroConfigService({ dshHome: homeA })
+    await svc.set('guardBlacklist', { patterns: ['a'], placeholders: { a: 'b' } })
+    expect(await svc.unset('guardBlacklist', 'placeholders')).toBe(true)
+    expect(await svc.get('guardBlacklist')).toEqual({ patterns: ['a'] })
+    expect(await svc.unset('guardBlacklist', 'placeholders')).toBe(false)
+  })
+
   it('services bound to different homes do not cross-talk', async () => {
     const a = createMaestroConfigService({ dshHome: homeA })
     const b = createMaestroConfigService({ dshHome: homeB })

@@ -12,29 +12,56 @@ describe('Task 3: Settings UI tabs', () => {
     expect(src).toContain('Guard')
   })
 
-  it('Settings has 4 tabs: Guard | Blacklist | Supervisor | Notifier', () => {
+  it('Settings has pills for Guard, Supervisor and Notifier (Blacklist merged into Guard)', () => {
     const src = read('MaestroSettings.tsx')
     expect(src).toContain('Guard')
-    expect(src).toContain('Blacklist')
     expect(src).toContain('Supervisor')
     expect(src).toContain('Notifier')
+    // The standalone Blacklist pill is gone; its editor lives as a section
+    // inside the Guard tab.
+    expect(src).not.toMatch(/id: 'blacklist'/)
+    expect(src).toContain('Blacklist')
   })
 
-  it('Guard tab has toggles for publishBlocked, gitProtection.enabled, cwdContainment', () => {
+  it('Guard tab speaks schema v2: per-rule tiers, branches, paths, containment, journal', () => {
     const src = read('MaestroSettings.tsx')
-    expect(src).toContain('publishBlocked')
-    expect(src).toContain('gitProtection')
-    expect(src).toContain('cwdContainment')
+    expect(src).toContain('saveGuardRule')
+    expect(src).toContain('protectedBranches')
+    expect(src).toContain('protectedPaths')
+    expect(src).toContain('workingDirContainment')
+    expect(src).toContain('retainDays')
+    expect(src).toContain('retainFiles')
+    // Rule ids live in guard-view.ts (RULE_META); the tab renders them grouped.
+    expect(read('guard-view.ts')).toContain('guard.tamper')
+    expect(src).toContain('Self-protection')
+    // Text fields commit on blur/Enter, never per keystroke.
+    expect(src).toContain('function CommitField')
+    // 'Default' unsets the override (null) instead of echoing the tier.
+    expect(src).toContain('ruleTierPatch')
+    // Multi-value fields use one row per value, not comma-joined text.
+    expect(src).toContain('function ListEditor')
+    expect(src).toContain('One branch per row')
+    expect(src).toContain('One path per row')
+    // Status card stacks on narrow screens (shell keeps its nav column).
+    expect(src).toContain('data-maestro-guard-status')
+    // Boot-time knobs say they need a restart.
+    expect(src).toContain('once at boot')
   })
 
-  it('Blacklist tab has a textarea for patterns (one per line)', () => {
+  it('Blacklist editor lives inside the Guard tab as row-based offline scan list', () => {
     const src = read('MaestroSettings.tsx')
-    expect(src).toMatch(/textarea/i)
-    expect(src).toContain('patterns')
-    // The placeholders half of this tab was removed 2026-09-14: nothing read
+    expect(src).toContain('Blacklist patterns')
+    expect(src).toContain('Publish scan list (offline)')
+    expect(src).toContain('One pattern per row')
+    // The writer persists the patterns array (rows commit the whole list).
+    expect(src).toMatch(/cfgSet\('guardBlacklist',\s*\{\s*patterns/)
+    // The placeholders half of this editor was removed 2026-09-14: nothing read
     // `guardBlacklist.placeholders` — not the guard runtime, not even
     // check-public-blacklist.mjs, its sibling field's one consumer.
     expect(src).not.toContain('placeholders')
+    // The textarea is gone with the line-based editor; rows use ListEditor.
+    expect(src).toContain('function ListEditor')
+    expect(src).not.toContain('TextareaField')
   })
 
   it('Supervisor tab has intervalMs etc', () => {
@@ -47,11 +74,12 @@ describe('Task 3: Settings UI tabs', () => {
     expect(src).toContain('telegram')
   })
 
-  it('host exposes guard/guardBlacklist domains via RPC get/set (generic channel)', () => {
+  it('host exposes guard/guardBlacklist domains via RPC get/set/unset (generic channel)', () => {
     const host = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/host/index.ts'), 'utf8')
     expect(host).toContain('/dsh-maestro-config')
     expect(host).toContain("'get'")
     expect(host).toContain("'set'")
+    expect(host).toContain("'unset'")
   })
 
   it('client index wires configRpcCall for guard domains', () => {

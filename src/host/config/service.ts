@@ -6,6 +6,8 @@ export interface MaestroConfigService {
   get(domain: string): Promise<unknown>
   /** Deep-merges the patch into the domain (same semantics as the lib). */
   set(domain: string, patch: object): Promise<void>
+  /** Deletes one top-level key of a domain; false when there was nothing to delete. */
+  unset(domain: string, key: string): Promise<boolean>
   onChange(cb: (domain: string) => void): () => void
 }
 
@@ -25,6 +27,9 @@ export function createMaestroConfigService(opts?: { dshHome?: string }): Maestro
     },
     async set(domain, patch) {
       await lib.set(domain, patch, libOpts)
+    },
+    async unset(domain, key) {
+      return lib.unset(domain, key, libOpts)
     },
     onChange(cb) {
       return lib.onChange(cb)
