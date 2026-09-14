@@ -86,3 +86,34 @@ describe('notifier domain schema', () => {
     ).rejects.toThrow(/validation failed for 'notifier'.*reviewNotifications boolean/)
   })
 })
+
+/**
+ * Regression pin for the two-hop legacy flat-key alias
+ * `telegramReviewNotifications` ↔ `notifier.policy.reviewNotifications`.
+ * This alias bridges `dsh-maestro-config-lib`'s DOMAIN_KEY_MAP and
+ * `dsh-maestro-review`'s flat config read/write; nothing type-checks the
+ * connection across packages, so a rename on either side must break a test
+ * instead of breaking silently.
+ */
+import { DOMAIN_KEY_MAP, splitLegacyPatch, readFlat, writeLegacyPatch } from '../src/index.ts'
+describe('telegramReviewNotifications alias (regression pin)', () => {
+  it('DOMAIN_KEY_MAP pins the flat-key alias', () => {
+    expect(DOMAIN_KEY_MAP.telegramReviewNotifications).toBe('notifier.policy.reviewNotifications')
+  })
+  it('splitLegacyPatch routes the flat key into the notifier domain', () => {
+    const writes = splitLegacyPatch({ telegramReviewNotifications: true } as any)
+    expect(writes).toEqual([{ domain: 'notifier', patch: { policy: { reviewNotifications: true } } }])
+  })
+  it('readFlat exposes the domain value back under the flat key', async () => {
+    await set('notifier', { policy: { reviewNotifications: true } } as any, { dshHome: home })
+    const flat = await readFlat({ dshHome: home })
+    expect(flat.telegramReviewNotifications).toBe(true)
+  })
+  it('writeLegacyPatch round-trips through the alias via the store', async () => {
+    await writeLegacyPatch({ telegramReviewNotifications: false } as any, { dshHome: home })
+    const flat = await readFlat({ dshHome: home })
+    expect(flat.telegramReviewNotifications).toBe(false)
+    const doc = await load({ dshHome: home })
+    expect((doc.domains.notifier as any).policy.reviewNotifications).toBe(false)
+  })
+})
