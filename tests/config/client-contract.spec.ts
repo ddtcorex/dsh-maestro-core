@@ -9,9 +9,16 @@ const read = (f: string) => readFileSync(resolve(clientDir, f), 'utf8')
 describe('settings section registration contract', () => {
   const entry = read('index.tsx')
 
-  it('registers as "Maestro" (not "Maestro Config") right below Agent presets', () => {
+  it('registers as "Maestro" after the archived-sessions page, never tied with it', () => {
     expect(entry).toContain("id: 'maestro'")
-    expect(entry).toContain("order: 25")
+    // The shell sorts settings.section rows by order alone, so a shared number
+    // leaves the relative order undefined: upstream's archived-sessions page
+    // owns 25 and this tab used to collide with it, swapping places between
+    // loads. Pin the resolved value through the exported constant the
+    // registration reads, and keep the literal out of the register call.
+    expect(entry).toContain('export const MAESTRO_SETTINGS_ORDER = 26')
+    expect(entry).toContain('order: MAESTRO_SETTINGS_ORDER')
+    expect(entry).not.toContain('order: 25')
     expect(entry).toMatch(/label:\s*\(\)\s*=>\s*'Maestro'/)
     expect(entry).not.toContain('Maestro Config')
   })

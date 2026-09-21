@@ -1,3 +1,16 @@
+/**
+ * Settings nav order for every Maestro section.
+ *
+ * The shell sorts `settings.section` rows by `order` alone, so two registrants
+ * sharing a number have no defined relative order. Upstream's
+ * `archived-sessions` page occupies 25, which is exactly where this plugin used
+ * to register: the Maestro tabs and Archived sessions swapped places between
+ * loads. The Maestro block therefore starts at 26, and the sibling tabs in
+ * dsh-maestro-jobs / -sync / -gateway continue from here — keep them ahead of
+ * later upstream sections and never reuse 25.
+ */
+export const MAESTRO_SETTINGS_ORDER = 26
+
 // DSH-native redesign — reuses DSH tokens & primitive geometry maximally (see MaestroSettings.tsx).
 import { MaestroSettingsTab } from './MaestroSettings.js'
 import { MAESTRO_RPC_CHANNEL } from './api.js'
@@ -96,7 +109,7 @@ export function apply(ctx: ClientCtx): void {
 
   slots.inject('settings.section', () =>
     slots.register(
-      { name: 'settings.section', id: 'maestro', order: 25, label: () => 'Maestro', inject: () => ({ rpcCall, configRpcCall, supervisorRpcCall }) },
+      { name: 'settings.section', id: 'maestro', order: MAESTRO_SETTINGS_ORDER, label: () => 'Maestro', inject: () => ({ rpcCall, configRpcCall, supervisorRpcCall }) },
       MaestroSettingsTab as unknown as (props: { rpcCall: RpcCall }) => unknown,
     ),
   )
