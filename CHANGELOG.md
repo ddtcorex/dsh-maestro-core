@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.9.0] - 2026-09-22
+
+### Fixed
+
+- **Supervisor fallback reads the shared settings store** — the four
+  `domains.supervisor.*` reads pointed at `~/.dsh/maestro/settings.json`,
+  which never exists on a real install where the config lib writes
+  `~/.dsh/dsh-maestro-config/settings.json`; they now resolve the shared
+  path honouring `DSH_HOME` (#91).
+- **A fresh install defers to the store** — the hardcoded
+  `autoResumeEnabled: true` left `cordis.patch.yml`, so the UI toggle is no
+  longer silently overridden (#91).
+
+### Added
+
+- `isAutoResumePinned()` and a status RPC endpoint, so a settings UI can
+  render an honest locked/disabled toggle when an install-supplied Cordis
+  config pins the value (#91).
+
+### Changed
+
+- Follow `@ddtcorex/dsh-maestro-config-lib` to `^0.3.0`.
+
 ## [0.8.4] - 2026-09-14
 
 ### Fixed
