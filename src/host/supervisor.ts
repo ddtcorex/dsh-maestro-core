@@ -700,7 +700,11 @@ export class Supervisor {
 
   // Synchronous start wrapper for callers that do not await (daemon cli fire-and-forget)
   startSync(): void {
-    void this.start()
+    // The caller never observes this promise: an escaping rejection would reach
+    // the host's unhandled-rejection path and exit the daemon.
+    void this.start().catch((err) => {
+      console.error('dsh-web-supervisor: start failed:', err instanceof Error ? err.message : err)
+    })
   }
 
   stop(): void {
