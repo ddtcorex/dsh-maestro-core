@@ -34,7 +34,8 @@
 import { decompress, Decompress } from 'fzstd'
 import { copyFileSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync, type Dirent } from 'node:fs'
 import { zstdCompressSync } from 'node:zlib'
-import { join, basename } from 'node:path'
+import { join } from 'node:path'
+import { resolveSessionLogPath } from './session-log-file.js'
 
 export type SessionLogClass = 'ok' | 'single-frame-whole-log' | 'corrupt-first-frame' | 'not-a-session-log'
 export interface SessionHealthEntry { path: string; klass: SessionLogClass; remark?: string }
@@ -156,20 +157,24 @@ export async function repairSingleFrameLog(path: string, backupSuffix = '.corrup
 }
 
 /**
- * Walk `root` recursively and classify every `session.jsonl.zstd` found.
+ * Walk `root` recursively and classify the session log of every session
+ * directory found. One directory owns one log — the newest format generation
+ * in it (`session.v<N>.jsonl[.zstd]`, generation 0 without the `vN`) is exactly
+ * the file the harness reads, so a stale generation beside it is skipped.
  * The process-write layout is <dshHome>/sessions/<project>/<session>/, but we
- * recurse generically so tests and future layouts work unchanged.
+ * recurse generically so tests and future layouts work unchanged. Resolving the
+ * generation by name is load-bearing: matching a literal went blind when the
+ * harness bumped it (v3 -> v4 on 2026-09-23), leaving this pre-flight with zero
+ * files to classify.
  */
 export async function scanSessionLogs(root: string): Promise<SessionHealthEntry[]> {
   const found: string[] = []
   const walk = (dir: string): void => {
     let entries: Dirent[]
     try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
-    for (const e of entries) {
-      const fp = join(dir, e.name)
-      if (e.isDirectory()) walk(fp)
-      else if (e.isFile() && basename(e.name) === 'session.jsonl.zstd') found.push(fp)
-    }
+    const log = resolveSessionLogPath(dir)
+    if (log !== undefined) found.push(log)
+    for (const e of entries) if (e.isDirectory()) walk(join(dir, e.name))
   }
   walk(root)
   const out: SessionHealthEntry[] = []

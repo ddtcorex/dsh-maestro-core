@@ -226,3 +226,54 @@ describe('session health on V3-shaped logs', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })
+
+// ---------------------------------------------------------------------------
+// DSH 0.1.7-rc.1 session-format V4. The classifier is version-agnostic, so what
+// these pin is DISCOVERY: the harness names a log by generation
+// (`generationLogFilename`), so a walker that matches only the literal
+// `session.jsonl.zstd` finds nothing on a current machine — the boot pre-flight
+// then silently scans zero files and never quarantines a corrupt live log.
+// ---------------------------------------------------------------------------
+describe('session health discovery on current-generation (v4) filenames', () => {
+  const writeLogGen = (dir: string, gen: number, frames: Buffer[]): string => {
+    mkdirSync(dir, { recursive: true })
+    const name = gen === 0 ? 'session.jsonl.zstd' : `session.v${gen}.jsonl.zstd`
+    const path = join(dir, name)
+    writeFileSync(path, Buffer.concat(frames))
+    return path
+  }
+
+  it('classifies a v4-named healthy log as ok', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sh-v4-healthy-'))
+    try {
+      const path = writeLogGen(dir, 4, [
+        compress(Buffer.from(headerV3('v4a'))),
+        compress(Buffer.from('{"type":"turn/start","seq":1,"time":2,"data":{"turn":1}}\n')),
+      ])
+      expect((await classifySessionLog(path)).klass).toBe('ok')
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('runSessionHealthCheck discovers and repairs a v4-named single-frame log', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sh-v4-walk-'))
+    try {
+      const sessDir = join(root, 'sessions', '--proj--', 'session-v4')
+      const payload = headerV3('v4b') + '{"type":"turn/start","seq":1,"time":2,"data":{"turn":1}}\n'
+      const path = writeLogGen(sessDir, 4, [compress(Buffer.from(payload))])
+      const r = await runSessionHealthCheck(root, { repair: true })
+      expect(r.fixed).toBe(1)
+      expect((await classifySessionLog(path)).klass).toBe('ok')
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('runSessionHealthCheck still discovers generations above the ones known today', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'sh-v27-walk-'))
+    try {
+      const sessDir = join(root, 'sessions', '--proj--', 'session-v27')
+      const payload = headerV3('v27a') + '{"type":"turn/start","seq":1,"time":2,"data":{"turn":1}}\n'
+      writeLogGen(sessDir, 27, [compress(Buffer.from(payload))])
+      const r = await runSessionHealthCheck(root, { repair: true })
+      expect(r.fixed).toBe(1)
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})

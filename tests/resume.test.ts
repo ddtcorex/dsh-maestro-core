@@ -308,3 +308,97 @@ describe('v3 session logs', () => {
     expect(res.interrupted).toContain('proj/sess-v3-dangling')
   })
 })
+
+/** One log generation: gen 0 => session.jsonl[.zstd]; gen N => session.vN.jsonl[.zstd]. */
+function writeZstdGen(dir: string, gen: number, lines: string[], mtime?: Date): string {
+  const name = gen === 0 ? 'session.jsonl.zstd' : `session.v${gen}.jsonl.zstd`
+  const plain = path.join(dir, `_src-gen${gen}.jsonl`)
+  fs.writeFileSync(plain, lines.join('\n') + '\n')
+  const zstdPath = path.join(dir, name)
+  childProcess.execSync(`zstd -q -f ${JSON.stringify(plain)} -o ${JSON.stringify(zstdPath)}`)
+  fs.rmSync(plain)
+  if (mtime) fs.utimesSync(zstdPath, mtime, mtime)
+  return zstdPath
+}
+
+// Regression (2026-09-23, after the DSH 0.1.7-rc.1 upgrade): the harness bumped
+// the session format generation v3 -> v4, so live sessions persist as
+// `session.v4.jsonl.zstd`. A resolver that enumerates generation filenames as
+// literals goes blind again — the exact silent-skip class as 2026-09-11, which
+// is why the generation must be discovered, never listed.
+describe('current-generation session logs', () => {
+  it('resolves a v4 log when it is the only log in the session dir', () => {
+    const dir = sessionDir('proj', 'sess-v4-only')
+    fs.writeFileSync(path.join(dir, 'session.lock'), '')
+    fs.writeFileSync(path.join(dir, 'session.v4.jsonl.zstd'), 'stub')
+    expect(resolveSessionLogPath(dir)).toBe(path.join(dir, 'session.v4.jsonl.zstd'))
+  })
+
+  it('prefers the newest generation when several generations coexist', () => {
+    const dir = sessionDir('proj', 'sess-multi-gen')
+    writeJsonl(dir, [completedLine(Date.now())])
+    fs.writeFileSync(path.join(dir, 'session.jsonl.zstd'), 'stub-gen0')
+    fs.writeFileSync(path.join(dir, 'session.v3.jsonl.zstd'), 'stub-gen3')
+    fs.writeFileSync(path.join(dir, 'session.v4.jsonl.zstd'), 'stub-gen4')
+    expect(resolveSessionLogPath(dir)).toBe(path.join(dir, 'session.v4.jsonl.zstd'))
+  })
+
+  it('prefers the compressed artifact when both encodings of one generation exist', () => {
+    const dir = sessionDir('proj', 'sess-encoding')
+    fs.writeFileSync(path.join(dir, 'session.v4.jsonl'), 'stub-plain')
+    fs.writeFileSync(path.join(dir, 'session.v4.jsonl.zstd'), 'stub-zstd')
+    expect(resolveSessionLogPath(dir)).toBe(path.join(dir, 'session.v4.jsonl.zstd'))
+  })
+
+  it('still reads generations above the ones known today', () => {
+    // The generation counter is unbounded — the harness's own
+    // generationLogFilename(version, compression) is parameterised and its
+    // suite asserts v27 — so a future bump must not need a code change here.
+    const dir = sessionDir('proj', 'sess-future-gen')
+    fs.writeFileSync(path.join(dir, 'session.v3.jsonl.zstd'), 'stub-gen3')
+    fs.writeFileSync(path.join(dir, 'session.v27.jsonl.zstd'), 'stub-gen27')
+    expect(resolveSessionLogPath(dir)).toBe(path.join(dir, 'session.v27.jsonl.zstd'))
+  })
+
+  it('returns undefined for a session dir that holds no log at all', () => {
+    const dir = sessionDir('proj', 'sess-empty')
+    fs.writeFileSync(path.join(dir, 'session.lock'), '')
+    expect(resolveSessionLogPath(dir)).toBeUndefined()
+  })
+
+  it.skipIf(!zstdAvailable)('findInterrupted detects a trailing interrupted turn/end in a v4 log', async () => {
+    const dir = sessionDir('proj', 'sess-v4-interrupted')
+    writeZstdGen(dir, 4, [
+      JSON.stringify({ type: 'turn/start', time: Date.now() - 1000, data: { turn: 2 } }),
+      interruptedLine(Date.now()),
+    ])
+    const res = await findInterrupted(tmp)
+    expect(res.interrupted).toContain('proj/sess-v4-interrupted')
+  })
+
+  it.skipIf(!zstdAvailable)('findDanglingOpenTurns detects an open turn in a v4 log', async () => {
+    const now = Date.now()
+    const dir = sessionDir('proj', 'sess-v4-dangling')
+    writeZstdGen(dir, 4, [
+      JSON.stringify({ type: 'turn/start', time: now - 2000, data: { turn: 12 } }),
+      JSON.stringify({ type: 'step/start', time: now - 1900, data: { turn: 12, step: 1 } }),
+    ], new Date(now - 1000))
+    const res = await findDanglingOpenTurns(tmp)
+    expect(res.interrupted).toContain('proj/sess-v4-dangling')
+  })
+
+  it.skipIf(!zstdAvailable)('judges a mixed-generation dir by its newest generation, not the stale one', async () => {
+    // A dir holding both v3 (old, clean) and v4 (live, interrupted) must be
+    // reported interrupted: reading the stale file would both miss this
+    // recovery and, on an old interrupted v3, fire a false continue.
+    const dir = sessionDir('proj', 'sess-mixed-gen-live')
+    const now = Date.now()
+    writeZstdGen(dir, 3, [completedLine(now - 60_000)], new Date(now - 60_000))
+    writeZstdGen(dir, 4, [
+      JSON.stringify({ type: 'turn/start', time: now - 2000, data: { turn: 3 } }),
+      interruptedLine(now),
+    ])
+    const res = await findInterrupted(tmp)
+    expect(res.interrupted).toContain('proj/sess-mixed-gen-live')
+  })
+})
