@@ -904,7 +904,7 @@ function makeSessionHealthToolDef(config: SupervisorPluginConfig) {
 }
 
 /**
- * Register the session-health RPC handle (loopback authority) and the
+ * Register the session-health RPC handle and the
  * maestro_session_health host tool. Fail-safe like the other registrations:
  * any registration error is logged, never thrown, and the returned disposer
  * unregisters everything that did succeed.
@@ -917,7 +917,6 @@ export function registerSessionHealthService(ctx: any, config: SupervisorPluginC
       disposers.push(conn.rpc.handle(
         '/dsh-maestro-supervisor-session-health',
         createSessionHealthRpcHandler(ctx, { config }),
-        { authority: 'loopback' },
       ))
     }
   } catch (e: any) {
@@ -1052,7 +1051,6 @@ export function apply(ctx: any, config: SupervisorPluginConfig = {}): void {
           disposeRpc = conn.rpc.handle(
             '/dsh-maestro-supervisor-resume',
             createResumeRpcHandler(ctx, { config }),
-            { authority: 'loopback' }
           )
         }
       } catch (e: any) {
