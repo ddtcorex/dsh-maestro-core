@@ -1,6 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
+import { resolveSessionLogPath } from './session-log-file.js'
 
 export interface ResumeResult {
   scanned: number
@@ -13,23 +14,13 @@ export interface FindInterruptedOpts {
 }
 
 /**
- * Resolve the readable session log inside one session directory across
- * format generations. `session.v3.jsonl.zstd` is the current successor;
- * `session.jsonl.zstd` / `session.jsonl` remain for committed older
- * generations (migrations never move or delete them). Prefer v3 when
- * present — live sessions persist there, and a scan that only knows the
- * old names silently skips every current session (2026-09-11: auto-resume
- * found nothing after a restart, so no recovery continue was triggered).
+ * Resolve the readable session log inside one session directory. Owned by
+ * `session-log-file.ts` — the single owner of "which file is the log":
+ * generations are discovered, never listed, because enumerating them went
+ * blind twice (v3 on 2026-09-11, v4 on 2026-09-23). Re-exported here because
+ * `plugin.ts` and `preset.ts` already import it from this module.
  */
-export function resolveSessionLogPath(dir: string): string | undefined {
-  const v3 = path.join(dir, 'session.v3.jsonl.zstd')
-  if (fs.existsSync(v3)) return v3
-  const zstd = path.join(dir, 'session.jsonl.zstd')
-  if (fs.existsSync(zstd)) return zstd
-  const jsonl = path.join(dir, 'session.jsonl')
-  if (fs.existsSync(jsonl)) return jsonl
-  return undefined
-}
+export { resolveSessionLogPath }
 
 /**
  * Read the last ~100 lines of one session's raw log, applying the mtime
