@@ -34,7 +34,7 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 └──────────────────────────────────────────┘
 ```
 
-* **Daemon ↔ Web:** `supervisor.ts` `resumeViaRpc()` POSTs `client-request` envelope to `http://127.0.0.1:3080/dsh-maestro-supervisor-resume/resume` (loopback, `authority: loopback`). The in-tree plugin handles it via `createResumeRpcHandler` and returns `{resumed: string[]}`. Daemon never blocks on notifier.
+* **Daemon ↔ Web:** `supervisor.ts` `resumeViaRpc()` POSTs `client-request` envelope to `http://127.0.0.1:3080/dsh-maestro-supervisor-resume/resume`. Reachability is loopback because the daemon dials `127.0.0.1`, not because registration requests it: `connection.rpc.handle(channel, handler)` takes exactly two parameters and has no `authority` option (a third argument is silently ignored; loopback is reported by `connection.isLoopback`). The in-tree plugin handles it via `createResumeRpcHandler` and returns `{resumed: string[]}`. Daemon never blocks on notifier.
 * **Host ↔ Client:** Client polling is primary (works when host is down); host push is secondary (after `health.up` or `runAutoResume` success, host could `emit`/`broadcast` — currently client polling alone is sufficient and host health check is the hybrid's host half).
 * **Sessions:** Stored at `~/.dsh/sessions/<projectKey>/<sessionId>/session.jsonl.zstd` (zstd, header `type: session` + events). `projectKey` is `sha1(cwd)` humanized (`--home-kai-Work-htdocs-maestro-harness--`). Subagents have `origin: subagent`, `parentSession`, same storage.
 

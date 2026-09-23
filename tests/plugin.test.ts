@@ -646,14 +646,17 @@ describe('runAutoResume', () => {
 
 function makeCtxWithEffect(overrides: Record<string, any> = {}) {
   const logs: string[] = []
-  const rpcHandlers: { channel: string; opts: any }[] = []
+  const rpcHandlers: { channel: string; arity: number }[] = []
   return {
     logger: { info: (m: string) => logs.push(`info:${m}`), warn: (m: string) => logs.push(`warn:${m}`) },
     effect: (fn: any) => fn(),
     connection: {
       rpc: {
-        handle: (channel: string, _handler: any, opts?: any) => {
-          rpcHandlers.push({ channel, opts })
+        // Mirrors the real HostConnectionRpc.handle(channel, handler) — two
+        // parameters. Loopback is a transport property (connection.isLoopback),
+        // never a per-channel option, so the mock must not accept one.
+        handle: (...args: any[]) => {
+          rpcHandlers.push({ channel: args[0], arity: args.length })
           return () => {}
         },
       },
@@ -814,7 +817,9 @@ describe('apply', () => {
     // Every channel must satisfy the host channel contract (/^\/[A-Za-z0-9._~-]+$/ —
     // assertChannel rejects inner slashes, so the sibling dash convention applies).
     for (const ch of channels) expect(ch).toMatch(/^\/[A-Za-z0-9._~-]+$/)
-    for (const r of ctx._rpcHandlers) expect(r.opts).toMatchObject({ authority: 'loopback' })
+    // handle() takes exactly (channel, handler): passing an `authority` option
+    // is silently ignored by the real host, so pin the arity, not an option.
+    for (const r of ctx._rpcHandlers) expect(r.arity).toBe(2)
   })
 
   it('routes a loopback session-health request to runSessionHealthCheck with repair on', async () => {

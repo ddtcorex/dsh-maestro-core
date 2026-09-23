@@ -348,7 +348,7 @@ export function makeRepairPresetToolDef(ctx: any): any {
 }
 
 /**
- * Register the resume-tool-health RPC handle (loopback authority) and the
+ * Register the resume-tool-health RPC handle and the
  * maestro_resume_tool_health host tool. Fail-safe like the other
  * registrations: any registration error is logged, never thrown, and the
  * returned disposer unregisters everything that did succeed.
@@ -361,7 +361,6 @@ export function registerResumeToolHealthService(ctx: any): () => void {
       disposers.push(conn.rpc.handle(
         '/dsh-maestro-supervisor-resume-tool-health',
         createResumeToolHealthRpcHandler(ctx),
-        { authority: 'loopback' },
       ))
     }
   } catch (e: any) {
