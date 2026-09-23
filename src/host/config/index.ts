@@ -73,6 +73,6 @@ export function apply(ctx: Context): void {
         }
       }
       return fail(`unknown endpoint: ${String(endpoint)}`)
-    }, { authority: 'loopback' })
+    })
   )
 }
