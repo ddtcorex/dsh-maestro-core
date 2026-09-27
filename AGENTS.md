@@ -138,7 +138,7 @@ curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js
 DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &  # or --port <ephemeral>
 # wait for "dsh web: http://127.0.0.1:<port>" and curl 200, then kill
 # This catches load-time failures (missing lib/index.js, stale build, bad cordis.patch.yml) that no in-code try/catch can catch.
-# See dsh-safe-web-update skill for the guarded helper: maestro-skills/skills/dsh-safe-web-update/scripts/restart-dsh-web.sh
+# See dsh-safe-restart skill for the guarded helper: skills/dsh-safe-restart/scripts/restart-dsh-web.sh
 ```
 
 This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/index.js`, stale `link:`). See `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md`.
@@ -218,10 +218,10 @@ DSH_INTEGRATION=1 pnpm test -- tests/integration.test.ts  # needs real DSH web
 ## Conventions
 
 - **Deterministic, no LLM** — supervisor never calls a model; decisions are rule-based (`http !=200` → down, log pattern → error). Debug auto-fix (Phase 3) is rule-based (`autoFixKnownPatterns` + dry-boot transient check) and is spawned on-demand only after LKG rollback (max 3 attempts).
-- **Daemon stays outside the tree** — the daemon (`bin.ts`/`supervisor.ts`/`snapshot.ts`/`health-poller.ts`, run via systemd) never adds a Cordis row or `cordis.patch.yml`; it must survive tree crashes. PID/port resolution via `ss -tlnp` + `resolve_tree()` like `dsh-safe-web-update`.
+- **Daemon stays outside the tree** — the daemon (`bin.ts`/`supervisor.ts`/`snapshot.ts`/`health-poller.ts`, run via systemd) never adds a Cordis row or `cordis.patch.yml`; it must survive tree crashes. PID/port resolution via `ss -tlnp` + `resolve_tree()` like `dsh-safe-restart`.
 - **The auto-resume plugin (`plugin.ts`/`index.ts` + `client/auto-reload.ts`) is the one deliberate exception** — it runs in-tree because it needs `sessions`/`connection`/`agents` (host) and `window`/`fetch`/`WebSocket` (client) context the daemon cannot reach. This is permitted only under two non-negotiable conditions:
   1. **`apply()` must never throw synchronously or let a rejected promise escape.** Every failure — expected or not — degrades to "auto-resume disabled for this boot," logged, never a crash. See `tests/plugin.test.ts` for the required coverage (a throwing `findInterrupted`, a throwing `resumeInterrupted`, a throwing RPC registration must all leave `apply()` non-throwing).
-  2. **Before this package is ever added to a live profile's `bundles`** (e.g. `~/.dsh/profiles/web/package.json`), `pnpm build` must succeed AND a dry-boot on an ephemeral port with an isolated `DSH_HOME` must pass, per the `dsh-safe-web-update` skill. This is not optional guidance — it is the only defense against a *load-time* failure (a missing `lib/index.js`, a stale build), which no amount of in-code `try`/`catch` can catch. This exact failure class caused repeated `dsh web` outages on 2026-08-27 (see the workspace's `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md`).
+  2. **Before this package is ever added to a live profile's `bundles`** (e.g. `~/.dsh/profiles/web/package.json`), `pnpm build` must succeed AND a dry-boot on an ephemeral port with an isolated `DSH_HOME` must pass, per the `dsh-safe-restart` skill. This is not optional guidance — it is the only defense against a *load-time* failure (a missing `lib/index.js`, a stale build), which no amount of in-code `try`/`catch` can catch. This exact failure class caused repeated `dsh web` outages on 2026-08-27 (see the workspace's `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md`).
 - **Injectable deps for testability** — `pollHealth`, `writeLKG`, `rollback`, `notify`, `findInterrupted`, `resumeSessions` are constructor-injected; tests mock them, real daemon wires to `health-poller`/`snapshot`/`restart-dsh-web.sh --auto` and `resumeViaRpc` (loopback fetch).
 - **Snapshot rotation** — keep 3 LKG, verify sha256 before promote, `df` >500MB guard.
 - **Debounce + rolling guard** — at most 1 rollback per 60s, single `rollingBack` flag, `flock` on `~/.dsh/.supervisor/lock` for cross-process safety.
@@ -295,7 +295,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 ## See Also
 
 - Spec: `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md` (Maestro Harness workspace, Granularization hybrid)
-- Skill: `maestro-skills/skills/dsh-safe-web-update/` (guarded `restart-dsh-web.sh` with `dry_boot_and_verify()` and `--auto`, ephemeral `DSH_HOME`, `ss -tlnp` pid resolution)
+- Skill: `skills/dsh-safe-restart/` (guarded `restart-dsh-web.sh` with `dry_boot_and_verify()` and `--auto`, ephemeral `DSH_HOME`, `ss -tlnp` pid resolution)
 - Plan: `<workspace-root>/docs/plans/2026-08-27-dsh-web-resilience-phase1.md` (transient, deleted after ship)
 - Client bundling: `dsh-maestro-mobile` (`scripts/build-client.mjs` pattern, `window.__ModuleLoader__.load`)
 - Reports: `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md` (load-time failure class)

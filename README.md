@@ -42,7 +42,7 @@ ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-supervisor  # → .
 DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &
 # wait for "dsh web: http://127.0.0.1:<port>" and curl 200, then kill
 # This catches load-time failures (missing lib/index.js, stale build, bad cordis.patch.yml)
-# that no in-code try/catch can catch. See dsh-safe-web-update skill.
+# that no in-code try/catch can catch. See dsh-safe-restart skill.
 ```
 
 This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/index.js`). See `AGENTS.md` Conventions.
@@ -192,5 +192,5 @@ Hard mode (optional): `package.json` add `"@ddtcorex/dsh-maestro-notifier": "wor
 ## See Also
 
 - Spec: `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md`
-- Skill: `maestro-skills/skills/dsh-safe-web-update/` (`restart-dsh-web.sh` with `dry_boot_and_verify()` and `--auto`)
+- Skill: `skills/dsh-safe-restart/` (`restart-dsh-web.sh` with `dry_boot_and_verify()` and `--auto`)
 - Client bundling: `dsh-maestro-mobile` (`scripts/build-client.mjs` pattern)
