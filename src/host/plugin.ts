@@ -45,6 +45,8 @@ import {
 } from './preset.js'
 export * from './preset.js'
 
+import { SUPERVISOR_SOURCE_KIND } from './source.js'
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const inject = ['sessions', 'agents', 'connection', 'tools', 'skills'] as const
@@ -769,7 +771,7 @@ export async function resumeInterrupted(
       const { text: resumeMessage, intentReason } = recoveryPromptFor(sessionId)
       agent.followup(createUserMessage({
         content: [{ type: 'text', text: resumeMessage }],
-        source: { kind: 'user' },
+        source: { kind: SUPERVISOR_SOURCE_KIND },
       }))
       try { if (resumeMessage !== RECOVERY_PROMPT_IDLE) doConsumeIntent(sessionId) } catch {}
       resumed.push(id)

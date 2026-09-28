@@ -23,6 +23,7 @@
 
 import { notify } from './notifier.js'
 import { repairAgentPreset, type RepairOutcome } from './preset.js'
+import { SUPERVISOR_SOURCE_KIND } from './source.js'
 import {
   probeToolView,
   defaultResolveToolScope,
@@ -137,7 +138,7 @@ function makeDefaultSessionMessageInjector(ctx: any): (sessionId: string, conten
       }))
       agent.followup(createUserMessage({
         content: [{ type: 'text', text: content }],
-        source: { kind: 'user' },
+        source: { kind: SUPERVISOR_SOURCE_KIND },
       }))
     } catch {}
   }

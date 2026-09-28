@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned } from '../src/host/plugin.js'
+import { SUPERVISOR_SOURCE_KIND } from '../src/host/source.js'
 
 function makeCtx(overrides: Record<string, any> = {}) {
   const logs: string[] = []
@@ -80,7 +81,7 @@ describe('resumeInterrupted', () => {
     expect(sentMessage.content[0].text).toContain('interrupted')
     expect(sentMessage.content[0].text).toContain('bash')
     expect(sentMessage.content[0].text).toContain('TOOL_OUTCOME_UNKNOWN')
-    expect(sentMessage.source).toEqual({ kind: 'user' })
+    expect(sentMessage.source).toEqual({ kind: SUPERVISOR_SOURCE_KIND })
     expect(ctx._logs.some((l: string) => l.includes('sent recovery continue'))).toBe(true)
   })
 
