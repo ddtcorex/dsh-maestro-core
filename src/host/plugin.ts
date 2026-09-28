@@ -421,6 +421,14 @@ export const RECOVERY_PROMPT_IDLE =
  * @param text - recovery prompt text.
  */
 export async function promptOwnedSession(ctx: any, sessionId: string, text: string): Promise<boolean> {
+  // Known attribution gap, recorded rather than hidden: `sessionController.prompt`
+  // hardcodes `source: { kind: 'user', rpcId, clientTimeZone }` and its request
+  // type carries no source field, so this delivery path cannot use
+  // SUPERVISOR_SOURCE_KIND. It fires when the reconnecting browser holds the
+  // write handle — the common post-crash case — so those recovery turns still
+  // look human to consumers that classify a turn by source kind, including
+  // dsh-maestro-memory's write guard. Closing it needs a harness change (or a
+  // controller API that accepts a source); see the spec's follow-ups.
   try {
     const controller = (ctx.get?.('sessionController') as any) ?? (ctx as any).sessionController
     if (typeof controller?.prompt !== 'function') return false

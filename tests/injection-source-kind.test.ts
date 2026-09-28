@@ -21,6 +21,19 @@ describe('supervisor message attribution', () => {
     }
   })
 
+  it('records the delivery path that cannot carry a kind', () => {
+    // `promptOwnedSession` goes through sessionController.prompt, which
+    // hardcodes kind 'user' and takes no source field — so that recovery turn
+    // still looks human to consumers. The limitation is documented at the call
+    // site and in the constant's own doc comment; this case fails if someone
+    // deletes the record and leaves the earlier claim ("every injection is
+    // attributed") standing unchecked.
+    const source = readFileSync(new URL('../src/host/source.ts', import.meta.url), 'utf8')
+    expect(source).toMatch(/promptOwnedSession/)
+    const plugin = readFileSync(new URL('../src/host/plugin.ts', import.meta.url), 'utf8')
+    expect(plugin).toMatch(/promptOwnedSession[\s\S]{0,400}kind: 'user'/)
+  })
+
   it('sends the tool-inventory message with the plugin kind', async () => {
     const sent: any[] = []
     const ctx: any = {
