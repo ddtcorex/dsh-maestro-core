@@ -15,18 +15,20 @@ export const MAESTRO_SETTINGS_ORDER = 26
 import { MaestroSettingsTab } from './MaestroSettings.js'
 import { MAESTRO_RPC_CHANNEL } from './api.js'
 import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-icon.js'
+import { maestroMarkMaskUri } from './components/BrandMark.js'
 
 /**
  * DSH 0.1.x gives external settings sections a generic gear and exposes no
  * icon field in the settings.section contract (mirrors dsh-better-sidebar):
  * the marker only claims this plugin's localized row and this CSS paints the
  * Maestro M-logo glyph as a currentColor mask so it follows native nav
- * hover/active colors at the shell's 16px icon rhythm. The path matches the
- * sidebar MaestroTrigger (trigger.tsx#MaestroLogo) — M2 11 L5 4 L8 9 L11 4 L14 11.
+ * hover/active colors at the shell's 16px icon rhythm. The glyph itself is
+ * declared once in components/BrandMark.tsx — the workspace reference
+ * implementation.
  */
 const SETTINGS_NAV_CSS = `
 
-/* maestro: replace the settings-nav fallback gear with the Maestro M-logo glyph — same mark as sidebar/popup BrandMark */
+/* maestro: replace the settings-nav fallback gear with the Maestro M-logo glyph — same mark as components/BrandMark.tsx */
 [${SETTINGS_NAV_MARKER}] > svg:first-child,
 [${SETTINGS_NAV_MARKER}] > svg.zWKi1a_navIcon {
   display: none !important;
@@ -39,8 +41,8 @@ const SETTINGS_NAV_CSS = `
   height: 16px;
   display: inline-block;
   background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: url("${maestroMarkMaskUri()}") center / contain no-repeat;
+  mask: url("${maestroMarkMaskUri()}") center / contain no-repeat;
 }
 `
 

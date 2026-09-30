@@ -16,6 +16,7 @@ import { RULE_META, effectiveGuardView, ruleTierPatch } from './guard-view.js'
 import type { GuardTier } from './guard-view.js'
 import { generateWebhookSecret, gitlabWebhookUrl } from './webhook-secret.js'
 import { PIN_TTL_PRESETS, MAX_PIN_TTL_HOURS, presetForTtlHours } from './pin-ttl.js'
+import { BrandBadge } from './components/BrandMark.js'
 
 // ---------------------------------------------------------------------------
 // DSH tokens — single source, no custom hex (except QR quiet zone #fff)
@@ -1911,10 +1912,8 @@ export function MaestroSettingsTab({ rpcCall, configRpcCall, supervisorRpcCall }
     h(
       'div',
       { style: { padding: '2px 2px 8px', display: 'flex', gap: 10, alignItems: 'flex-start' } },
-      // Shared BrandBadge — same as dashboard sidebar/popup (BrandMark #0A84FF)
-      h('span', { 'data-maestro-logo': '', style: { width: 28, height: 28, borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--dsw-alias-brand-primary, #0A84FF)', backgroundColor: '#0A84FF', color: '#fff', flex: 'none', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 0 0 1px var(--dsw-alias-border-l1)', boxSizing: 'border-box' as any, alignSelf: 'flex-start' as any, marginTop: 2 } } as any,
-        h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' } as any, h('path', { d: 'M2 11 L5 4 L8 9 L11 4 L14 11', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' } as any))
-      ),
+      // Shared BrandBadge — components/BrandMark.tsx, the workspace reference implementation
+      h(BrandBadge as any, { style: { alignSelf: 'flex-start', marginTop: 2 } }),
       h('div', { style: { display: 'flex', flexDirection: 'column', minWidth: 0 } },
         h('div', { style: { fontSize: 15, fontWeight: 600, color: t.labelPrimary as string, lineHeight: '22px' } }, 'Maestro'),
         h('div', { style: { fontSize: 12, color: t.labelSecondary as string, lineHeight: '16px', marginTop: 2 } }, 'Tunnel, access, review & guard — all via the shared Maestro store. Uses the same tokens and primitives as DSH settings.'),
