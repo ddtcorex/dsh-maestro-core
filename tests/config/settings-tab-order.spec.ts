@@ -29,7 +29,7 @@ const siblingEntries = [
   'dsh-maestro-sync',
   'dsh-maestro-gateway',
 ].map((pkg) => resolve(packagesDir, pkg, 'src/client/index.tsx'))
-const sutunamEntry = resolve(packagesDir, '..', 'dsh-sutunam-kit', 'src/client/index.tsx')
+const sutunamEntry = resolve(packagesDir, 'dsh-sutunam-kit', 'src/client/index.tsx')
 const siblingsPresent = [...siblingEntries, sutunamEntry].every((f) => existsSync(f))
 
 /** The number a tab registers, as written in its own source. */
@@ -92,7 +92,7 @@ describe.skipIf(!siblingsPresent)('Maestro settings tab ordering', () => {
     // number with one: equal numbers leave the relative order undefined, so
     // this pins the exclusion from the other side. Whatever either side
     // chooses in the future, a Maestro tab may never tie or pass Sutunam.
-    const sutunam = readFileSync(resolve(packagesDir, '..', 'dsh-sutunam-kit', 'src/client/index.tsx'), 'utf8')
+    const sutunam = readFileSync(sutunamEntry, 'utf8')
     const sutunamOrder = orderOf(sutunam, 'sutunam-kit')
     for (const [id, order] of Object.entries(loadOrders())) {
       expect(order, `${id} must render before sutunam-kit (${sutunamOrder})`).toBeLessThan(sutunamOrder)
@@ -103,5 +103,20 @@ describe.skipIf(!siblingsPresent)('Maestro settings tab ordering', () => {
     for (const [id, order] of Object.entries(loadOrders())) {
       expect(order, `${id} must leave room below later upstream sections`).toBeLessThan(100)
     }
+  })
+})
+
+// Deliberately OUTSIDE the describe above. That block is `skipIf(!siblingsPresent)`,
+// so a wrong sutunam path makes every assertion above vanish while the suite still
+// reports green — the Sutunam tab-order pin would stop being enforced with nothing
+// to say so. This guard always runs.
+describe('sutunam-kit location', () => {
+  it('resolves under packages/, not one level above it', () => {
+    expect(sutunamEntry).toBe(resolve(packagesDir, 'dsh-sutunam-kit', 'src/client/index.tsx'))
+    expect(existsSync(sutunamEntry)).toBe(true)
+  })
+
+  it('has no leftover checkout at the old workspace-root path', () => {
+    expect(existsSync(resolve(packagesDir, '..', 'dsh-sutunam-kit'))).toBe(false)
   })
 })
