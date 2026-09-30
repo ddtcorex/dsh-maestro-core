@@ -31,13 +31,31 @@ validate first and get explicit user consent before a real swap.
 
 1. Run relevant package tests and build steps, then check the output really
    carries the expected marker.
-2. Dry-boot the candidate on an ephemeral port with an isolated `DSH_HOME`.
+2. **Assert no bundle is silently skipped.** Editing a profile manifest does NOT
+   relink `node_modules`: a `link:` row whose target has moved or been deleted
+   leaves a broken symlink, and the boot then drops that plugin with a
+   `skipping profile bundle ... cannot resolve profile bundle` line on stderr
+   rather than erroring. The user sees a working host missing a toolset, which
+   reads as "my tools vanished", not as a failure. Check BOTH arms — the
+   workspace's upgrade-preflight grep does not cover this one:
+
+   ```sh
+   dsh --profile <p> --dump-config 2>&1 \
+     | grep -E "skipping profile bundle|cannot resolve profile bundle|name mismatch|entry .* not found"
+   ```
+
+   Expect no output, and confirm every declared bundle appears as a `# == `
+   header. A clean upgrade-preflight result alone is NOT evidence here: it
+   prints "clean" on exactly the broken state. Run
+   `dsh plugin --profile <p> install` after any manifest edit so `node_modules`
+   is relinked before the check.
+3. Dry-boot the candidate on an ephemeral port with an isolated `DSH_HOME`.
    Keep the live process and its sessions/settings untouched. If the review
    webhook conflicts on a bound port, exclude that provider for the candidate
    or run a no-server composition check instead.
-3. Verify HTTP 200 and the new marker on the candidate. Retain last-known-good
+4. Verify HTTP 200 and the new marker on the candidate. Retain last-known-good
    assets until the real swap has passed post-swap checks.
-4. Check the **second** long-lived process, not only `dsh web`: the standalone
+5. Check the **second** long-lived process, not only `dsh web`: the standalone
    `dsh-web-supervisor` daemon also caches this package's `lib/*.js` in RAM at
    start, and it is the process that judges the new boot. A daemon older than
    the newest build still applies the OLD rollback rules — on 2026-09-13 that
@@ -48,7 +66,7 @@ validate first and get explicit user consent before a real swap.
    `stat -c '%y' <package>/lib/*.js`; a build newer than the daemon's start
    means the daemon is **stale** and must be reloaded BEFORE the swap.
    `restart-dsh-web.sh --check-supervisor` reports this and changes nothing.
-5. Ask for explicit consent and timing. “restart đi” is consent; silence is
+6. Ask for explicit consent and timing. “restart đi” is consent; silence is
    not.
 
 ## Run the bundled helper only after consent
