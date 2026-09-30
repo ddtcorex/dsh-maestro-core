@@ -56,7 +56,9 @@ ${opts.logTail.slice(-5000) || '(empty)'}
 export async function collectGitDiff(workspaceRoot: string): Promise<string> {
   try {
     const { execSync } = await import('node:child_process')
-    // Find all link: plugins from profiles
+    // Reports the workspace's own uncommitted changes. It does NOT inspect a
+    // profile: the link: scan a crash report would be most useful for lives in
+    // the dsh-safe-restart preflight, which reads the dump-config bundle headers.
     const out = execSync('git -C ' + JSON.stringify(workspaceRoot) + ' status --porcelain 2>/dev/null || true', { encoding: 'utf-8' })
     if (out.trim()) {
       const diff = execSync('git -C ' + JSON.stringify(workspaceRoot) + ' diff 2>/dev/null | head -n 200', { encoding: 'utf-8' })
