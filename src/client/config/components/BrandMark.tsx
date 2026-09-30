@@ -26,30 +26,44 @@
  */
 
 import { createElement as h } from 'react'
+import {
+  MAESTRO_BRAND_TILE,
+  MAESTRO_MARK_PATH,
+  MAESTRO_MARK_STROKE_WIDTH,
+  MAESTRO_MARK_VIEWBOX,
+} from '../maestro-mark.js'
 
-/** The glyph. Never re-hardcode it; every surface reads this constant. */
-export const MAESTRO_MARK_PATH = 'M2 11 L5 4 L8 9 L11 4 L14 11'
-export const MAESTRO_MARK_VIEWBOX = '0 0 16 16'
-export const MAESTRO_MARK_STROKE_WIDTH = 1.6
-
-/** Badge tile colour — part of the house pattern documented in AGENTS.md. */
-export const MAESTRO_BRAND_TILE = '#0A84FF'
+// Re-exported so importers of this path keep working; the declarations live in
+// ../maestro-mark.ts, which has no react import and is therefore importable
+// from a test — BrandMark.tsx cannot be, because react is a client-bundler
+// EXTERNAL with no entry in this package's package.json.
+export {
+  MAESTRO_BRAND_TILE,
+  MAESTRO_MARK_PATH,
+  MAESTRO_MARK_STROKE_WIDTH,
+  MAESTRO_MARK_VIEWBOX,
+  maestroMarkMaskUri,
+} from '../maestro-mark.js'
 
 /**
- * The same glyph as a `currentColor` CSS-mask data-URI, for the settings-nav
- * row (see `SETTINGS_NAV_CSS` in `index.tsx`).
- *
- * Only `<` and `>` are encoded. `encodeURIComponent` would additionally escape
- * quotes, slashes and spaces, producing a different data-URI than the literal
- * this replaces — the nav glyph renders through `mask`, so a subtly different
- * URI can leave the row blank.
+ * Keys a call site may override on the badge. POSITIONING ONLY — the tile's
+ * colour, border, shadow, radius and size are the brand and are not negotiable.
+ * A `style` prop spread wholesale would let any call site silently repaint the
+ * badge, which is the one thing the fixed `#0A84FF` exists to prevent.
  */
-export function maestroMarkMaskUri(): string {
-  const svg =
-    `<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='${MAESTRO_MARK_VIEWBOX}' ` +
-    `fill='none' stroke='black' stroke-width='${MAESTRO_MARK_STROKE_WIDTH}' ` +
-    `stroke-linecap='round' stroke-linejoin='round'><path d='${MAESTRO_MARK_PATH}'/></svg>`
-  return `data:image/svg+xml,${svg.replace(/</g, '%3C').replace(/>/g, '%3E')}`
+export const BRAND_BADGE_LAYOUT_KEYS = [
+  'alignSelf', 'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+] as const
+
+type BrandBadgeStyle = Partial<Record<(typeof BRAND_BADGE_LAYOUT_KEYS)[number], unknown>>
+
+/** Keep only the layout keys; drop anything that would touch the chrome. */
+function layoutOnly(style: BrandBadgeStyle | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of BRAND_BADGE_LAYOUT_KEYS) {
+    if (style?.[key] !== undefined) out[key] = style[key]
+  }
+  return out
 }
 
 export function MaestroMark(props: { size?: number }) {
@@ -64,7 +78,7 @@ export function MaestroMark(props: { size?: number }) {
  * copying its chrome: the Settings card header needs `alignSelf`/`marginTop`
  * to sit flush in a flex row, and those are layout, not brand.
  */
-export function BrandBadge(props: { size?: number; outer?: number; radius?: number; style?: Record<string, unknown> }) {
+export function BrandBadge(props: { size?: number; outer?: number; radius?: number; style?: BrandBadgeStyle }) {
   const outer = props.outer ?? 28
   const size = props.size ?? 16
   const radius = props.radius ?? 8
@@ -74,7 +88,7 @@ export function BrandBadge(props: { size?: number; outer?: number; radius?: numb
       width: outer, height: outer, borderRadius: radius, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       background: `var(--dsw-alias-brand-primary, ${MAESTRO_BRAND_TILE})`, backgroundColor: MAESTRO_BRAND_TILE, color: '#fff', flex: 'none',
       border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 0 0 1px var(--dsw-alias-border-l1)', boxSizing: 'border-box' as any,
-      ...(props.style ?? {}),
+      ...layoutOnly(props.style),
     },
   } as any, h(MaestroMark as any, { size }))
 }

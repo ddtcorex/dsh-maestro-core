@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -109,14 +109,22 @@ describe.skipIf(!siblingsPresent)('Maestro settings tab ordering', () => {
 // Deliberately OUTSIDE the describe above. That block is `skipIf(!siblingsPresent)`,
 // so a wrong sutunam path makes every assertion above vanish while the suite still
 // reports green — the Sutunam tab-order pin would stop being enforced with nothing
-// to say so. This guard always runs.
+// to say so. These guards run even when the block above is skipped.
 describe('sutunam-kit location', () => {
+  // Pure path computation, no filesystem — so it holds in EVERY checkout,
+  // including CI. A regression back to a `'..'` segment fails here.
   it('resolves under packages/, not one level above it', () => {
     expect(sutunamEntry).toBe(resolve(packagesDir, 'dsh-sutunam-kit', 'src/client/index.tsx'))
-    expect(existsSync(sutunamEntry)).toBe(true)
+    expect(sutunamEntry).not.toContain(`${sep}packages${sep}..${sep}`)
   })
 
-  it('has no leftover checkout at the old workspace-root path', () => {
+  // The silent-skip guard, scoped to checkouts where the plugin can legitimately
+  // be present. CI clones ONLY the siblings declared in ci.yml (`dsh-maestro-config-lib`),
+  // and this repo is private and never checked out there — so asserting existence
+  // unconditionally turned this guard into the very CI failure it was added to
+  // prevent. `siblingsPresent` is the same signal the block above uses.
+  it.skipIf(!siblingsPresent)('is present, with no leftover at the old workspace-root path', () => {
+    expect(existsSync(sutunamEntry)).toBe(true)
     expect(existsSync(resolve(packagesDir, '..', 'dsh-sutunam-kit'))).toBe(false)
   })
 })

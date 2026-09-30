@@ -55,10 +55,11 @@ describe('settings section registration contract', () => {
     expect(card).toContain('saved — type new value to replace')
     expect(card).toContain('Projects —')
     // audio-lines glyph mask from the old bundle. The mask literal lives in
-    // components/BrandMark.tsx now — the workspace reference implementation;
-    // index.tsx builds its data-URI from maestroMarkMaskUri() at runtime, so the
-    // prefix is a literal only in that file.
-    expect(card + entry + read('components/BrandMark.tsx')).toContain('data:image/svg+xml')
+    // maestro-mark.ts — the react-free half of the workspace reference
+    // implementation, re-exported by components/BrandMark.tsx; index.tsx builds
+    // its data-URI from maestroMarkMaskUri() at runtime, so the prefix is a
+    // literal only in that file.
+    expect(card + entry + read('maestro-mark.ts')).toContain('data:image/svg+xml')
     expect(read('settings-nav-icon.ts')).toContain('data-maestro-settings-nav')
   })
 
