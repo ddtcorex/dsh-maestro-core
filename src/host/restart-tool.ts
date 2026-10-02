@@ -20,6 +20,7 @@ import { spawn, execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { writeRestartRequest, readRestartRequest } from './restart-guards.js'
 import { intentPath, readIntent, readRestartOutcome } from './intents.js'
+import { supervisorDaemonState, describeDaemonState, type DaemonState } from './daemon-freshness.js'
 
 /**
  * Copy a live profile tree for an isolated dry-boot. A naive recursive copy
@@ -292,11 +293,13 @@ export function registerRestartTool(ctx: any, deps: {
   harnessRoot?: string
   gcReaders?: GcReaders
   killPid?: (pid: number, sig: string) => void
+  daemonState?: () => DaemonState
 } = {}): () => void {
   const doDryBoot = deps.dryBoot ?? dryBootVerify
   const doWrite = deps.writeRestartRequest ?? writeRestartRequest
   const doRead = deps.readRestartRequest ?? readRestartRequest
   const doSessionId = deps.sessionIdOf ?? currentSessionId
+  const readDaemonState = deps.daemonState ?? supervisorDaemonState
   let dispose: (() => void) | undefined
   let disposeDryboot: (() => void) | undefined
   let disposeGc: (() => void) | undefined
@@ -304,7 +307,7 @@ export function registerRestartTool(ctx: any, deps: {
   try {
     dispose = ctx.tools.register({
       name: 'dsh_web_restart',
-      description: 'Schedule a safe restart of the dsh web host. Verifies the plugin tree first (dry-boot), records an intent for the calling session, and hands the restart to the supervisor daemon (out-of-band). Never restarts in-tree itself.',
+      description: 'Schedule a safe restart of the dsh web host: dry-boots the plugin tree when it changed, records an intent for the calling session, and hands the swap to the supervisor daemon (out-of-band — it never restarts in-tree). Returns immediately; the swap lands ~1-5 min later and kills the calling turn, so call this as the LAST action of the turn and verify with dsh_web_restart_status in the NEXT one (never sleep here). Do not call dsh_web_dryboot first — this tool already dry-boots. The result carries the supervisor daemon verdict: a "stale" line means run its `kill -TERM <pid>` before the swap lands.',
       parameters: {
         type: 'object',
         properties: {
@@ -349,7 +352,21 @@ export function registerRestartTool(ctx: any, deps: {
         }
         doWrite({ callerSessionId, reason: typeof args.reason === 'string' ? args.reason : undefined, oldPid: process.pid }, 180_000)
         writeIntentSidecar(callerSessionId, args.reason)
-        return { ok: true, detail: `restart scheduled (≈30s) — caller ${callerSessionId}`, oldPid: process.pid, intentPath: intentPath(callerSessionId) }
+        // A read-only probe, and it must never fail the swap: an unmeasurable
+        // daemon is reported as such, not treated as a blocker.
+        let daemon: DaemonState
+        try {
+          daemon = readDaemonState()
+        } catch {
+          daemon = { verdict: 'unknown' }
+        }
+        return {
+          ok: true,
+          detail:
+            `restart scheduled — caller ${callerSessionId}. The swap lands ~1-5 min from now (measured 2026-10-02: 5m04s schedule→outcome; the dry-boot gate, the daemon's poll, the ~90s SIGTERM stop and the new boot all sit inside that window). THIS TURN ENDS AT THE SWAP: poll dsh_web_restart_status in the next turn, never sleep here. ${describeDaemonState(daemon)}`,
+          oldPid: process.pid,
+          intentPath: intentPath(callerSessionId),
+        }
       },
     })
   } catch (e: any) {

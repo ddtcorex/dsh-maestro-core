@@ -43,7 +43,8 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 - `src/host/index.ts` — CLI entry (`daemon|status|logs|rollback`)
 - `src/host/cli.ts` — argument parsing and command dispatch
 - `src/host/bin.ts` — daemon binary entry (`dsh-web-supervisor`), wires `Supervisor` and starts poll loop
-- `src/host/paths.ts` — shared `~/.dsh/.supervisor/**` path helpers (LKG, failed, reports, lock, config)
+- `src/host/paths.ts` — shared `~/.dsh/.supervisor/**` path helpers (LKG, failed, reports, lock, config) + `resolveSupervisorPackageDir()` (walks up from this file to the package root, so `src/host/` and the built `lib/` both resolve it)
+- `src/host/daemon-freshness.ts` — in-tree supervisor-daemon freshness behind injectable probes (`mainPid`/`cmdline`/`startMs`/`newestLibMs`) → `fresh|stale|absent|unknown`, plus `describeDaemonState()`. The port of the bash helper's `supervisor_daemon_state`: `dsh_web_restart` reports the verdict at schedule time because an in-session agent can neither run the helper (self-kill guard) nor be trusted to remember the check. Read-only — it never signals the daemon.
 - `src/host/supervisor.ts` — `Supervisor` class: poll loop (3s), debounce (60s), rolling guard, `resumeViaRpc()` (loopback POST), `attemptAutoResume()` with `RESUME FAILED/SKIPPED` vs `RESUME: continue triggered` notifies
 - `src/host/snapshot.ts` — LKG store: `writeLKG`, `verifyLKG` (sha256), `rotateLKG(3)`, `writeFailed`; `df` >500MB guard and `manifest.json`
 - `src/host/health-poller.ts` — `pollHealth()` with injectable `fetch/psAlive/logTail`; detects `ERR_MODULE_NOT_FOUND` / `assertChannel` / `unhandledRejection` / `EADDRINUSE`
