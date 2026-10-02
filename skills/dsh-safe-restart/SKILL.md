@@ -123,7 +123,9 @@ touch the live process:
 - `dsh_web_restart_status` (no params) — reads the calling session's restart
   outcome: `pending` until the daemon swaps, then `ok`/`failed` with
   `oldPid`/`newPid`/`httpStatus`. `dsh_web_restart` itself now returns
-  `{ ok, detail, oldPid, intentPath }` — quote all four when reporting.
+  `{ ok, detail, oldPid, intentPath }` — quote all four when reporting. Its
+  `detail` also carries the supervisor-daemon verdict and the real swap budget
+  (see "Budget the turn, not the tool call").
 
 Settings-staging rule: config-lib memoizes settings per process, so an
 out-of-band settings edit is invisible to the host until restart. Stage ALL
@@ -136,6 +138,34 @@ durable path for a local CA (e.g. a Govard/Caddy dev CA) is a systemd user
 drop-in (`~/.config/systemd/user/dsh-web.service.d/*.conf` with
 `Environment=NODE_EXTRA_CA_CERTS=<path>`), followed by a daemon reload and a
 host restart.
+
+## Budget the turn, not the tool call
+
+`dsh_web_restart` returns in well under a second. The swap does not: measured
+2026-10-02, schedule → outcome took **5m04s** — the dry-boot gate, the daemon's
+poll for the request, the ~90s SIGTERM stop and the new boot all sit inside
+that window. Plan against minutes, and shape the turn so the swap costs one
+turn instead of five.
+
+- **Call it as the LAST action of the turn.** The swap kills the calling turn
+  mid-flight; a `sleep`/verify tool call issued in the same turn is discarded
+  (`tool call interrupted … no result durably recorded`) and has to be re-issued.
+  Verify with `dsh_web_restart_status` in the **next** turn.
+- **Do not call `dsh_web_dryboot` first when the plugin tree changed.** The
+  restart tool runs that gate itself; a separate call just pays for a second
+  full boot of every linked plugin.
+- **Read the daemon verdict in the tool's own result.** It now classifies the
+  supervisor daemon (`fresh` / `stale` / `absent` / `unknown`) at schedule time.
+  A `stale` line carries the exact `kill -TERM <daemon pid>` to run **now, in
+  this turn, before the swap lands** — systemd brings it back in ~2s. Reloading
+  it after the restart is the mistake that costs an extra cycle (2026-10-02:
+  build 19:58:19, daemon started 19:18:01, discovered only after the swap).
+- **Skip the fixed "sleep 150s and hope" tail.** Poll `dsh_web_restart_status`
+  and the listener tree instead; a rollback loop shows up in the daemon's
+  outcome and the pid, not in an arbitrary wait.
+- **One restart per batch.** Stage every settings/lib change, then restart once.
+  Config-lib memoizes per process, so N edits need N restarts unless they are
+  staged together.
 
 ## Post-swap checks
 
@@ -161,6 +191,10 @@ Do not read the top of an old append-only log as liveness evidence. Instead:
 - Treat a 200 response alone as proof that a rebuilt plugin was loaded.
 - Treat a rebuilt `lib/` as loaded while the supervisor daemon that judges the
   boot still runs the previous one; the two processes load the code separately.
+- Sleep, curl or otherwise verify inside the same turn that called
+  `dsh_web_restart` — that turn dies at the swap and the check is thrown away.
+- Run a separate `dsh_web_dryboot` before `dsh_web_restart`; the restart tool
+  already gates on it, and a second boot is pure wall-clock cost.
 
 ## Agent handoff (required when you are an agent)
 

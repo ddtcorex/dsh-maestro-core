@@ -31,15 +31,20 @@ vi.mock('node:os', async (importOriginal) => {
 
 // dryBootVerify must be unit-tested with a mocked spawn (never a real node
 // boot). The fake child keeps `exitCode` null while the fetch stub serves 200.
-const { spawnMock, childKillMock } = vi.hoisted(() => ({
+const { spawnMock, childKillMock, execFileSyncMock } = vi.hoisted(() => ({
   spawnMock: vi.fn(),
   childKillMock: vi.fn(),
+  // Stubs the daemon-freshness probe's read-only `systemctl --user show`, so the
+  // suite never asks the real systemd about a real daemon. Empty output reads
+  // as "no daemon", i.e. verdict `absent`.
+  execFileSyncMock: vi.fn(() => ''),
 }))
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>()
   return {
     ...actual,
     spawn: spawnMock,
+    execFileSync: execFileSyncMock,
   }
 })
 
@@ -109,6 +114,76 @@ describe('registerRestartTool', () => {
     const result = await t.execute({ pluginChanged: false }, {})
     expect(result.ok).toBe(true)
     expect(dryBoot).not.toHaveBeenCalled()
+  })
+
+  // Measured 2026-10-02: schedule → outcome took 5m04s, not the "≈30s" this
+  // tool used to promise. The estimate is the agent's only plan, so it has to
+  // match the clock — and it has to say where to verify from, because the swap
+  // kills the calling turn.
+  it('states the measured swap budget and sends verification to the next turn', async () => {
+    const registered: any[] = []
+    const ctx: any = {
+      tools: { register: (def: any) => { registered.push(def); return () => {} } },
+      logger: { info: () => {}, warn: () => {} },
+      get: () => undefined,
+    }
+    const deps = {
+      sessionIdOf: () => 'proj/abc',
+      dryBoot: async () => ({ ok: true, detail: '200' }),
+      writeRestartRequest: vi.fn(),
+      daemonState: () => ({ verdict: 'fresh' as const, pid: 31181, startMs: 1, libMs: 2 }),
+    }
+    const dispose = registerRestartTool(ctx, deps as any)
+    const t = registered.find(x => x.name === 'dsh_web_restart')
+    const result = await t.execute({}, {})
+    expect(result.detail).not.toMatch(/≈30s/)
+    expect(result.detail).toMatch(/1-5 min/)
+    expect(result.detail).toMatch(/next turn/i)
+    expect(result.detail).toMatch(/dsh_web_restart_status/)
+    dispose()
+  })
+
+  it('carries the daemon reload command when that daemon is stale', async () => {
+    const registered: any[] = []
+    const ctx: any = {
+      tools: { register: (def: any) => { registered.push(def); return () => {} } },
+      logger: { info: () => {}, warn: () => {} },
+      get: () => undefined,
+    }
+    const deps = {
+      sessionIdOf: () => 'proj/abc',
+      dryBoot: async () => ({ ok: true, detail: '200' }),
+      writeRestartRequest: vi.fn(),
+      daemonState: () => ({ verdict: 'stale' as const, pid: 2080, startMs: 1, libMs: 2 }),
+    }
+    const dispose = registerRestartTool(ctx, deps as any)
+    const t = registered.find(x => x.name === 'dsh_web_restart')
+    const result = await t.execute({}, {})
+    expect(result.detail).toContain('stale')
+    expect(result.detail).toContain('kill -TERM 2080')
+    dispose()
+  })
+
+  it('reports the daemon as absent instead of failing when no systemd owns it', async () => {
+    const registered: any[] = []
+    const ctx: any = {
+      tools: { register: (def: any) => { registered.push(def); return () => {} } },
+      logger: { info: () => {}, warn: () => {} },
+      get: () => undefined,
+    }
+    const deps = {
+      sessionIdOf: () => 'proj/abc',
+      dryBoot: async () => ({ ok: true, detail: '200' }),
+      writeRestartRequest: vi.fn(),
+    }
+    const dispose = registerRestartTool(ctx, deps as any)
+    const t = registered.find(x => x.name === 'dsh_web_restart')
+    const result = await t.execute({}, {})
+    // execFileSync is stubbed to '' → no MainPID → absent, and the restart is
+    // still scheduled: an unmeasurable daemon must never block a swap.
+    expect(result.ok).toBe(true)
+    expect(result.detail).toMatch(/absent/)
+    dispose()
   })
 
   it('refuses to schedule when the calling session cannot be identified', async () => {
