@@ -46,7 +46,6 @@ function setIn(obj: Record<string, unknown>, dotted: string, value: unknown): vo
   cur[parts[parts.length - 1]] = value
 }
 
-
 // ---------------------------------------------------------------------------
 // adapter helpers — one mapping source for consumer config-stores
 // ---------------------------------------------------------------------------

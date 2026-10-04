@@ -1,4 +1,6 @@
 import * as lib from '../store/index.js'
+// Guard and guardBlacklist writes through the Settings card must always be validated.
+import '../guard/validators.js'
 
 export interface MaestroConfigService {
   /** Union of schema-registered domains and domains present in the store file. */
