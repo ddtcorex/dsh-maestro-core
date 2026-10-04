@@ -1,6 +1,8 @@
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { mkdir, open, readFile, rename, unlink, stat, rm, writeFile } from 'node:fs/promises'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { watch, type FSWatcher } from 'node:fs'
 
 export interface SettingsDoc {
   version: 1
@@ -32,11 +34,124 @@ export function defineDomain(name: string, validator: DomainValidator): void {
   domainValidators.set(name, validator)
 }
 
+// ---------------------------------------------------------------------------
+// change notification
+// ---------------------------------------------------------------------------
+
+/**
+ * Every plugin embeds its own copy of this module, so a listener has to hear
+ * writes made by another copy (or by another process), not only writes made
+ * through the copy that owns it. While at least one listener exists we watch
+ * the settings file and compare every domain against `snapshot`; a local write
+ * refreshes `snapshot` before it fires the callbacks, so it never fires twice.
+ *
+ * The watcher resolves DSH_HOME once, when it starts. A store pinned to an
+ * explicit `dshHome` therefore stays out of the watched home and neither fires
+ * nor receives notifications for writes that go somewhere else.
+ */
+const WATCH_DEBOUNCE_MS = 50
+const POLL_MS = 2_000
+const FILE_BASENAME = 'settings.json'
+
+let watcher: FSWatcher | null = null
+let pollTimer: NodeJS.Timeout | null = null
+let debounceTimer: NodeJS.Timeout | null = null
+let snapshot: Record<string, string> = {}
+let watchedHome: string | null = null
+let checking = false
+
+/** JSON text per domain, so a value change is a cheap string comparison. */
+function fingerprint(doc: SettingsDoc): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [domain, value] of Object.entries(doc.domains)) {
+    out[domain] = JSON.stringify(value) ?? 'undefined'
+  }
+  return out
+}
+
+/**
+ * Seed the snapshot synchronously so a write racing `onChange` cannot slip
+ * between "listener registered" and "snapshot taken" and go unnoticed.
+ */
+function readSnapshotSync(home: string): Record<string, string> {
+  try {
+    return fingerprint(parseDoc(readFileSync(storePath({ dshHome: home }), 'utf8')))
+  } catch {
+    return {} // no store on disk yet: every domain is new
+  }
+}
+
+async function checkExternal(): Promise<void> {
+  if (changeCbs.size === 0 || watchedHome === null || checking) return
+  checking = true
+  try {
+    // load() invalidates its own cache on an mtime change, so this sees other
+    // writers' values without an extra stat.
+    const next = fingerprint(await load({ dshHome: watchedHome }))
+    const changed: string[] = []
+    for (const domain of new Set([...Object.keys(snapshot), ...Object.keys(next)])) {
+      // A domain that disappeared compares against undefined and counts as changed.
+      if (snapshot[domain] !== next[domain]) changed.push(domain)
+    }
+    snapshot = next
+    for (const domain of changed) for (const cb of [...changeCbs]) cb(domain)
+  } catch {
+    // A transient read failure must never break boot; the next tick retries.
+  } finally {
+    checking = false
+  }
+}
+
+function scheduleCheck(): void {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null
+    void checkExternal()
+  }, WATCH_DEBOUNCE_MS)
+  debounceTimer.unref()
+}
+
+function stopWatching(): void {
+  watcher?.close()
+  watcher = null
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = null
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = null
+  snapshot = {}
+  watchedHome = null
+}
+
+function startWatching(): void {
+  if (watcher || pollTimer) return
+  const home = resolveDshHome()
+  const path = storePath({ dshHome: home })
+  watchedHome = home
+  snapshot = readSnapshotSync(home)
+  try {
+    // fs.watch is not recursive, so it only sees the file when its own
+    // directory exists; the store is the only writer of that path either way.
+    mkdirSync(dirname(path), { recursive: true })
+    watcher = watch(dirname(path), { persistent: false }, (_event, filename) => {
+      if (filename === null || filename === FILE_BASENAME) scheduleCheck()
+    })
+  } catch {
+    watcher = null // polling below still covers the change
+  }
+  pollTimer = setInterval(() => void checkExternal(), POLL_MS)
+  pollTimer.unref()
+}
+
 /** Fire callbacks registered through this instance after a successful set(). */
 export function onChange(cb: (domain: string) => void): () => void {
   changeCbs.add(cb)
+  startWatching()
+  let disposed = false
   return () => {
+    if (disposed) return
+    disposed = true
     changeCbs.delete(cb)
+    if (changeCbs.size === 0) stopWatching()
   }
 }
 
@@ -44,6 +159,7 @@ export function onChange(cb: (domain: string) => void): () => void {
 export function resetForTests(): void {
   cached = null
   changeCbs.clear()
+  stopWatching()
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +275,7 @@ export async function set(
 ): Promise<void> {
   const path = storePath(opts)
   const key = resolveDshHome(opts?.dshHome)
+  let written: unknown
   await withLock(path, async () => {
     const doc = await readDoc(path)
     const validator = domainValidators.get(domain)
@@ -168,12 +285,15 @@ export async function set(
       if (!res.ok) throw new Error(`config-lib: validation failed for '${domain}': ${res.error}`)
     }
     doc.domains[domain] = merged
+    written = merged
     await writeDocLocked(path, doc)
     let mtimeMs = 0
     try { mtimeMs = (await stat(path)).mtimeMs } catch {}
     cached = { key, doc, mtimeMs }
   })
-  for (const cb of changeCbs) cb(domain)
+  // Refresh the watched copy first so the watcher sees no diff for this write.
+  if (watchedHome === key) snapshot[domain] = JSON.stringify(written) ?? 'undefined'
+  for (const cb of [...changeCbs]) cb(domain)
 }
 
 /**
@@ -194,6 +314,7 @@ export async function unset(
   }
   const path = storePath(opts)
   const homeKey = resolveDshHome(opts?.dshHome)
+  let written: Record<string, unknown> | undefined
   const deleted = await withLock(path, async () => {
     const doc = await readDoc(path)
     const bucket = doc.domains[domain]
@@ -207,13 +328,17 @@ export async function unset(
       if (!res.ok) throw new Error(`config-lib: validation failed for '${domain}': ${res.error}`)
     }
     doc.domains[domain] = next
+    written = next
     await writeDocLocked(path, doc)
     let mtimeMs = 0
     try { mtimeMs = (await stat(path)).mtimeMs } catch {}
     cached = { key: homeKey, doc, mtimeMs }
     return true
   })
-  if (deleted) for (const cb of changeCbs) cb(domain)
+  if (deleted) {
+    if (watchedHome === homeKey) snapshot[domain] = JSON.stringify(written) ?? 'undefined'
+    for (const cb of [...changeCbs]) cb(domain)
+  }
   return deleted
 }
 
