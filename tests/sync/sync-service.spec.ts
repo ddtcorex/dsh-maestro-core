@@ -25,7 +25,7 @@ describe('SyncService', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -49,7 +49,7 @@ describe('SyncService', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -91,7 +91,7 @@ describe('SyncService', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -124,7 +124,7 @@ describe('SyncService', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -152,7 +152,7 @@ describe('SyncService', () => {
     });
     const target = await svc.resolveTarget();
     expect(target.host).toBe('sync-host');
-    expect(target.dshRoot).toBe('/home/kai/.dsh');
+    expect(target.dshRoot).toBe('/home/user/.dsh');
   });
 
   it('preview while offline throws a structured OFFLINE failure', async () => {
@@ -161,7 +161,7 @@ describe('SyncService', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: { run: vi.fn(async () => ({ stdout: Buffer.alloc(0), stderr: Buffer.from('Connection refused'), exitCode: 255 })) } as any,
         transport: createFakeRemote().transport as any,
@@ -190,7 +190,7 @@ describe('SyncService', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -220,7 +220,7 @@ describe('SyncService', () => {
         ['dsh-maestro-memory/daily/remote.md', Buffer.from('remote-only')],
       ]));
       const cacheDir = path.join(localRoot, '.fp-cache');
-      const svc = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/kai/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any, cacheDir });
+      const svc = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/user/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any, cacheDir });
       const preview = await svc.preview({ direction: 'pull' });
       const sameAct = preview.actions.find((a: any) => a.path === 'dsh-maestro-memory/daily/same.md');
       expect(sameAct!.action).toBe('skip');               // byte-identical → skip, content never read

@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased: absorbed config-lib, config, guard and sync
+
+### Changed
+
+- **One package, four host rows.** The settings store, the Maestro settings
+  card service, the guard and the sync engine now live in this repository as
+  `src/host/{store,config,guard,sync}`, loaded by four rows in
+  `cordis.patch.yml` instead of four separately installed packages. Each
+  repository's history is preserved and its changelog is kept under
+  `docs/history/`.
+- **The store registers no domain validator.** `store/index.ts` is the file
+  and the atomic write; the legacy flat-key adapter moved to `store/legacy.ts`
+  and each domain owner registers its own validator through `defineDomain`.
+  The guard validators ship with the guard module; the review and notifier
+  validators are declared by those plugins.
+- **`onChange` fires for writes made by another copy.** An embedded store copy
+  watches the settings file while it has listeners, so a module that embeds the
+  store keeps hearing Settings writes. The watcher starts with the first
+  listener and stops with the last.
+- **One client bundle.** `src/client/index.tsx` composes the auto-reload, the
+  settings card and the Sync card, each guarded so one failure cannot cost the
+  others their registration.
+
+### Added
+
+- `scripts/vendor-store.mjs` generates a consumer's embedded store copy with a
+  body hash, and `verifyVendored` rejects a hand-edited or stale copy.
+- `exports["./store"]` publishes the store as a subpath.
+
+### Removed
+
+- The `@ddtcorex/dsh-maestro-config-lib` dependency, the sibling checkout in
+  `pnpm-workspace.yaml` and the `sibling-repos` entry in CI.
+
+The package name is still `@ddtcorex/dsh-maestro-supervisor`: the repository
+rename and the local directory move happen in a later wave, so an installed
+profile keeps resolving.
+
 ## [0.9.0] - 2026-09-22
 
 ### Fixed

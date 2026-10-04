@@ -17,7 +17,7 @@ function makeSvc(localRoot: string, fake: any) {
   return new SyncService({
     localDsh: localRoot,
     remote: 'sync-host',
-    remoteDsh: '/home/kai/.dsh',
+    remoteDsh: '/home/user/.dsh',
     fs: fs as any,
     runner: stubRunner as any,
     transport: fake.transport as any,

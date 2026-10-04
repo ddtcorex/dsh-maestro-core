@@ -225,13 +225,13 @@ describe('remote-agent', () => {
     const run = vi.fn(async (file: string, args: readonly string[], opts?: any) => {
       expect(file).toBe('ssh');
       expect(args[0]).toBe('sync-host');
-      expect(args[1]).toBe('/home/kai/.dsh/.maestro-sync/bin/maestro-sync-commit');
+      expect(args[1]).toBe('/home/user/.dsh/.maestro-sync/bin/maestro-sync-commit');
       expect(args[2]).toBe('op-abc');
       expect(Buffer.isBuffer(opts?.input)).toBe(true);
       return { stdout: Buffer.from('committed'), stderr: Buffer.alloc(0), exitCode: 0 };
     });
     const transport = new SshRsyncTransport({ run } as any);
-    await transport.commit({ host: 'sync-host', dshRoot: '/home/kai/.dsh' }, 'op-abc', Buffer.from('[{}\n]'));
+    await transport.commit({ host: 'sync-host', dshRoot: '/home/user/.dsh' }, 'op-abc', Buffer.from('[{}\n]'));
     expect(run).toHaveBeenCalledTimes(1);
   });
 
@@ -242,13 +242,13 @@ describe('remote-agent', () => {
       return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), exitCode: 0 };
     });
     const transport = new SshRsyncTransport({ run } as any);
-    await transport.ensureAgent({ host: 'sync-host', dshRoot: '/home/kai/.dsh' });
+    await transport.ensureAgent({ host: 'sync-host', dshRoot: '/home/user/.dsh' });
     const sshCalls = calls.filter((c) => c.file === 'ssh');
     // mkdir -p, cat > helper, chmod
     expect(sshCalls.length).toBeGreaterThanOrEqual(2);
     const catCall = sshCalls.find((c) => c.args.join(' ').includes('cat >'));
     expect(catCall).toBeDefined();
-    expect(catCall!.args.join(' ')).toContain('/home/kai/.dsh/.maestro-sync/bin/maestro-sync-commit');
+    expect(catCall!.args.join(' ')).toContain('/home/user/.dsh/.maestro-sync/bin/maestro-sync-commit');
     expect(Buffer.isBuffer(catCall!.input)).toBe(true);
     expect(catCall!.input!.toString('utf-8')).toContain('maestro-sync-commit');
   });

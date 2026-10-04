@@ -36,7 +36,7 @@ describe('legacy pull/push compatibility', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fsMock,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -63,7 +63,7 @@ describe('legacy pull/push compatibility', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,

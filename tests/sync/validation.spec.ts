@@ -18,10 +18,10 @@ describe('validation', () => {
 
   describe('ABSOLUTE regex', () => {
     it('matches absolute paths', () => {
-      expect(ABSOLUTE_RE.test('/home/kai/.dsh')).toBe(true);
+      expect(ABSOLUTE_RE.test('/home/user/.dsh')).toBe(true);
       expect(ABSOLUTE_RE.test('/tmp/a')).toBe(true);
       expect(ABSOLUTE_RE.test('/a')).toBe(true);
-      expect(ABSOLUTE_RE.test('/home/kai/dsh-data')).toBe(true);
+      expect(ABSOLUTE_RE.test('/home/user/dsh-data')).toBe(true);
     });
     it('rejects non-absolute and unsafe', () => {
       expect(ABSOLUTE_RE.test('~/.dsh')).toBe(false);
@@ -71,24 +71,24 @@ describe('validation', () => {
     });
 
     it.each(['-oProxyCommand=x', 'host;id', 'host name'])('rejects unsafe host %s', (host) => {
-      expect(() => validateRemoteTarget({ host, dshRoot: '/home/kai/.dsh' })).toThrow();
+      expect(() => validateRemoteTarget({ host, dshRoot: '/home/user/.dsh' })).toThrow();
     });
 
     it('accepts valid remote target', () => {
-      expect(validateRemoteTarget({ host: 'sync-host', dshRoot: '/home/kai/.dsh' })).toEqual({
+      expect(validateRemoteTarget({ host: 'sync-host', dshRoot: '/home/user/.dsh' })).toEqual({
         host: 'sync-host',
-        dshRoot: '/home/kai/.dsh',
+        dshRoot: '/home/user/.dsh',
       });
-      expect(validateRemoteTarget({ host: 'kai@ssh.ddtcorex.com', dshRoot: '/home/kai/.dsh' })).toEqual({
+      expect(validateRemoteTarget({ host: 'kai@ssh.ddtcorex.com', dshRoot: '/home/user/.dsh' })).toEqual({
         host: 'kai@ssh.ddtcorex.com',
-        dshRoot: '/home/kai/.dsh',
+        dshRoot: '/home/user/.dsh',
       });
     });
 
     it('rejects empty and control chars', () => {
-      expect(() => validateRemoteTarget({ host: '', dshRoot: '/home/kai/.dsh' })).toThrow();
+      expect(() => validateRemoteTarget({ host: '', dshRoot: '/home/user/.dsh' })).toThrow();
       expect(() => validateRemoteTarget({ host: 'sync-host', dshRoot: '' })).toThrow();
-      expect(() => validateRemoteTarget({ host: 'host\u0000name', dshRoot: '/home/kai/.dsh' })).toThrow();
+      expect(() => validateRemoteTarget({ host: 'host\u0000name', dshRoot: '/home/user/.dsh' })).toThrow();
       expect(() => validateRemoteTarget({ host: 'sync-host', dshRoot: '/tmp/a\u0000b' })).toThrow();
     });
 

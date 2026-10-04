@@ -88,7 +88,7 @@ OPTIONS
   --host <host>             with set-peer-host: this machine's peer ssh target
   --clear                   with set-peer-host: drop the machine-local peer
   --remote <host>           ssh remote host (default: from config/REMOTE_HOST)
-  --remote-dsh <path>       remote DSH path; must be absolute (e.g. /home/kai/.dsh);
+  --remote-dsh <path>       remote DSH path; must be absolute (e.g. /home/user/.dsh);
                             a '~/.dsh' default is resolved to an absolute remote home
                             path by the transport preflight, never shell ~ expansion
   --strategy <merge|override>  merge (default): union dedup, no --delete.

@@ -37,12 +37,12 @@ describe('readLocalMachineId', () => {
 describe('readRemoteMachineId', () => {
   it('runs ssh cat with fixed argv and trims output', async () => {
     const run = vi.fn(async () => ({ stdout: Buffer.from('machine-b\n'), stderr: Buffer.alloc(0), exitCode: 0 }));
-    expect(await readRemoteMachineId({ run } as any, 'kai@remote', '/home/kai/.dsh')).toBe('machine-b');
-    expect(run).toHaveBeenCalledWith('ssh', ['kai@remote', 'cat', '/home/kai/.dsh/machine-id'], { timeoutMs: 8000 });
+    expect(await readRemoteMachineId({ run } as any, 'kai@remote', '/home/user/.dsh')).toBe('machine-b');
+    expect(run).toHaveBeenCalledWith('ssh', ['kai@remote', 'cat', '/home/user/.dsh/machine-id'], { timeoutMs: 8000 });
   });
 
   it('returns null on non-zero exit', async () => {
     const run = vi.fn(async () => ({ stdout: Buffer.alloc(0), stderr: Buffer.from('nope'), exitCode: 1 }));
-    expect(await readRemoteMachineId({ run } as any, 'kai@remote', '/home/kai/.dsh')).toBeNull();
+    expect(await readRemoteMachineId({ run } as any, 'kai@remote', '/home/user/.dsh')).toBeNull();
   });
 });

@@ -115,7 +115,7 @@ describe('sync-plan', () => {
           ['dsh-maestro-memory/shared.md', Buffer.from('identical\n')],
         ]),
       );
-      const svc = new SyncService({ localDsh: localRoot, remote: 'host', remoteDsh: '/home/kai/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
+      const svc = new SyncService({ localDsh: localRoot, remote: 'host', remoteDsh: '/home/user/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
 
       const preview = await svc.preview({ direction: 'pull' });
       expect(preview.actions).toContainEqual(expect.objectContaining({ path: 'dsh-maestro-memory/daily/2026-08-29.md', action: 'merge', added: 1 }));
@@ -139,7 +139,7 @@ describe('sync-plan', () => {
       fs.mkdirSync(path.join(localRoot, 'dsh-maestro-memory'), { recursive: true });
       fs.writeFileSync(path.join(localRoot, 'dsh-maestro-memory', 'a.md'), 'same content');
       const fake = createFakeRemote(new Map<string, Buffer>([['dsh-maestro-memory/a.md', Buffer.from('same content')]]));
-      const svc = new SyncService({ localDsh: localRoot, remote: 'host', remoteDsh: '/home/kai/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
+      const svc = new SyncService({ localDsh: localRoot, remote: 'host', remoteDsh: '/home/user/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
       const preview = await svc.preview({ direction: 'pull' });
       expect(preview.summary.skipped).toBe(1);
       expect(preview.actions[0].action).toBe('skip');

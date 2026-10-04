@@ -34,8 +34,8 @@ describe('remote manifest', () => {
   });
 
   it('buildRemoteManifestScript embeds only the validated absolute root', () => {
-    const s = buildRemoteManifestScript('/home/kai/.dsh');
-    expect(s).toContain('/home/kai/.dsh/dsh-maestro-memory');
+    const s = buildRemoteManifestScript('/home/user/.dsh');
+    expect(s).toContain('/home/user/.dsh/dsh-maestro-memory');
     expect(s).toContain('sha256sum');
     expect(s).toContain('printf');
   });

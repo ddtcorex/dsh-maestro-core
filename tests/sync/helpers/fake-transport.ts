@@ -10,7 +10,7 @@
  *   matches its expected SHA-256 (or is absent when expected === 'absent') before publishing;
  *   a mismatch throws CONCURRENT_MODIFICATION and writes nothing for that entry.
  * - warmCache(target) -> counts invocations (push-apply refreshes the remote fp cache)
- * - remoteHome(target) -> '/home/kai'
+ * - remoteHome(target) -> '/home/user'
  *
  * `calls` records upload/commit/stage/manifest/warmCache invocations for assertions.
  */
@@ -42,7 +42,7 @@ export function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
 
-export function createFakeRemote(initial: Map<string, Buffer> = new Map(), dshRoot = '/home/kai/.dsh'): FakeRemoteResult {
+export function createFakeRemote(initial: Map<string, Buffer> = new Map(), dshRoot = '/home/user/.dsh'): FakeRemoteResult {
   const remote = new Map<string, Buffer>();
   for (const [p, buf] of initial) remote.set(p, Buffer.from(buf));
   const staged = new Map<string, Map<string, Buffer>>();
@@ -50,7 +50,7 @@ export function createFakeRemote(initial: Map<string, Buffer> = new Map(), dshRo
     remote,
     calls: { stage: [], upload: [], commit: [], manifest: 0 },
     transport: {
-      remoteHome: async () => '/home/kai',
+      remoteHome: async () => '/home/user',
       stage: async (target: RemoteTarget, paths: readonly string[], destination: string) => {
         result.calls.stage.push({ dest: destination, paths: [...paths] });
         for (const rel of paths) {

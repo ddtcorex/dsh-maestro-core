@@ -29,7 +29,7 @@ const cases = [
   },
   {
     id: 'B1-plugin-lib-missing',
-    log: 'Error: Cannot find module \'/home/kai/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-memory/lib/index.js\'\nERR_MODULE_NOT_FOUND',
+    log: 'Error: Cannot find module \'/home/user/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-memory/lib/index.js\'\nERR_MODULE_NOT_FOUND',
     fetchStatus: 500,
     expectUp: false,
     expectDegraded: false,

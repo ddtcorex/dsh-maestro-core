@@ -32,14 +32,14 @@ describe('remote fingerprint cache', () => {
   });
 
   it('warm script writes fp.tsv atomically (tmp + mv) and never uses shell interpolation of paths', () => {
-    const s = buildWarmCacheScript('/home/kai/.dsh');
+    const s = buildWarmCacheScript('/home/user/.dsh');
     expect(s).toContain(REMOTE_CACHE_REL);
     expect(s).toContain('.tmp.');
     expect(s).toMatch(/mv .*\.tmp\./);
   });
 
   it('manifest script is cache-aware but read-only: references the cache and never writes', () => {
-    const s = buildRemoteManifestScript('/home/kai/.dsh');
+    const s = buildRemoteManifestScript('/home/user/.dsh');
     expect(s).toContain(REMOTE_CACHE_REL);       // reads the cache
     expect(s).not.toMatch(/\bmv\b/);             // no rename
     expect(s).not.toMatch(/mv\s/);                // no rename

@@ -95,14 +95,14 @@ describe('restoreRemoteTunnel', () => {
   it('delegates to the fixed agent op and reports changed + sha', async () => {
     const sha = 'b'.repeat(64);
     const patchRemoteTunnel = vi.fn(async () => ({ changed: true, sha256: sha }));
-    const r = await restoreRemoteTunnel({ patchRemoteTunnel } as any, { host: 'sync-host', dshRoot: '/home/kai/.dsh' } as any, 'machine-b');
+    const r = await restoreRemoteTunnel({ patchRemoteTunnel } as any, { host: 'sync-host', dshRoot: '/home/user/.dsh' } as any, 'machine-b');
     expect(r).toEqual({ ok: true, profile: 'machine-b', changed: true, sha256: sha });
-    expect(patchRemoteTunnel).toHaveBeenCalledWith({ host: 'sync-host', dshRoot: '/home/kai/.dsh' }, 'machine-b');
+    expect(patchRemoteTunnel).toHaveBeenCalledWith({ host: 'sync-host', dshRoot: '/home/user/.dsh' }, 'machine-b');
   });
 
   it('rejects unsafe profile names before touching the transport', async () => {
     const patchRemoteTunnel = vi.fn(async () => ({ changed: true, sha256: 'c'.repeat(64) }));
-    const r = await restoreRemoteTunnel({ patchRemoteTunnel } as any, { host: 'sync-host', dshRoot: '/home/kai/.dsh' } as any, '../escape');
+    const r = await restoreRemoteTunnel({ patchRemoteTunnel } as any, { host: 'sync-host', dshRoot: '/home/user/.dsh' } as any, '../escape');
     expect(r.ok).toBe(false);
     expect(patchRemoteTunnel).not.toHaveBeenCalled();
   });

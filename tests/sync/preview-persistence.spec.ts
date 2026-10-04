@@ -45,7 +45,7 @@ describe('preview persistence', () => {
       const svcA = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         previewDir,
         fs: fs as any,
         runner: stubRunner as any,
@@ -58,7 +58,7 @@ describe('preview persistence', () => {
       const svcB = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         previewDir,
         fs: fs as any,
         runner: stubRunner as any,
@@ -71,7 +71,7 @@ describe('preview persistence', () => {
       expect(fs.readFileSync(path.join(localRoot, MD), 'utf-8')).toBe('a\n§\nlocal1\n§\nremote2\n');
       // single-use persists across processes: a third apply rejects
       clearPreviews();
-      const svcC = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/kai/.dsh', previewDir, fs: fs as any, runner: stubRunner as any, transport: createFakeRemote(new Map([[MD, Buffer.from('x')]])).transport as any });
+      const svcC = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/user/.dsh', previewDir, fs: fs as any, runner: stubRunner as any, transport: createFakeRemote(new Map([[MD, Buffer.from('x')]])).transport as any });
       await expect(svcC.apply({ previewId: preview.previewId, direction: 'pull', confirm: true })).rejects.toMatchObject({ code: 'STALE_PREVIEW' });
     } finally {
       cleanup();
@@ -84,7 +84,7 @@ describe('preview persistence', () => {
       fs.mkdirSync(path.join(localRoot, 'dsh-maestro-memory', 'daily'), { recursive: true });
       fs.writeFileSync(path.join(localRoot, MD), 'a\n');
       const fake = createFakeRemote();
-      const svc = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/kai/.dsh', previewDir, fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
+      const svc = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/user/.dsh', previewDir, fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
       const preview = await svc.preview({ direction: 'pull' });
       const file = path.join(previewDir, `${preview.previewId}.json`);
       expect(fs.existsSync(file)).toBe(true);
@@ -93,7 +93,7 @@ describe('preview persistence', () => {
       rec.preview.expiresAt = new Date(Date.now() - 1000).toISOString();
       fs.writeFileSync(file, JSON.stringify(rec), 'utf-8');
       clearPreviews();
-      const svcB = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/kai/.dsh', previewDir, fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
+      const svcB = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/user/.dsh', previewDir, fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
       await expect(svcB.apply({ previewId: preview.previewId, direction: 'pull', confirm: true })).rejects.toMatchObject({ code: 'STALE_PREVIEW' });
       expect(fs.existsSync(file)).toBe(false); // expired file cleaned
       // hash equality sanity for the fixture line above

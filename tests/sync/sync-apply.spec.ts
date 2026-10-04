@@ -63,7 +63,7 @@ describe('apply', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -100,7 +100,7 @@ describe('apply', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: probe.fs,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -138,7 +138,7 @@ describe('apply', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -175,7 +175,7 @@ describe('apply', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -206,7 +206,7 @@ describe('apply', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fs as any,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -257,7 +257,7 @@ describe('apply', () => {
       const svc = new SyncService({
         localDsh: localRoot,
         remote: 'sync-host',
-        remoteDsh: '/home/kai/.dsh',
+        remoteDsh: '/home/user/.dsh',
         fs: fsProbe,
         runner: stubRunner as any,
         transport: fake.transport as any,
@@ -281,7 +281,7 @@ describe('apply', () => {
       fs.mkdirSync(path.join(localRoot, 'dsh-maestro-memory'));
       fs.writeFileSync(path.join(localRoot, 'dsh-maestro-memory/a.md'), 'push-me');
       const fake = createFakeRemote();
-      const svc = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/kai/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
+      const svc = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/user/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake.transport as any });
       const preview = await svc.preview({ direction: 'push' });
       const applied = await svc.apply({ previewId: preview.previewId, direction: 'push', confirm: true });
       expect(applied.ok).toBe(true);
@@ -289,7 +289,7 @@ describe('apply', () => {
 
       // preview (read-only) must never trigger warmCache
       const fake2 = createFakeRemote(new Map([['dsh-maestro-memory/b.md', Buffer.from('b')]]));
-      const svc2 = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/kai/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake2.transport as any });
+      const svc2 = new SyncService({ localDsh: localRoot, remote: 'sync-host', remoteDsh: '/home/user/.dsh', fs: fs as any, runner: stubRunner as any, transport: fake2.transport as any });
       await svc2.preview({ direction: 'pull' });
       expect((fake2.calls as any).warmCache ?? 0).toBe(0);
     } finally {
