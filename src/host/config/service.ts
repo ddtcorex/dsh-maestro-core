@@ -1,4 +1,4 @@
-import * as lib from '@ddtcorex/dsh-maestro-config-lib'
+import * as lib from '../store/index.js'
 
 export interface MaestroConfigService {
   /** Union of schema-registered domains and domains present in the store file. */

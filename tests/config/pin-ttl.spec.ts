@@ -4,7 +4,7 @@ import {
   DEFAULT_PIN_TTL_HOURS,
   MAX_PIN_TTL_HOURS,
   presetForTtlHours,
-} from '../src/client/pin-ttl.ts'
+} from '../../src/client/config/pin-ttl.ts'
 
 describe('PIN TTL presets', () => {
   it('offers the agreed options in ascending order', () => {

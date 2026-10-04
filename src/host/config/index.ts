@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 
 type RpcResult<T> = { ok: true; value: T } | { ok: false; error: { code: string; message: string; details: object } }
 type RpcErrorDetailsMap = { 'bad-request': { issues: object[] } }
-import { createMaestroConfigService, type MaestroConfigService } from './service.ts'
+import { createMaestroConfigService, type MaestroConfigService } from './service.js'
 
 export const name = 'maestro-config'
 export const inject = ['connection']

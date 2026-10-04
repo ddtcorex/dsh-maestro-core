@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../src/client')
+const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/client/config')
 const read = (f: string) => readFileSync(resolve(clientDir, f), 'utf8')
 
 describe('settings section registration contract', () => {

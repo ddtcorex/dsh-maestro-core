@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createMaestroConfigService } from '../src/host/service.ts'
-import { defineDomain, resetForTests } from '@ddtcorex/dsh-maestro-config-lib'
+import { createMaestroConfigService } from '../../src/host/config/service.ts'
+import { defineDomain, resetForTests } from '../../src/host/store/index.js'
 
 let homeA: string
 let homeB: string

@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
 // This spec reads the sibling sources directly — they are separate repos on
 // disk, not dependencies of this package.
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const packagesDir = resolve(packageRoot, '..')
 const readClientEntry = (pkg: string) => readFileSync(resolve(packagesDir, pkg, 'src/client/index.tsx'), 'utf8')
 

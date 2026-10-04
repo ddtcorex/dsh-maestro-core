@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../src/client')
+const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/client/config')
 const read = (f: string) => readFileSync(resolve(clientDir, f), 'utf8')
 
 describe('Task 3: Settings UI tabs', () => {
@@ -75,7 +75,7 @@ describe('Task 3: Settings UI tabs', () => {
   })
 
   it('host exposes guard/guardBlacklist domains via RPC get/set/unset (generic channel)', () => {
-    const host = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/host/index.ts'), 'utf8')
+    const host = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../src/host/config/index.ts'), 'utf8')
     expect(host).toContain('/dsh-maestro-config')
     expect(host).toContain("'get'")
     expect(host).toContain("'set'")

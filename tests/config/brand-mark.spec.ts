@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../src/client')
+const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/client/config')
 const read = (f: string) => readFileSync(resolve(clientDir, f), 'utf8')
 
 describe('Maestro M logo reference implementation', () => {
@@ -83,7 +83,7 @@ describe('BrandBadge chrome is not caller-overridable', () => {
 // imported (react is a client-bundler EXTERNAL with no package.json entry), so
 // the react-free half lives in maestro-mark.ts and is pinned here by exact
 // bytes — not by grepping a call site for a function name.
-import { maestroMarkMaskUri, MAESTRO_MARK_PATH } from '../src/client/maestro-mark.js'
+import { maestroMarkMaskUri, MAESTRO_MARK_PATH } from '../../src/client/config/maestro-mark.js'
 
 describe('maestroMarkMaskUri encoding', () => {
   it('encodes only < and >, leaving quotes, slashes and spaces intact', () => {
