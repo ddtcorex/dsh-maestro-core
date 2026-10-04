@@ -22,6 +22,10 @@
       "types": "./lib/types/client/auto-reload.d.ts",
       "default": "./lib/client.js"
     },
+    "./store": {
+      "types": "./lib/types/store/index.d.ts",
+      "default": "./lib/store/index.js"
+    },
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -38,6 +42,7 @@
   },
   "files": [
     "lib",
+    "src",
     "skills",
     "README.md",
     "cordis.patch.yml"
