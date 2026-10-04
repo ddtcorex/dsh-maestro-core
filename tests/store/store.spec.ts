@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, stat, readFile, readdir, writeFile, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { load, get, set, onChange, resetForTests } from '../src/index.ts'
+import { load, get, set, onChange, resetForTests } from '../../src/host/store/index.js'
 
 let home: string
 

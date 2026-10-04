@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import {
   DOMAIN_KEY_MAP, RUNTIME_KEYS,
   splitLegacyPatch, writeLegacyPatch, readFlat, resetForTests,
-} from '../src/index.ts'
+} from '../../src/host/store/index.js'
 
 let home: string
 beforeEach(async () => { home = await mkdtemp(join(tmpdir(), 'cfgadap-')); resetForTests() })

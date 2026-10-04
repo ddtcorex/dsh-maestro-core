@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { defineDomain, set, get, load, resetForTests } from '../src/index.ts'
+import { defineDomain, set, get, load, resetForTests } from '../../src/host/store/index.js'
 
 let home: string
 beforeEach(async () => { home = await mkdtemp(join(tmpdir(), 'cfgschema-')); resetForTests() })
@@ -58,7 +58,7 @@ describe('domain schemas', () => {
   })
 })
 
-import { definedDomains } from '../src/index.ts'
+import { definedDomains } from '../../src/host/store/index.js'
 describe('definedDomains()', () => {
   it('lists registered domain names without affecting the store', () => {
     resetForTests()
@@ -95,7 +95,7 @@ describe('notifier domain schema', () => {
  * connection across packages, so a rename on either side must break a test
  * instead of breaking silently.
  */
-import { DOMAIN_KEY_MAP, splitLegacyPatch, readFlat, writeLegacyPatch } from '../src/index.ts'
+import { DOMAIN_KEY_MAP, splitLegacyPatch, readFlat, writeLegacyPatch } from '../../src/host/store/index.js'
 describe('telegramReviewNotifications alias (regression pin)', () => {
   it('DOMAIN_KEY_MAP pins the flat-key alias', () => {
     expect(DOMAIN_KEY_MAP.telegramReviewNotifications).toBe('notifier.policy.reviewNotifications')

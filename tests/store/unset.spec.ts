@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { get, set, unset, onChange, defineDomain, resetForTests } from '../src/index.ts'
+import { get, set, unset, onChange, defineDomain, resetForTests } from '../../src/host/store/index.js'
 
 let home: string
 const storePath = () => join(home, 'dsh-maestro-config', 'settings.json')

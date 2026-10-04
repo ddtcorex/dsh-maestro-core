@@ -29,7 +29,7 @@ describe('supervisor config', () => {
     await writeFile(join(tmpHome, 'maestro', 'settings.json'), JSON.stringify({ version: 1, domains: { supervisor } }))
   }
   const resetLibCache = async () => {
-    const { resetForTests } = await import('@ddtcorex/dsh-maestro-config-lib')
+    const { resetForTests } = await import('../src/host/store/index.js')
     resetForTests()
   }
 
