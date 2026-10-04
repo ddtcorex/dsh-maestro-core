@@ -331,6 +331,6 @@ function apply(ctx: any): void {
   }, 'maestro-sync: settings')
 }
 
-export { SyncPanel }
+export { SyncPanel, apply }
 
 export default { inject, apply }

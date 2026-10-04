@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
  * shape of the contract instead — a range, an early floor, and a `-0` ceiling.
  */
 const here = dirname(fileURLToPath(import.meta.url))
-const manifest = JSON.parse(readFileSync(resolve(here, '../../package.json'), 'utf8')) as {
+const manifest = JSON.parse(readFileSync(resolve(here, '../package.json'), 'utf8')) as {
   peerDependencies?: Record<string, string>
 }
 
