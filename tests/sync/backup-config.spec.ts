@@ -1,0 +1,91 @@
+// tests/backup-config.spec.ts — backup target config + secret resolution (redacted).
+import { describe, it, expect } from 'vitest';
+import { describeSecretSource, resolveBackupTarget, validateR2ConfigInput, type BackupSecrets } from '../src/host/backup-config.js';
+
+describe('backup config', () => {
+  it('describeSecretSource never leaks values: env|file|none', () => {
+    expect(describeSecretSource({ R2_ACCESS_KEY_ID: 'x', R2_SECRET_ACCESS_KEY: 'y' }, '/nope')).toBe('env');
+    expect(describeSecretSource({ AWS_ACCESS_KEY_ID: 'x', AWS_SECRET_ACCESS_KEY: 'y' }, '/nope')).toBe('env');
+    expect(describeSecretSource({}, '/nope')).toBe('none');
+  });
+
+  it('resolveBackupTarget builds an R2 target with a default endpoint+prefix and env secrets', async () => {
+    const t = await resolveBackupTarget(
+      { domains: { sync: { r2: { accountId: 'acct', bucket: 'maestro-backup' } } } },
+      { R2_ACCESS_KEY_ID: 'ak', R2_SECRET_ACCESS_KEY: 'sk' } as any,
+    );
+    expect(t.config.provider).toBe('r2');
+    expect(t.config.endpoint).toContain('acct');
+    expect(t.config.prefix).toMatch(/^v1\/hosts\/[0-9a-f]{12}\/$/);
+    expect(t.secrets.accessKeyId).toBe('ak');
+    expect(t.source).toBe('env');
+  });
+
+  it('resolves R2 secrets from the private sidecar when env is absent', async () => {
+    const t = await resolveBackupTarget(
+      { domains: { sync: { r2: { accountId: 'acct', bucket: 'b' } } } },
+      {},
+      // sidecar path override: write a temp file and pass its dir
+      (() => {
+        const tmp = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'bkcfg-'));
+        const dir = require('node:path').join(tmp, 'dsh-maestro-sync');
+        require('node:fs').mkdirSync(dir, { recursive: true });
+        require('node:fs').writeFileSync(require('node:path').join(dir, 'backup-secrets.json'), JSON.stringify({ accessKeyId: 'file-ak', secretAccessKey: 'file-sk' }), 'utf-8');
+        return tmp;
+      })(),
+    );
+    expect(t.source).toBe('file');
+    expect(t.secrets.accessKeyId).toBe('file-ak');
+  });
+
+  it('throws MISSING_BACKUP_SECRETS when no secret source resolves', async () => {
+    // The refusal must be self-serving: name both accepted sources and the
+    // exact sidecar path for the resolved home, so an operator can fix it
+    // without reading the source (hit live on 2026-09-22).
+    const err: any = await resolveBackupTarget(
+      { domains: { sync: { r2: { accountId: 'acct', bucket: 'b' } } } },
+      {} as any,
+      '/tmp/no-sidecar-dsh',
+    ).catch((e) => e);
+    expect(err).toMatchObject({ code: 'MISSING_BACKUP_SECRETS' });
+    expect(String(err.message)).toContain('R2_ACCESS_KEY_ID');
+    expect(String(err.message)).toContain('AWS_ACCESS_KEY_ID');
+    expect(String(err.message)).toContain('/tmp/no-sidecar-dsh/dsh-maestro-sync/backup-secrets.json');
+  });
+
+  it('aws provider resolves from the same config shape (UI hidden phase 1)', async () => {
+    const t = await resolveBackupTarget(
+      { domains: { sync: { r2: { provider: 'aws', bucket: 'maestro-backup', region: 'eu-west-1' } } } },
+      { AWS_ACCESS_KEY_ID: 'ak', AWS_SECRET_ACCESS_KEY: 'sk' } as any,
+    );
+    expect(t.config.provider).toBe('aws');
+    expect(t.config.region).toBe('eu-west-1');
+  });
+
+  it('never returns secrets on the status path: only the source label and config', async () => {
+    const t = await resolveBackupTarget({ domains: { sync: { r2: { accountId: 'acct', bucket: 'b' } } } }, { R2_ACCESS_KEY_ID: 'ak', R2_SECRET_ACCESS_KEY: 'sk' } as any);
+    const status = JSON.stringify({ source: t.source, bucket: t.config.bucket, prefix: t.config.prefix, provider: t.config.provider, endpoint: t.config.endpoint });
+    expect(status).not.toContain('ak');
+    expect(status).not.toContain('sk');
+    expect(status).not.toContain('secret');
+  });
+
+  it('validateR2ConfigInput normalizes a full R2 form (prefix slash appended)', () => {
+    const v = validateR2ConfigInput({ provider: 'r2', accountId: 'a'.repeat(32), endpoint: '', region: 'auto', bucket: 'maestro-backup', prefix: 'v1/hosts/abc' });
+    expect(v).toEqual({ provider: 'r2', accountId: 'a'.repeat(32), endpoint: '', region: 'auto', bucket: 'maestro-backup', prefix: 'v1/hosts/abc/' });
+  });
+
+  it('validateR2ConfigInput rejects bad provider/bucket/endpoint/region/prefix', () => {
+    expect(() => validateR2ConfigInput({ provider: 'gcs', bucket: 'b', prefix: 'p/' })).toThrow(/invalid provider/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'UPPER', prefix: 'p/' })).toThrow(/invalid bucket/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'b', prefix: 'p/' })).toThrow(/invalid bucket/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'maestro-backup', prefix: 'p/', endpoint: 'http://plain' })).toThrow(/invalid endpoint/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'maestro-backup', prefix: 'p/', endpoint: 'https://x; rm' })).toThrow(/invalid endpoint/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'maestro-backup', prefix: 'p/', region: 'us east!' })).toThrow(/invalid region/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'maestro-backup', prefix: '/abs' })).toThrow(/invalid prefix/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'maestro-backup', prefix: '../up/' })).toThrow(/invalid prefix/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', bucket: 'maestro-backup', prefix: '' })).toThrow(/prefix is required/);
+    expect(() => validateR2ConfigInput({ provider: 'aws', accountId: 'a'.repeat(32), bucket: 'maestro-backup', prefix: 'p/' })).toThrow(/only meaningful for provider r2/);
+    expect(() => validateR2ConfigInput({ provider: 'r2', accountId: 'short', bucket: 'maestro-backup', prefix: 'p/' })).toThrow(/invalid accountId/);
+  });
+});

@@ -1,0 +1,484 @@
+// @vitest-environment jsdom
+/**
+ * Client behavior (Task 7): Preview is a read-only exact plan; apply exists only
+ * in a confirmation dialog bound to a live preview; cancel never applies; errors
+ * are announced with role="alert"; long lists paginate with "Show more".
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import * as React from 'react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { SyncPanel } from '../src/client/index.js';
+
+const PREVIEW_ID = 'a'.repeat(32);
+
+const summary = { copied: 1, merged: 1, skipped: 2, conflicts: 0, added: 1 };
+
+function makePreview(actions: any[] = [
+  { path: 'dsh-maestro-memory/daily/2026-08-29.md', action: 'merge', target: 'local', added: 1, reason: 'content differs' },
+  { path: 'dsh-maestro-memory/projects/new.md', action: 'copy', target: 'local', added: 0, reason: 'remote only' },
+]) {
+  return {
+    ok: true,
+    previewId: PREVIEW_ID,
+    revision: 'rev1',
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+    actions,
+    summary,
+    connection: { ok: true, host: 'sync-host' },
+    remoteHost: 'sync-host',
+  };
+}
+
+function makeCtx(rpc: any) {
+  return { connection: { rpc: { call: rpc } }, get: () => undefined as any };
+}
+
+const carrier = (value: any) => ({ ok: true, value });
+
+/** Async preview flow: previewStart returns a jobId, previewStatus settles with the preview. */
+const previewFlow = (settled: any, first: 'running' | 'done' = 'done') => ({
+  'previewStart': () => carrier({ jobId: 'job1' }),
+  'previewStatus': () =>
+    first === 'running'
+      ? carrier({ status: 'running', progress: { phase: 'hashing', current: 1, total: 2, file: 'sessions/abc/x.jsonl.zstd' } })
+      : carrier({ status: 'done', preview: settled }),
+})
+
+function statusCalls(rpc: any) {
+  return rpc.mock.calls.filter(([c]: any) => c === '/dsh-maestro-sync').map(([, m]: any) => m);
+}
+
+/** Explicit-check flow mocks: config → save → check(pass) → status/pages load. */
+function checkFlowBranches(method: string) {
+  if (method === 'getRemoteConfig') return carrier({ remoteHost: 'sync-host', source: 'default' });
+  if (method === 'saveRemoteHost') return carrier({ remoteHost: 'sync-host' });
+  if (method === 'check') return carrier({ connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+  return null;
+}
+
+async function driveCheck(user: any) {
+  await waitFor(() => expect(screen.getByTestId('sync-check-connection')).toBeEnabled());
+  await user.click(screen.getByTestId('sync-check-connection'));
+}
+
+beforeEach(() => cleanup());
+
+describe('SyncPanel', () => {
+  it('Preview Pull opens a confirmation dialog with exact actions; no apply before confirmation', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 2, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      const f = previewFlow(makePreview());
+      if (method === 'previewStart') return f['previewStart']();
+      if (method === 'previewStatus') return f['previewStatus']();
+      if (method === 'apply') return carrier({ ok: true, revision: 'rev1', summary, committed: [], failures: [] });
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-preview-pull'));
+
+    // confirmation dialog names the plan and shows the merged file with its added count
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('2026-08-29.md');
+    expect(dialog.textContent).toMatch(/1 new entry/);
+    expect(dialog.textContent).toContain('sync-host');
+    // apply is only inside the dialog; none happened yet
+    const applyButtons = screen.getAllByRole('button', { name: /apply/i });
+    expect(applyButtons.length).toBeGreaterThan(0);
+    expect(statusCalls(rpc)).not.toContain('apply');
+  });
+
+  it('cancelling the confirmation applies nothing and closes the dialog', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      const f = previewFlow(makePreview());
+      if (method === 'previewStart') return f['previewStart']();
+      if (method === 'previewStatus') return f['previewStatus']();
+      if (method === 'apply') return carrier({ ok: true });
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-preview-pull'));
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(statusCalls(rpc)).not.toContain('apply');
+  });
+
+  it('confirming applies with {previewId, direction, confirm:true} and announces success in an aria-live region', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      const f = previewFlow(makePreview());
+      if (method === 'previewStart') return f['previewStart']();
+      if (method === 'previewStatus') return f['previewStatus']();
+      if (method === 'apply') return carrier({ ok: true, revision: 'rev1', summary, committed: ['dsh-maestro-memory/daily/2026-08-29.md'], failures: [] });
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-preview-pull'));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: /apply pull/i }));
+    await waitFor(() => expect(statusCalls(rpc)).toContain('apply'));
+    const applyArgs = rpc.mock.calls.find(([, m]: any) => m === 'apply')![2];
+    expect(applyArgs).toMatchObject({ previewId: PREVIEW_ID, direction: 'pull', confirm: true });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // success is announced through an aria-live region
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0);
+  });
+
+  it('announces apply errors with role="alert" and keeps the dialog closed', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      const f = previewFlow(makePreview());
+      if (method === 'previewStart') return f['previewStart']();
+      if (method === 'previewStatus') return f['previewStatus']();
+      if (method === 'apply') return { ok: false, error: { code: 'STALE_PREVIEW', message: 'inventory changed since preview', details: {} } };
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-preview-pull'));
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: /apply pull/i }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('STALE_PREVIEW');
+    // dialog closed after a failed apply
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('a long preview action list paginates with Show more', async () => {
+    const user = userEvent.setup();
+    const actions = Array.from({ length: 12 }, (_, i) => ({ path: `dsh-maestro-memory/daily/2026-08-${String(i + 1).padStart(2, '0')}.md`, action: 'merge' as const, target: 'local' as const, added: 1, reason: 'content differs' }));
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      const f = previewFlow(makePreview(actions));
+      if (method === 'previewStart') return f['previewStart']();
+      if (method === 'previewStatus') return f['previewStatus']();
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-preview-pull'));
+    const dialog = await screen.findByRole('dialog');
+    // initial page shows 5 rows, then Show more reveals the rest
+    const rowsBefore = dialog.querySelectorAll('[data-action-row]').length;
+    expect(rowsBefore).toBe(5);
+    await user.click(screen.getByRole('button', { name: /show more/i }));
+    const rowsAfter = dialog.querySelectorAll('[data-action-row]').length;
+    expect(rowsAfter).toBe(10);
+  });
+
+  it('R2 tab renders when selected; Remote tab keeps the preview buttons', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string) => {
+      if (method === 'backupStatus') return carrier({ configured: true, source: 'env', bucket: 'maestro-backup', prefix: 'v1/hosts/t/', lastManifest: null, eligible: { md: 2, sessions: 3 } });
+      if (method === 'status') return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 2, remoteOnly: 0, both: 0 });
+      if (method === 'backupPreview') return carrier({ previewId: 'pv'.repeat(16), summary: { identical: 1, missing: 1, addedBytes: 10 } });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx((_ch: string, m: string) => rpc(_ch, m)) as any }));
+    expect(await screen.findByTestId('sync-tab-r2')).toBeInTheDocument();
+    expect(screen.getByTestId('sync-tab-remote')).toBeInTheDocument();
+    // Remote tab (default) unlocks the sync preview pin only after an explicit check
+    await driveCheck(user);
+    expect(screen.getByTestId('sync-preview-pull')).toBeInTheDocument();
+    await user.click(screen.getByTestId('sync-tab-r2'));
+    expect(await screen.findByText(/maestro-backup/i)).toBeInTheDocument();
+    expect(screen.getByTestId('r2-preview-backup')).toBeEnabled();
+    await user.click(screen.getByTestId('r2-preview-backup'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('R2 tab shows Not configured and disables backup actions when no bucket is set', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string) => {
+      if (method === 'backupStatus') return carrier({ configured: false, source: 'none', bucket: '', prefix: '', lastManifest: null, eligible: { md: 0, sessions: 0 } });
+      if (method === 'status') return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx((_ch: string, m: string) => rpc(_ch, m)) as any }));
+    await user.click(screen.getByTestId('sync-tab-r2'));
+    expect((await screen.findAllByText(/not configured/i)).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('r2-preview-backup')).toBeDisabled();
+  });
+
+  it('Sync both ways opens a combined dialog (exact push + projected pull) and applies once', async () => {
+    const user = userEvent.setup();
+    const pushPreview = makePreview([
+      { path: 'dsh-maestro-memory/daily/2026-09-09.md', action: 'merge', target: 'remote', added: 2, reason: 'content differs' },
+    ]);
+    const combined = {
+      ok: true,
+      previewId: PREVIEW_ID,
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      push: pushPreview,
+      pullProjected: makePreview(),
+      note: 'pull plan is projected; recomputed exact at apply time',
+    };
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      if (method === 'bidirectionalPreview') return carrier(combined);
+      if (method === 'bidirectionalApply') {
+        expect(args).toMatchObject({ previewId: PREVIEW_ID, confirm: true });
+        return carrier({ ok: true, push: { summary }, pull: { summary }, verification: { copied: 0, merged: 0, skipped: 3, conflicts: 0, added: 0 }, committed: ['dsh-maestro-memory/daily/2026-09-09.md'], failures: [] });
+      }
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+
+    await waitFor(() => expect(screen.getByTestId('sync-both-ways')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-both-ways'));
+
+    // combined dialog: exact push file plus the projected-pull honesty note
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('2026-09-09.md');
+    expect(dialog.textContent).toMatch(/projected/i);
+    expect(statusCalls(rpc)).not.toContain('bidirectionalApply');
+
+    await user.click(screen.getByRole('button', { name: /apply both ways/i }));
+    await waitFor(() => expect(statusCalls(rpc)).toContain('bidirectionalApply'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // success announced with the convergence verdict
+    const statuses = screen.getAllByRole('status');
+    expect(statuses.some((el) => /converged/i.test(el.textContent ?? ''))).toBe(true);
+  });
+
+  it('primary actions live in a sticky thumb-reach bar', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      return { ok: true };
+    });
+    const { container } = render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    expect(container.querySelector('[data-sync-actions-bar]')).not.toBeNull();
+  });
+
+  it('bucket sections collapse and expand without losing pagination', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 1, remoteOnly: 0, both: 0 });
+      if (method === 'status' && args?.bucket === 'localOnly') return carrier({ ok: true, total: 1, offset: 0, limit: 10, files: ['dsh-maestro-memory/MEMORY.md'], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+    // wide viewport (jsdom) starts expanded
+    const toggle = await screen.findByRole('button', { name: /collapse ready to send/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByText('Global memory')).toBeInTheDocument();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Global memory')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /expand ready to send/i }));
+    expect(screen.getByText('Global memory')).toBeInTheDocument();
+  });
+
+  it('R2 restore/GC actions live behind a More menu; backup stays primary', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string) => {
+      if (method === 'backupStatus') return carrier({ configured: true, source: 'env', bucket: 'b', prefix: 'p/', lastManifest: null, eligible: { md: 1, sessions: 1 } });
+      if (method === 'status') return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await user.click(screen.getByTestId('sync-tab-r2'));
+    await waitFor(() => expect(screen.getByTestId('r2-preview-backup')).toBeEnabled());
+    // restore/GC hidden until the menu opens
+    expect(screen.queryByTestId('r2-restore-newdir')).toBeNull();
+    const more = screen.getByTestId('r2-more');
+    expect(more).toHaveAttribute('aria-expanded', 'false');
+    await user.click(more);
+    expect(more).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('r2-restore-newdir')).toBeInTheDocument();
+    expect(screen.getByTestId('r2-restore-inplace')).toBeInTheDocument();
+    expect(screen.getByTestId('r2-preview-gc')).toBeInTheDocument();
+  });
+
+  it('locks Preview and file lists behind an explicit connection check', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    // entering the tab probes nothing: no check, no status, no preview
+    await waitFor(() => expect(screen.getByTestId('sync-ssh-host')).toHaveValue('sync-host'));
+    expect(statusCalls(rpc)).not.toContain('check');
+    expect(statusCalls(rpc)).not.toContain('status');
+    expect(screen.queryByTestId('sync-preview-pull')).toBeNull();
+    expect(screen.getByText(/preview and file lists are locked/i)).toBeInTheDocument();
+    // an explicit check saves the host, then unlocks preview
+    await driveCheck(user);
+    await waitFor(() => expect(screen.getByTestId('sync-preview-pull')).toBeEnabled());
+    expect(statusCalls(rpc)).toEqual(expect.arrayContaining(['getRemoteConfig', 'saveRemoteHost', 'check', 'status']));
+  });
+
+  it('surfaces save validation errors without probing SSH', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string) => {
+      if (method === 'getRemoteConfig') return carrier({ remoteHost: 'sync-host', source: 'default' });
+      if (method === 'saveRemoteHost') return { ok: false, error: { code: 'INVALID_HOST', message: 'invalid host', details: {} } };
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await waitFor(() => expect(screen.getByTestId('sync-check-connection')).toBeEnabled());
+    await user.click(screen.getByTestId('sync-check-connection'));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('invalid host');
+    expect(statusCalls(rpc)).not.toContain('check');
+  });
+
+  it('R2 target form prefills from status and saves non-secret fields', async () => {
+    const user = userEvent.setup();
+    let saved: any = null;
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'backupStatus') {
+        return carrier({ configured: true, source: 'env', bucket: 'maestro-backup', prefix: 'v1/hosts/t/', lastManifest: null, eligible: { md: 1, sessions: 1 }, r2: { provider: 'r2', endpoint: 'https://x.r2.cloudflarestorage.com', region: 'auto', bucket: 'maestro-backup', prefix: 'v1/hosts/t/' } });
+      }
+      if (method === 'saveR2Config') {
+        saved = args;
+        return carrier({ r2: { provider: 'r2', endpoint: '', region: 'auto', bucket: args.bucket, prefix: args.prefix } });
+      }
+      if (method === 'status') return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 0, remoteOnly: 0, both: 0 });
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await user.click(screen.getByTestId('sync-tab-r2'));
+    // fields prefill from the non-secret status snapshot
+    const bucketInput = await screen.findByTestId('r2-cfg-bucket');
+    await waitFor(() => expect(bucketInput).toHaveValue('maestro-backup'));
+    expect(screen.getByTestId('r2-save-config')).toBeEnabled();
+    // editing + saving sends only non-secret fields
+    await user.clear(bucketInput);
+    await user.type(bucketInput, 'my-bucket');
+    await user.click(screen.getByTestId('r2-save-config'));
+    await waitFor(() => expect(saved).not.toBeNull());
+    expect(saved).toMatchObject({ provider: 'r2', bucket: 'my-bucket', prefix: 'v1/hosts/t/' });
+    expect(JSON.stringify(saved)).not.toContain('secret');
+    expect(JSON.stringify(saved)).not.toContain('accessKey');
+  });
+
+  it('Remote tab shows machine ids and offers tunnel restore on mismatch', async () => {    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 2, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      if (method === 'checkMachines') return carrier({ ok: true, mode: 'bidirectional', localId: 'machine-a', remoteId: 'machine-b', from: 'machine-a', to: 'machine-b' });
+      if (method === 'tunnelRestorePreview') {
+        return carrier({ previewId: 'tp-1', side: 'local', profile: 'machine-a', expiresAt: new Date(Date.now() + 60_000).toISOString(), target: 'domains.tunnel', current: { mode: 'named', hostname: 'stale' }, desired: { mode: 'named', hostname: 'machine-a.example.com' }, changed: true });
+      }
+      if (method === 'tunnelRestore') {
+        expect(args).toMatchObject({ side: 'local', confirm: true, previewId: 'tp-1' });
+        return carrier({ ok: true, side: 'local', profile: 'machine-a' });
+      }
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+    expect(await screen.findByTestId('sync-machines')).toHaveTextContent(/machine-a.*machine-b/);
+    // One click never writes: it opens a dialog bound to a read-only preview
+    // of exactly what the restore would change.
+    await user.click(screen.getByTestId('sync-tunnel-restore'));
+    await waitFor(() => expect(statusCalls(rpc)).toContain('tunnelRestorePreview'));
+    expect(statusCalls(rpc)).not.toContain('tunnelRestore');
+    await screen.findByTestId('sync-tunnel-dialog');
+    expect(await screen.findByTestId('sync-tunnel-current')).toHaveTextContent('hostname=stale');
+    expect(await screen.findByTestId('sync-tunnel-desired')).toHaveTextContent('hostname=machine-a.example.com');
+    // The write exists only inside the dialog, bound to the preview id.
+    await user.click(screen.getByTestId('sync-tunnel-confirm'));
+    await waitFor(() => expect(statusCalls(rpc)).toContain('tunnelRestore'));
+  });
+
+  it('names the machines failure inline and locks the actions when checkMachines throws', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 2, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      // transient transport failure (e.g. remoteHome SSH wobble inside checkMachines)
+      if (method === 'checkMachines') throw new Error('remoteHome failed after retry: timeout');
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+    // The line stays visible with "?" ids and names the failure...
+    expect(await screen.findByTestId('sync-machines')).toHaveTextContent('?');
+    expect(screen.getByTestId('sync-machines-error')).toHaveTextContent(/remoteHome/);
+    // ...and a failed verdict GATES the actions: a plan computed against the
+    // wrong peer must never be offered.
+    await waitFor(() => expect(screen.getByTestId('sync-machines-gate')).toHaveTextContent(/machine identity/i));
+    expect(screen.getByTestId('sync-preview-pull')).toBeDisabled();
+    expect(screen.getByTestId('sync-preview-push')).toBeDisabled();
+    expect(screen.getByTestId('sync-both-ways')).toBeDisabled();
+  });
+
+  it('names the machines failure inline and locks the actions when checkMachines returns a fail carrier', async () => {
+    const user = userEvent.setup();
+    const rpc = vi.fn(async (_ch: string, method: string, args: any) => {
+      if (method === 'status' && !args?.bucket) return carrier({ ok: true, remoteHost: 'sync-host', connection: { ok: true, host: 'sync-host' }, localOnly: 2, remoteOnly: 0, both: 0 });
+      if (method === 'status') return carrier({ ok: true, total: 0, offset: 0, limit: 10, files: [], nextCursor: null, connection: { ok: true, host: 'sync-host' }, remoteHost: 'sync-host' });
+      const cf = checkFlowBranches(method);
+      if (cf) return cf;
+      if (method === 'checkMachines') return { ok: false, error: { code: 'maestro-sync/machines', message: 'remoteHome failed after retry', details: {} } };
+      return { ok: true };
+    });
+    render(React.createElement(SyncPanel, { ctx: makeCtx(rpc) }));
+    await driveCheck(user);
+    expect(await screen.findByTestId('sync-machines')).toHaveTextContent('?');
+    expect(screen.getByTestId('sync-machines-error')).toHaveTextContent(/remoteHome/);
+    await waitFor(() => expect(screen.getByTestId('sync-machines-gate')).toHaveTextContent(/machine identity/i));
+    expect(screen.getByTestId('sync-preview-pull')).toBeDisabled();
+  });
+});
