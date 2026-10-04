@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { redact, containsSecret } from '../src/host/redact.js'
+import { redact, containsSecret } from '../../src/host/guard/redact.js'
 
 // Secret values are assembled at runtime. A raw token literal in this file would
 // be rewritten by the guard's own pre-execute path before the test could read it

@@ -2,45 +2,22 @@ import { describe, it, expect } from 'vitest'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { createGuardHandler } from '../src/host/index.js'
-import { Journal } from '../src/host/journal.js'
-import { PermissionPolicy } from '../src/host/permission-policy.js'
-import { DEFAULT_CONFIG } from '../src/host/config.js'
+import { createGuardHandler } from '../../src/host/guard/index.js'
+import { Journal } from '../../src/host/guard/journal.js'
+import { PermissionPolicy } from '../../src/host/guard/permission-policy.js'
+import { DEFAULT_CONFIG } from '../../src/host/guard/config.js'
 
-function readFileCandidates(...candidates: string[]): string {
-  for (const c of candidates) {
-    if (existsSync(c)) return readFileSync(c, 'utf8');
-    if (existsSync(resolve(c))) return readFileSync(resolve(c), 'utf8');
-  }
-  try { return readFileSync(new URL(`../${candidates[0].replace('packages/dsh-maestro-guard/', '')}`, import.meta.url), 'utf8'); } catch {}
-  throw new Error('not found: ' + candidates.join(', '));
-}
-
-describe('dsh-maestro-guard', () => {
-  it('src/host/index.ts contains preExecute or waterfall', () => {
-    const src = readFileCandidates('packages/dsh-maestro-guard/src/host/index.ts', 'src/host/index.ts', 'packages/dsh-maestro-guard/src/index.ts', 'src/index.ts');
-    const hasWaterfall = src.includes('preExecute') || src.includes('pre-execute') || src.includes('tools/pre-execute');
-    expect(hasWaterfall).toBe(true);
-  });
-
-  it('package.json name is @ddtcorex/dsh-maestro-guard', () => {
-    const pkg = JSON.parse(readFileCandidates('packages/dsh-maestro-guard/package.json', 'package.json'));
-    expect(pkg.name).toBe('@ddtcorex/dsh-maestro-guard');
-    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(pkg.dsh.bundle.patch).toBe('./cordis.patch.yml');
-  });
-
-  it('cordis.patch.yml has dsh-maestro-guard row', () => {
-    const yml = readFileCandidates('packages/dsh-maestro-guard/cordis.patch.yml', 'cordis.patch.yml');
-    expect(yml).toContain('dsh-maestro-guard');
-    expect(yml).toContain('@ddtcorex/dsh-maestro-guard');
-  });
-});
+describe('guard host module', () => {
+  it('src/host/guard/index.ts hooks tools/pre-execute', () => {
+    const src = readFileSync(resolve(import.meta.dirname, '../../src/host/guard/index.ts'), 'utf8')
+    expect(src).toContain('tools/pre-execute')
+  })
+})
 
 /**
- * The handler's behaviour is pinned by `tests/guard-handler.test.ts` (tiers,
+ * The handler's behaviour is pinned by `tests/guard/guard-handler.test.ts` (tiers,
  * journal, native ask). These cases cover the two contracts this file has
  * always owned: a policy-denied tool never reaches the tool, and the executed
  * arguments are never rewritten.

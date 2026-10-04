@@ -58,6 +58,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
     "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@types/node": "^26.3.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "~18.3.1",

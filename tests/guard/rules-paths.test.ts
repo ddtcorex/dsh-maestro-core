@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { homedir, tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import { classify } from '../src/host/rules.js'
-import { defaultProtectedPaths, guardConfigPaths } from '../src/host/paths.js'
-import { journalPath } from '../src/host/journal.js'
+import { classify } from '../../src/host/guard/rules.js'
+import { defaultProtectedPaths, guardConfigPaths } from '../../src/host/guard/paths.js'
+import { journalPath } from '../../src/host/guard/journal.js'
 
 /**
  * Task B4 — the path rules through `classify`, with every value under test

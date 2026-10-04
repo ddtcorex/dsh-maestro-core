@@ -7,9 +7,9 @@ import {
   loadGuardConfig,
   loadGuardConfigWithMigration,
   mapLegacyConfig,
-} from '../src/host/config.js'
-import { Journal, journalPath } from '../src/host/journal.js'
-import { journalLegacyConfigMigration } from '../src/host/index.js'
+} from '../../src/host/guard/config.js'
+import { Journal, journalPath } from '../../src/host/guard/journal.js'
+import { journalLegacyConfigMigration } from '../../src/host/guard/index.js'
 
 /**
  * The store lib's on-disk layout is its own private detail — it moved between
@@ -20,7 +20,7 @@ import { journalLegacyConfigMigration } from '../src/host/index.js'
  */
 const store = vi.hoisted(() => ({ doc: undefined as unknown, calls: [] as unknown[] }))
 
-vi.mock('@ddtcorex/dsh-maestro-config-lib', () => ({
+vi.mock('../../src/host/store/index.js', () => ({
   load: async (opts?: unknown) => {
     store.calls.push(opts)
     return store.doc

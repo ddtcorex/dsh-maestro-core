@@ -26,7 +26,7 @@ process.exit(0)
 
 describe('maestro_full_scan tool', () => {
   it('registers tool', async () => {
-    const mod = await import('../src/host/full-scan-tool.js')
+    const mod = await import('../../src/host/guard/full-scan-tool.js')
     expect(REGISTER(mod).name).toBe('maestro_full_scan')
   })
 
@@ -36,7 +36,7 @@ describe('maestro_full_scan tool', () => {
     await mkdir(join(root, 'scripts'), { recursive: true })
     await writeFile(join(root, 'scripts/enforce-rules.mjs'), MINIMAL_SCRIPT)
 
-    const mod = await import('../src/host/full-scan-tool.js')
+    const mod = await import('../../src/host/guard/full-scan-tool.js')
     const tool = REGISTER(mod)
     const res: any = await tool.execute({ rootPath: root }, { agent: { session: { header: { cwd: root } } } })
 
@@ -51,7 +51,7 @@ describe('maestro_full_scan tool', () => {
     // No scripts/enforce-rules.mjs anywhere under this root, and no ancestor of it has one.
     const bare = await mkdtemp(join(tmpdir(), 'scan-bare-'))
 
-    const mod = await import('../src/host/full-scan-tool.js')
+    const mod = await import('../../src/host/guard/full-scan-tool.js')
     const tool = REGISTER(mod)
     const res: any = await tool.execute({ rootPath: bare }, { agent: { session: { header: { cwd: bare } } } })
 
@@ -68,7 +68,7 @@ describe('maestro_full_scan tool', () => {
     await writeFile(join(root, 'scripts/enforce-rules.mjs'), MINIMAL_SCRIPT)
     const elsewhere = await mkdtemp(join(tmpdir(), 'scan-elsewhere-'))
 
-    const mod = await import('../src/host/full-scan-tool.js')
+    const mod = await import('../../src/host/guard/full-scan-tool.js')
     const tool = REGISTER(mod, { rootPath: root })
     const res: any = await tool.execute({}, { agent: { session: { header: { cwd: elsewhere } } } })
 

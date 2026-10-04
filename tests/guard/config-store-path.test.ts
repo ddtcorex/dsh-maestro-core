@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadGuardConfigWithMigration } from '../src/host/config.js'
+import { loadGuardConfigWithMigration } from '../../src/host/guard/config.js'
 
 /**
  * Store-LOCATION pin (2026-09-14).
@@ -10,7 +10,7 @@ import { loadGuardConfigWithMigration } from '../src/host/config.js'
  * `config.test.ts` drives the loader through a mocked store — deliberately, so
  * the on-disk layout stays the lib's private detail. The gap that left: nothing
  * asserted WHICH file the guard's real dependency reads, so the package could
- * (and did) resolve a `@ddtcorex/dsh-maestro-config-lib` whose store path is the
+ * (and did) resolve a store module whose path is the
  * retired `~/.dsh/maestro/settings.json` while every sibling package linked the
  * workspace copy. The guard then read `domains.guard` as `undefined` and ran on
  * `DEFAULT_CONFIG`, silently ignoring the operator's persisted settings.

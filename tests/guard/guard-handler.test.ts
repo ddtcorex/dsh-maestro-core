@@ -3,12 +3,12 @@ import { mkdtemp, mkdir, readFile } from 'node:fs/promises'
 import { execSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createGuardHandler, branchOf } from '../src/host/index.js'
-import { Journal, journalPath } from '../src/host/journal.js'
-import { PermissionPolicy } from '../src/host/permission-policy.js'
-import { DEFAULT_CONFIG } from '../src/host/config.js'
-import { defaultProtectedPaths } from '../src/host/paths.js'
-import type { AskOutcome } from '../src/host/journal.js'
+import { createGuardHandler, branchOf } from '../../src/host/guard/index.js'
+import { Journal, journalPath } from '../../src/host/guard/journal.js'
+import { PermissionPolicy } from '../../src/host/guard/permission-policy.js'
+import { DEFAULT_CONFIG } from '../../src/host/guard/config.js'
+import { defaultProtectedPaths } from '../../src/host/guard/paths.js'
+import type { AskOutcome } from '../../src/host/guard/journal.js'
 
 async function setup(outcome: AskOutcome) {
   const dir = await mkdtemp(join(tmpdir(), 'h-'))

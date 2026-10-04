@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { decide, renderReason } from '../src/host/decide.js'
-import { DEFAULT_CONFIG } from '../src/host/config.js'
+import { decide, renderReason } from '../../src/host/guard/decide.js'
+import { DEFAULT_CONFIG } from '../../src/host/guard/config.js'
 
 const verdict = { ruleId: 'git.push.protected', tier: 'ask' as const, target: 'git push origin master', repo: '/repo', branch: 'master' }
 

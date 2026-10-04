@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classify } from '../src/host/rules.js'
+import { classify } from '../../src/host/guard/rules.js'
 
 const settings = { protectedBranches: ['master', 'main'], protectedPaths: [], guardPaths: [] }
 const run = (command: string, branch = 'feature') =>

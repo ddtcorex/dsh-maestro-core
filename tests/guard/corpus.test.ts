@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { classify, RULE_IDS } from '../src/host/rules.js'
-import { decide } from '../src/host/decide.js'
-import { DEFAULT_CONFIG } from '../src/host/config.js'
-import { defaultProtectedPaths, guardConfigPaths } from '../src/host/paths.js'
+import { classify, RULE_IDS } from '../../src/host/guard/rules.js'
+import { decide } from '../../src/host/guard/decide.js'
+import { DEFAULT_CONFIG } from '../../src/host/guard/config.js'
+import { defaultProtectedPaths, guardConfigPaths } from '../../src/host/guard/paths.js'
 
 /**
  * The golden corpus: every row is a real event (a bypass the legacy matchers

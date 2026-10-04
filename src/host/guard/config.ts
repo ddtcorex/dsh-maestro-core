@@ -205,7 +205,7 @@ export function mapLegacyConfig(raw: unknown): { config: GuardConfigV2; migrated
  */
 async function readGuardDomain(dshHome?: string): Promise<unknown> {
   try {
-    const mod: any = await import('@ddtcorex/dsh-maestro-config-lib')
+    const mod: any = await import('../store/index.js')
     const opts = dshHome === undefined ? undefined : { dshHome }
     if (typeof mod.load === 'function') {
       const doc = await mod.load(opts)

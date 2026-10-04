@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Journal, journalPath } from '../src/host/journal.js'
+import { Journal, journalPath } from '../../src/host/guard/journal.js'
 
 describe('journal', () => {
   it('appends one JSON line per decision, mode 0600, redacted marker set', async () => {

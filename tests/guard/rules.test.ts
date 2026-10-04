@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import { classify, RULE_IDS, DEFAULT_TIERS } from '../src/host/rules.js'
-import type { RuleSettings } from '../src/host/rules.js'
-import { isWithinTempDir, isRuntimeSpillPath } from '../src/host/paths.js'
+import { classify, RULE_IDS, DEFAULT_TIERS } from '../../src/host/guard/rules.js'
+import type { RuleSettings } from '../../src/host/guard/rules.js'
+import { isWithinTempDir, isRuntimeSpillPath } from '../../src/host/guard/paths.js'
 
 // Guard self-block protocol: protected path literals are assembled from
 // fragments at runtime so no tool call ever carries the contiguous literal.

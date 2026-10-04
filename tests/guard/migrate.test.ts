@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { mkdtemp, mkdir, writeFile, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Journal, journalDir, journalPath } from '../src/host/journal.js'
-import { retireLegacyStore } from '../src/host/migrate.js'
+import { Journal, journalDir, journalPath } from '../../src/host/guard/journal.js'
+import { retireLegacyStore } from '../../src/host/guard/migrate.js'
 
 describe('retireLegacyStore', () => {
   it('moves the legacy ticket store out of the active path and journals it', async () => {

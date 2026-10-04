@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import guardPlugin from '../src/host/index.js'
-import { journalPath } from '../src/host/journal.js'
+import guardPlugin from '../../src/host/guard/index.js'
+import { journalPath } from '../../src/host/guard/journal.js'
 
 /**
  * IMPORTANT 6 — `apply()` was only reachable through the live host, so the
@@ -13,7 +13,7 @@ import { journalPath } from '../src/host/journal.js'
  * ctx and pins the actionable message of every fail-closed path rather than
  * leaving it incidental.
  *
- * The boot-time config read goes through the real `@ddtcorex/dsh-maestro-config-lib`
+ * The boot-time config read goes through the real in-repo store (`src/host/store`)
  * (this file does not mock it, unlike `config.test.ts`), so `DSH_HOME` points at a
  * private temp dir: an absent store resolves to the built-in defaults and the
  * journal lands there too.

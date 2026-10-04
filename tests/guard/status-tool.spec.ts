@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
-import { Journal, COUNTERS_RULE, journalPath } from '../src/host/journal.js'
-import { applyStatusTools, createStatusTools } from '../src/host/status-tool.js'
-import { DEFAULT_CONFIG, type GuardConfigV2 } from '../src/host/config.js'
+import { Journal, COUNTERS_RULE, journalPath } from '../../src/host/guard/journal.js'
+import { applyStatusTools, createStatusTools } from '../../src/host/guard/status-tool.js'
+import { DEFAULT_CONFIG, type GuardConfigV2 } from '../../src/host/guard/config.js'
 
 async function tempDir(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'st-'))

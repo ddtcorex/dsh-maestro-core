@@ -11,8 +11,8 @@ import {
 } from '../../src/client/config/guard-view.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const guardRulesPath = resolve(here, '../../../dsh-maestro-guard/src/host/rules.ts')
-const guardConfigPath = resolve(here, '../../../dsh-maestro-guard/src/host/config.ts')
+const guardRulesPath = resolve(here, '../../src/host/guard/rules.ts')
+const guardConfigPath = resolve(here, '../../src/host/guard/config.ts')
 /**
  * The parity suite needs the guard sibling checkout, which exists in a local
  * workspace but NOT in CI (config's ci.yml clones only config-lib). Skip

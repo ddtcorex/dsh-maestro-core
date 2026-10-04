@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCommand, unwrapSegments, MAX_WRAP_DEPTH } from '../src/host/parse.js'
+import { parseCommand, unwrapSegments, MAX_WRAP_DEPTH } from '../../src/host/guard/parse.js'
 
 // Task B2: the rule layer must never read `bash -c 'git push …'` as a bare
 // `bash` again. `unwrapSegments` removes the wrappers that only change WHO runs

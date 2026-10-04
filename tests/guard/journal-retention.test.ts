@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, utimes, writeFile } from 'node:fs/pr
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { Journal, journalDir, journalPath, shouldRotateAtBoot } from '../src/host/journal.js'
+import { Journal, journalDir, journalPath, shouldRotateAtBoot } from '../../src/host/guard/journal.js'
 
 /** A fixed clock: the archives below are all dated in August 2026. */
 const NOW = Date.parse('2026-09-14T00:00:00Z')
@@ -26,7 +26,7 @@ async function lines(dir: string): Promise<string[]> {
  */
 const store = vi.hoisted(() => ({ guard: undefined as Record<string, unknown> | undefined }))
 
-vi.mock('@ddtcorex/dsh-maestro-config-lib', () => ({
+vi.mock('../../src/host/store/index.js', () => ({
   load: async () => ({ version: 1, domains: { guard: store.guard } }),
 }))
 
@@ -84,7 +84,7 @@ afterEach(() => {
  * exactly like the fiber does, and keeps the returned disposer.
  */
 async function bootGuard(): Promise<{ call: (exec: unknown, next: () => Promise<unknown>) => Promise<any>; dispose: () => void }> {
-  const guard = (await import('../src/host/index.js')).default
+  const guard = (await import('../../src/host/guard/index.js')).default
   let listener: ((exec: unknown, next: () => Promise<unknown>) => Promise<any>) | undefined
   const disposers: Array<() => void> = []
   const ctx: any = {

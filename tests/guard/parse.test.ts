@@ -6,7 +6,7 @@ import {
   extractCommandText,
   extractPathField,
   getCommandWorkingDir,
-} from '../src/host/parse.js'
+} from '../../src/host/guard/parse.js'
 
 // Task B1: the guard stops matching regular expressions against the raw command
 // string and starts reading a parsed command surface instead. The parser is

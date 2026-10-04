@@ -8,7 +8,7 @@ import {
   isBlockedPath,
   isOutsideCwd,
   isRuntimeSpillPath,
-} from '../src/host/paths.js'
+} from '../../src/host/guard/paths.js'
 
 /**
  * Guard self-block protocol: the always-blocked path names are assembled from
