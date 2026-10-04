@@ -72,7 +72,18 @@ describe('definedDomains()', () => {
   })
 })
 
-describe('notifier domain schema', () => {
+describe('notifier domain schema (validator registered by the test, as its owner will)', () => {
+  beforeEach(() => {
+    defineDomain('notifier', {
+      parse(v: any) {
+        if (v == null) return { ok: true }
+        if (v.policy !== undefined && v.policy.reviewNotifications !== undefined && typeof v.policy.reviewNotifications !== 'boolean') {
+          return { ok: false, error: 'reviewNotifications boolean' }
+        }
+        return { ok: true }
+      },
+    })
+  })
   it('accepts partial telegram patches and policy.reviewNotifications as boolean', async () => {
     await set('notifier', { telegram: { botToken: 'b' } }, { dshHome: home })
     await set('notifier', { policy: { reviewNotifications: true } }, { dshHome: home })
@@ -95,7 +106,7 @@ describe('notifier domain schema', () => {
  * connection across packages, so a rename on either side must break a test
  * instead of breaking silently.
  */
-import { DOMAIN_KEY_MAP, splitLegacyPatch, readFlat, writeLegacyPatch } from '../../src/host/store/index.js'
+import { DOMAIN_KEY_MAP, splitLegacyPatch, readFlat, writeLegacyPatch } from '../../src/host/store/legacy.js'
 describe('telegramReviewNotifications alias (regression pin)', () => {
   it('DOMAIN_KEY_MAP pins the flat-key alias', () => {
     expect(DOMAIN_KEY_MAP.telegramReviewNotifications).toBe('notifier.policy.reviewNotifications')

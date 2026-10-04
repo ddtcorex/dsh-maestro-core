@@ -1,4 +1,5 @@
-import { load, readFlat } from './store/index.js'
+import { load } from './store/index.js'
+import { readFlat } from './store/legacy.js'
 
 export async function readSupervisorConfig(): Promise<Record<string, any>> {
   try {

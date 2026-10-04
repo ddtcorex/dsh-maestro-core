@@ -9,6 +9,7 @@ import { DEFAULT_CONFIG, loadGuardConfig, loadGuardConfigWithMigration, type Gua
 import { retireLegacyStore } from './migrate.js'
 import { apply as applyFullScan } from './full-scan-tool.js'
 import { applyStatusTools } from './status-tool.js'
+import './validators.js'
 import type { GuardToolExecution, GuardPreToolDecision } from './augment.js'
 
 export interface GuardDeps {

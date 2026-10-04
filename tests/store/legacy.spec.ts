@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resetForTests } from '../../src/host/store/index.js'
 import {
   DOMAIN_KEY_MAP, RUNTIME_KEYS,
-  splitLegacyPatch, writeLegacyPatch, readFlat, resetForTests,
-} from '../../src/host/store/index.js'
+  splitLegacyPatch, writeLegacyPatch, readFlat,
+} from '../../src/host/store/legacy.js'
 
 let home: string
 beforeEach(async () => { home = await mkdtemp(join(tmpdir(), 'cfgadap-')); resetForTests() })
@@ -67,5 +68,14 @@ describe('splitLegacyPatch / writeLegacyPatch / readFlat round-trip', () => {
     // in `tunnel`, not merely in the flat view.
     const raw = JSON.parse(await readFile(join(home, 'dsh-maestro-config', 'settings.json'), 'utf8'))
     expect(raw.domains.tunnel.pinSessionTtlHours).toBe(12)
+  })
+})
+
+describe('legacy adapter location', () => {
+  it('is exported from store/legacy', () => {
+    expect(typeof readFlat).toBe('function')
+    expect(typeof splitLegacyPatch).toBe('function')
+    expect(Object.keys(DOMAIN_KEY_MAP).length).toBeGreaterThan(0)
+    expect(RUNTIME_KEYS).toContain('lastTunnelRunning')
   })
 })
