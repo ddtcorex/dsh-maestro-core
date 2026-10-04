@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SyncService } from '../src/host/sync-service.js';
-import { SshRsyncTransport } from '../src/host/transport.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import { SshRsyncTransport } from '../../src/host/sync/transport.js';
 
 async function bootPlugin(extra: any = {}) {
   const register = vi.fn(() => () => {});
@@ -21,7 +21,7 @@ async function bootPlugin(extra: any = {}) {
     }
   });
   const ctx: any = { effect, tools: { register }, connection: { rpc: { handle } }, on: vi.fn(() => () => {}), ...extra };
-  const mod: any = await import('../src/host/index.js');
+  const mod: any = await import('../../src/host/sync/index.js');
   const plugin: any = mod.default ?? mod;
   await plugin.apply(ctx);
   return { register, handle, rpcHandler, plugin, mod };
@@ -273,7 +273,7 @@ describe('host', () => {
       const good = await rpcHandler('saveR2Config', { provider: 'r2', accountId: '', endpoint: '', region: 'auto', bucket: 'maestro-backup', prefix: 'v1/hosts/t' });
       expect(good.ok).toBe(true);
       expect(good.value.r2).toMatchObject({ provider: 'r2', bucket: 'maestro-backup', prefix: 'v1/hosts/t/' });
-      const { load } = await import('@ddtcorex/dsh-maestro-config-lib');
+      const { load } = await import('../../src/host/store/index.js');
       const doc: any = await load({ dshHome: process.env.DSH_HOME });
       expect(doc.domains.sync.r2).toMatchObject({ bucket: 'maestro-backup', prefix: 'v1/hosts/t/' });
       expect(JSON.stringify(doc.domains.sync.r2)).not.toContain('secret');

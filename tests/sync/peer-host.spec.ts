@@ -9,9 +9,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resetForTests } from '@ddtcorex/dsh-maestro-config-lib';
-import { clearPeerHost, peerHostPath, readPeerHost, writePeerHost } from '../src/host/peer-host.js';
-import { loadSyncConfig, resolveRemoteHost } from '../src/host/config.js';
+import { resetForTests } from '../../src/host/store/index.js';
+import { clearPeerHost, peerHostPath, readPeerHost, writePeerHost } from '../../src/host/sync/peer-host.js';
+import { loadSyncConfig, resolveRemoteHost } from '../../src/host/sync/config.js';
 
 let home: string;
 

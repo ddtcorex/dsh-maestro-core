@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import * as React from 'react';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
-import { SyncPanel } from '../src/client/index.js';
+import { SyncPanel } from '../../src/client/sync/index.js';
 
 const PREVIEW_ID = 'b'.repeat(32);
 const summary = { copied: 1, merged: 1, skipped: 2, conflicts: 0, added: 1 };

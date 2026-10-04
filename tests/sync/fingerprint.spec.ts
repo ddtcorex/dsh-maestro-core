@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint, type FpEntry } from '../src/host/fingerprint.js';
+import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint, type FpEntry } from '../../src/host/sync/fingerprint.js';
 
 let dir: string;
 beforeEach(() => {

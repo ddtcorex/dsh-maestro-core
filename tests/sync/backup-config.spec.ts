@@ -1,6 +1,6 @@
 // tests/backup-config.spec.ts — backup target config + secret resolution (redacted).
 import { describe, it, expect } from 'vitest';
-import { describeSecretSource, resolveBackupTarget, validateR2ConfigInput, type BackupSecrets } from '../src/host/backup-config.js';
+import { describeSecretSource, resolveBackupTarget, validateR2ConfigInput, type BackupSecrets } from '../../src/host/sync/backup-config.js';
 
 describe('backup config', () => {
   it('describeSecretSource never leaks values: env|file|none', () => {

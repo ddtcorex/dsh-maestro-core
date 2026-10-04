@@ -4,6 +4,7 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "strict": true,
+    "jsx": "react-jsx",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "declaration": true,
@@ -14,6 +15,6 @@
     "declarationMap": true,
     "noEmitOnError": true
   },
-  "include": ["src/client/**/*.ts"],
+  "include": ["src/client/**/*.ts", "src/client/**/*.tsx"],
   "exclude": ["lib", ".client-build", "node_modules"]
 }

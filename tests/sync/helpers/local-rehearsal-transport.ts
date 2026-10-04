@@ -12,11 +12,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import type { SyncTransport } from '../../src/host/transport.js';
-import type { RemoteTarget } from '../../src/host/sync-types.js';
-import type { RemoteManifestEntry } from '../../src/host/remote-manifest.js';
-import { remoteAgentSource, REMOTE_AGENT_REL } from '../../src/host/remote-agent.js';
-import { normalizeEligiblePath } from '../../src/host/validation.js';
+import type { SyncTransport } from '../../../src/host/sync/transport.js';
+import type { RemoteTarget } from '../../../src/host/sync/sync-types.js';
+import type { RemoteManifestEntry } from '../../../src/host/sync/remote-manifest.js';
+import { remoteAgentSource, REMOTE_AGENT_REL } from '../../../src/host/sync/remote-agent.js';
+import { normalizeEligiblePath } from '../../../src/host/sync/validation.js';
 
 export class LocalRehearsalTransport implements SyncTransport {
   constructor(private readonly remoteRoot: string) {}

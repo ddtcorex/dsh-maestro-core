@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { startFakeS3 } from './helpers/fake-s3.js';
-import { S3ObjectStore, type S3Config } from '../src/host/s3-object-store.js';
+import { S3ObjectStore, type S3Config } from '../../src/host/sync/s3-object-store.js';
 
 const handles: Awaited<ReturnType<typeof startFakeS3>>[] = [];
 afterEach(async () => {

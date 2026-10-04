@@ -1,7 +1,7 @@
 // tests/sigv4.spec.ts — pins SigV4 determinism against the AWS documentation
 // GET-object example (exact signature from the official docs).
 import { describe, it, expect } from 'vitest';
-import { signRequest } from '../src/host/sigv4.js';
+import { signRequest } from '../../src/host/sync/sigv4.js';
 
 describe('sigv4', () => {
   it('reproduces the AWS docs GET-object example signature', () => {

@@ -1,4 +1,4 @@
-import { load } from '@ddtcorex/dsh-maestro-config-lib';
+import { load } from '../store/index.js';
 import { validateRemoteTarget } from './validation.js';
 import { readPeerHost } from './peer-host.js';
 import type { RemoteTarget, SyncDirection, SyncRequest } from './sync-types.js';

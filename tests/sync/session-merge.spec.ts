@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { constants, zstdCompress, zstdDecompress } from 'node:zlib';
 import { promisify } from 'node:util';
 import { describe, it, expect } from 'vitest';
-import { mergeZstdFiles, mergeZstdLines } from '../src/host/session-merge.js';
+import { mergeZstdFiles, mergeZstdLines } from '../../src/host/sync/session-merge.js';
 
 const compress = promisify(zstdCompress);
 const decompress = promisify(zstdDecompress);

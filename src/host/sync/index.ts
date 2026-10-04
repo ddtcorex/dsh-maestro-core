@@ -12,7 +12,7 @@ import { defaultDshHome, readPeerHost, writePeerHost } from './peer-host.js';
 import { BackupService } from './backup-service.js';
 import { S3ObjectStore } from './s3-object-store.js';
 import { resolveBackupTarget, validateR2ConfigInput, type NormalizedR2Config } from './backup-config.js';
-import { load, set as saveDomain } from '@ddtcorex/dsh-maestro-config-lib';
+import { load, set as saveDomain } from '../store/index.js';
 import { validateHost } from './validation.js';
 import type { PreviewJobState, RemoteTarget } from './sync-types.js';
 import { runBidirectionalApply, runBidirectionalPreview } from './bidirectional.js';

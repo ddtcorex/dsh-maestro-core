@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { SyncService } from '../src/host/sync-service.js';
-import { clearPreviews } from '../src/host/sync-plan.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import { clearPreviews } from '../../src/host/sync/sync-plan.js';
 import { createFakeRemote, makeTempRoots } from './helpers/fake-transport.js';
 
 const MD = 'dsh-maestro-memory/daily/2026-08-29.md';

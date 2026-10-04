@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 // the same 16px on iOS. Android and desktop never carry the marker, so the compact
 // scale they were designed with is untouched.
 const source = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../src/client/index.tsx'),
+  resolve(dirname(fileURLToPath(import.meta.url)), '../../src/client/sync/index.tsx'),
   'utf8',
 )
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeDelimited, parseEntries, serializeEntries } from '../src/host/merge.js';
+import { mergeDelimited, parseEntries, serializeEntries } from '../../src/host/sync/merge.js';
 
 describe('mergeDelimited', () => {
   it('unions § entries, dedup by stripId', () => {

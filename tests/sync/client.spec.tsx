@@ -9,7 +9,7 @@ import '@testing-library/jest-dom/vitest';
 import * as React from 'react';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { SyncPanel } from '../src/client/index.js';
+import { SyncPanel } from '../../src/client/sync/index.js';
 
 const PREVIEW_ID = 'a'.repeat(32);
 

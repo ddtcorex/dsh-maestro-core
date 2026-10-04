@@ -4,11 +4,11 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const outputPath = resolve(root, 'lib/client.js')
 
 const result = await build({
-  entryPoints: [resolve(root, 'src/client/index.tsx')],
+  entryPoints: [resolve(root, 'src/client/sync/index.tsx')],
   bundle: true,
   format: 'cjs',
   platform: 'browser',

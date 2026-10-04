@@ -10,8 +10,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { SyncService } from '../src/host/sync-service.js';
-import { clearPreviews } from '../src/host/sync-plan.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import { clearPreviews } from '../../src/host/sync/sync-plan.js';
 import { LocalRehearsalTransport } from './helpers/local-rehearsal-transport.js';
 import { makeSessionBuffer, sessionHeader } from './helpers/zstd.js';
 
@@ -99,7 +99,7 @@ describe('hermetic two-root rehearsal', () => {
       // session is byte-valid with the standalone header frame preserved
       const mergedSession = fs.readFileSync(path.join(localRoot, SESSION));
       expect(mergedSession.readUInt32LE(0)).toBe(0xfd2fb528);
-      const { parseSessionIdentity } = await import('../src/host/session-plan.js');
+      const { parseSessionIdentity } = await import('../../src/host/sync/session-plan.js');
       expect(parseSessionIdentity(mergedSession).sessionId).toBe('sync-test');
 
       // a second pull preview is empty (converged)

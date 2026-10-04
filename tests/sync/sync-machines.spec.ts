@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { checkMachines, readLocalMachineId, readRemoteMachineId } from '../src/host/machine-id.js';
+import { checkMachines, readLocalMachineId, readRemoteMachineId } from '../../src/host/sync/machine-id.js';
 
 describe('checkMachines', () => {
   it('pull requires from === remoteId', () => {

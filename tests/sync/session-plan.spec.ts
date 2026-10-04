@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { constants, zstdCompressSync } from 'node:zlib';
-import { parseSessionIdentity, isSameSession, mergeSessionBuffers } from '../src/host/session-plan.js';
+import { parseSessionIdentity, isSameSession, mergeSessionBuffers } from '../../src/host/sync/session-plan.js';
 
 function makeSessionBuffer(header: string, events: string[]): Buffer {
   const opts = { params: { [constants.ZSTD_c_checksumFlag]: 1 } } as any;

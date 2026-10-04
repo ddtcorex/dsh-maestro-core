@@ -17,7 +17,7 @@ const TOKEN = process.env.DSH_WEB_TOKEN || 'L3L3mRdW6jqHK_RUCa20XSGLK6Z_YeHCgHUP
 const TOKEN_URL = `http://127.0.0.1:3080/?token=${TOKEN}`
 const SESSION_ID = process.env.DSH_SESSION_ID || 'session-5674e8fd-f84a-4437-b648-b660fe59dbc9'
 const CHROME = '/opt/google/chrome/chrome'
-const SCREENSHOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'screenshots')
+const SCREENSHOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'screenshots')
 
 function allocPort() {
   return new Promise((resolve) => {

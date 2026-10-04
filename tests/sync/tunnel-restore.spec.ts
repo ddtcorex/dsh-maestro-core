@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { restoreLocalTunnel, restoreRemoteTunnel } from '../src/host/tunnel-restore.js';
+import { restoreLocalTunnel, restoreRemoteTunnel } from '../../src/host/sync/tunnel-restore.js';
 
 // The shared store moved to <dsh>/dsh-maestro-config/settings.json (config-lib,
 // which honors DSH_HOME). The restore must target the moved path — never the

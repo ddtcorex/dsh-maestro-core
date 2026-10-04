@@ -8,8 +8,8 @@
  * so the package could not be published at all).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { runCli } from '../src/host/cli.js';
-import { isMachineId, peerMachineId } from '../src/host/machine-id.js';
+import { runCli } from '../../src/host/sync/cli.js';
+import { isMachineId, peerMachineId } from '../../src/host/sync/machine-id.js';
 
 function capture() {
   const out: string[] = [];

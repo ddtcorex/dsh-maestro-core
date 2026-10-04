@@ -122,7 +122,7 @@ export async function restoreLocalTunnel(opts?: { dshHome?: string; profileName?
 
   try {
     try {
-      const cfgLib: any = await import('@ddtcorex/dsh-maestro-config-lib');
+      const cfgLib: any = await import('../store/index.js');
       if (typeof cfgLib.set === 'function') {
         await cfgLib.set('tunnel', tunnel);
         return { ok: true, profile };

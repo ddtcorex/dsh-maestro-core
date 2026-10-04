@@ -29,7 +29,7 @@ function eligibleCounts() {
 const args = process.argv.slice(2);
 const direction = args.includes('--push') ? 'push' : 'pull';
 const rounds = Number(args[args.indexOf('--rounds') + 1] || 3);
-const cli = path.resolve('lib/cli.js');
+const cli = path.resolve('lib/sync/cli.js');
 const { md, zstd } = eligibleCounts();
 const times = [];
 for (let i = 0; i < rounds; i++) {

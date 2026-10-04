@@ -9,8 +9,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { sha256 } from './helpers/fake-transport.js';
-import { remoteAgentSource, verifyRemoteAgentSource } from '../src/host/remote-agent.js';
-import { SshRsyncTransport } from '../src/host/transport.js';
+import { remoteAgentSource, verifyRemoteAgentSource } from '../../src/host/sync/remote-agent.js';
+import { SshRsyncTransport } from '../../src/host/sync/transport.js';
 
 interface RemoteFixture {
   root: string;

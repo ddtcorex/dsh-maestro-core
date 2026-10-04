@@ -2,7 +2,7 @@
 // tests/use-backup.spec.tsx — R2-tab controller (backup/restore/gc flows).
 import { describe, it, expect } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useBackupTarget } from '../src/client/use-backup.js';
+import { useBackupTarget } from '../../src/client/sync/use-backup.js';
 
 function makeCtx(handler: (method: string, payload: any) => Promise<any>) {
   return { connection: { rpc: { call: async (_ch: string, method: string, payload: any) => handler(method, payload) } } };

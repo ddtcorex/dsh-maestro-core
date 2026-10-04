@@ -4,8 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { startFakeS3 } from './helpers/fake-s3.js';
-import { S3ObjectStore } from '../src/host/s3-object-store.js';
-import { BackupService } from '../src/host/backup-service.js';
+import { S3ObjectStore } from '../../src/host/sync/s3-object-store.js';
+import { BackupService } from '../../src/host/sync/backup-service.js';
 
 const handles: Awaited<ReturnType<typeof startFakeS3>>[] = [];
 afterEach(async () => {

@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { NodeProcessRunner } from '../src/host/process-runner.js';
+import { NodeProcessRunner } from '../../src/host/sync/process-runner.js';
 
 const itPosix = process.platform === 'win32' ? it.skip : it;
 

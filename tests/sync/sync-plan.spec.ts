@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildPlan, buildPreview, clearPreviews, revisionFrom } from '../src/host/sync-plan.js';
-import { SyncService } from '../src/host/sync-service.js';
-import type { FileSnapshot } from '../src/host/sync-types.js';
+import { buildPlan, buildPreview, clearPreviews, revisionFrom } from '../../src/host/sync/sync-plan.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import type { FileSnapshot } from '../../src/host/sync/sync-types.js';
 import { createFakeRemote } from './helpers/fake-transport.js';
 import { makeSessionBuffer } from './helpers/zstd.js';
 import { constants, zstdCompressSync } from 'node:zlib';

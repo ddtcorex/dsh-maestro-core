@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashBuffer, snapshotFile, kindForPath, collectSnapshots, snapshotFromMap } from '../src/host/snapshot.js';
+import { hashBuffer, snapshotFile, kindForPath, collectSnapshots, snapshotFromMap } from '../../src/host/sync/snapshot.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';

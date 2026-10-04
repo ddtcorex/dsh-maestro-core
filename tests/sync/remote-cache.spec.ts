@@ -8,8 +8,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { parseFpCache, buildWarmCacheScript, REMOTE_CACHE_REL } from '../src/host/remote-cache.js';
-import { buildRemoteManifestScript, parseRemoteManifest } from '../src/host/remote-manifest.js';
+import { parseFpCache, buildWarmCacheScript, REMOTE_CACHE_REL } from '../../src/host/sync/remote-cache.js';
+import { buildRemoteManifestScript, parseRemoteManifest } from '../../src/host/sync/remote-manifest.js';
 
 describe('remote fingerprint cache', () => {
   it('parses TSV fp.tsv entries (rel, ino, size, mtimeNs, ctimeNs, sha256)', () => {

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { SyncService } from '../src/host/sync-service.js';
-import { clearPreviews } from '../src/host/sync-plan.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import { clearPreviews } from '../../src/host/sync/sync-plan.js';
 import { createFakeRemote, makeTempRoots } from './helpers/fake-transport.js';
 
 const MD = 'dsh-maestro-memory/daily/2026-08-29.md';
@@ -68,7 +68,7 @@ describe('count-only session preview', () => {
       expect(ticks.some((t) => t.startsWith('hashing:'))).toBe(true);
       expect(ticks.some((t) => t.includes('session.jsonl.zstd'))).toBe(true);
       // preview persisted for the apply step (same as the full preview path)
-      const stored = await import('../src/host/sync-plan.js');
+      const stored = await import('../../src/host/sync/sync-plan.js');
       expect(stored.getPreview(preview.previewId, svc['previewDir'])).toBeTruthy();
     } finally {
       cleanup();

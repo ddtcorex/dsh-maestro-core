@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateRemoteTarget, normalizeEligiblePath, HOST_RE, ABSOLUTE_RE, ELIGIBLE_RE } from '../src/host/validation.js';
+import { validateRemoteTarget, normalizeEligiblePath, HOST_RE, ABSOLUTE_RE, ELIGIBLE_RE } from '../../src/host/sync/validation.js';
 
 describe('validation', () => {
   describe('HOST regex', () => {

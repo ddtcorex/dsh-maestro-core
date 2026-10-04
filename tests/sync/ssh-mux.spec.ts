@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { openSshMux } from '../src/host/ssh-mux.js';
+import { openSshMux } from '../../src/host/sync/ssh-mux.js';
 
 afterEach(() => {});
 

@@ -9,8 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { SyncService } from '../src/host/sync-service.js';
-import { clearPreviews } from '../src/host/sync-plan.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import { clearPreviews } from '../../src/host/sync/sync-plan.js';
 import { createFakeRemote, sha256, makeTempRoots } from './helpers/fake-transport.js';
 import { makeSessionBuffer, sessionHeader, ZSTD_MAGIC } from './helpers/zstd.js';
 
@@ -222,7 +222,7 @@ describe('apply', () => {
       const out = fs.readFileSync(localPath);
       expect(out.readUInt32LE(0)).toBe(ZSTD_MAGIC);
       // merged artifact shares the session identity and stays a valid buffer artifact
-      const { parseSessionIdentity } = await import('../src/host/session-plan.js');
+      const { parseSessionIdentity } = await import('../../src/host/sync/session-plan.js');
       expect(parseSessionIdentity(out).sessionId).toBe('sync-test');
       // remote source is byte-identical after apply
       expect(fake.remote.get(SESSION)!.equals(remoteBuf)).toBe(true);

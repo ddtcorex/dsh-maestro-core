@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
-import { hashFiles } from '../src/host/hashing.js';
+import { hashFiles } from '../../src/host/sync/hashing.js';
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 

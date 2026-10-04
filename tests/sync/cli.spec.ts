@@ -6,7 +6,7 @@
  * - --strategy=override requires a separate --ack-override acknowledgement
  */
 import { describe, it, expect, vi } from 'vitest';
-import { runCli } from '../src/host/cli.js';
+import { runCli } from '../../src/host/sync/cli.js';
 
 function capture() {
   const out: string[] = [];

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SshRsyncTransport } from '../src/host/transport.js';
-import type { ProcessRunner } from '../src/host/process-runner.js';
+import { SshRsyncTransport } from '../../src/host/sync/transport.js';
+import type { ProcessRunner } from '../../src/host/sync/process-runner.js';
 
 function makeRunner(overrides: Partial<Record<string, any>> = {}): ProcessRunner {
   const mock = {

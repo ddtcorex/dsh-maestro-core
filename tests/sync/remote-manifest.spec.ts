@@ -1,6 +1,6 @@
 // tests/remote-manifest.spec.ts
 import { describe, it, expect } from 'vitest';
-import { buildRemoteManifestScript, parseRemoteManifest } from '../src/host/remote-manifest.js';
+import { buildRemoteManifestScript, parseRemoteManifest } from '../../src/host/sync/remote-manifest.js';
 
 describe('remote manifest', () => {
   it('parses NUL-framed sha<TAB>size<TAB>mtime<TAB>rel entries', () => {

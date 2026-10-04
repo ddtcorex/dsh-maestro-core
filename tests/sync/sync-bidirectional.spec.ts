@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { SyncService } from '../src/host/sync-service.js';
-import { clearPreviews } from '../src/host/sync-plan.js';
+import { SyncService } from '../../src/host/sync/sync-service.js';
+import { clearPreviews } from '../../src/host/sync/sync-plan.js';
 import { createFakeRemote, makeTempRoots } from './helpers/fake-transport.js';
 import { makeSessionBuffer, sessionHeader } from './helpers/zstd.js';
 
@@ -57,7 +57,7 @@ describe('bidirectional orchestration', () => {
   }
 
   it('apply runs push first, then pull, then verifies convergence', async () => {
-    const { runBidirectionalApply } = await import('../src/host/bidirectional.js');
+    const { runBidirectionalApply } = await import('../../src/host/sync/bidirectional.js');
     const { svc, calls } = stubService({ pushOk: true });
     const r = await runBidirectionalApply(svc, { previewId: 'pv', confirm: true as const, scope: 'memory' });
     expect(calls).toEqual(['apply:push', 'preview:pull', 'apply:pull', 'preview:pull']);
@@ -68,7 +68,7 @@ describe('bidirectional orchestration', () => {
   });
 
   it('push failure skips pull entirely', async () => {
-    const { runBidirectionalApply } = await import('../src/host/bidirectional.js');
+    const { runBidirectionalApply } = await import('../../src/host/sync/bidirectional.js');
     const { svc, calls } = stubService({ pushOk: false });
     const r = await runBidirectionalApply(svc, { previewId: 'pv', confirm: true as const, scope: 'memory' });
     expect(r.ok).toBe(false);
@@ -78,14 +78,14 @@ describe('bidirectional orchestration', () => {
   });
 
   it('apply without confirm:true throws before any write', async () => {
-    const { runBidirectionalApply } = await import('../src/host/bidirectional.js');
+    const { runBidirectionalApply } = await import('../../src/host/sync/bidirectional.js');
     const { svc, calls } = stubService({ pushOk: true });
     await expect(runBidirectionalApply(svc, { previewId: 'pv', confirm: false as any, scope: 'memory' })).rejects.toMatchObject({ code: 'CONFIRM_REQUIRED' });
     expect(calls).toEqual([]);
   });
 
   it('preview returns exact push plus projected pull plans', async () => {
-    const { runBidirectionalPreview } = await import('../src/host/bidirectional.js');
+    const { runBidirectionalPreview } = await import('../../src/host/sync/bidirectional.js');
     const { svc, calls } = stubService({ pushOk: true });
     const p = await runBidirectionalPreview(svc, { scope: 'memory' });
     expect(calls).toEqual(['preview:push', 'preview:pull']);

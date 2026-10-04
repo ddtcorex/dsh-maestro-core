@@ -45,7 +45,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && node scripts/build-client.mjs",
     "verify": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
-    "test": "vitest run --testTimeout=10000",
+    "test": "NODE_ENV=test vitest run --testTimeout=10000",
     "test:watch": "vitest"
   },
   "peerDependencies": {
@@ -58,13 +58,21 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "~4.0.4",
     "@deepseek-ai/dsh-client-connection": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
     "@types/node": "^26.3.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
     "esbuild": "^0.25.12",
+    "jsdom": "^30.0.1",
     "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
