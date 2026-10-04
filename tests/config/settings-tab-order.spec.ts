@@ -1,130 +1,127 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve, sep } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// The Maestro Settings tabs live in four separate npm packages, each
-// registering its own `settings.section`. The shell orders that slot by the
-// numeric `order` alone, so two tabs sharing a number have NO defined relative
-// order — which is exactly how the Maestro tab and upstream's archived-sessions
-// page (order 25) used to swap places between loads. Nothing else in the suite
-// can see this: each package only ever inspects its own bundle, so a collision
-// introduced in a sibling package stays invisible.
+// The Maestro Settings tabs are registered by several npm packages, each with
+// its own `settings.section`. The shell orders that slot by the numeric `order`
+// alone, so two tabs sharing a number have NO defined relative order, which is
+// how the Maestro tab and upstream's archived-sessions page (order 25) used to
+// swap places between loads. Each package only inspects its own bundle, so a
+// collision introduced in a sibling stays invisible to its own tests.
 //
-// The fix keeps the block above 25 and below 100, with four distinct numbers.
-// This spec reads the sibling sources directly — they are separate repos on
-// disk, not dependencies of this package.
+// This spec therefore asserts invariants over whichever sections can be read:
+//   - core's own sections (`maestro`, `maestro-sync`) are ALWAYS read from this
+//     repository;
+//   - sibling plugin sources are read from MAESTRO_SIBLINGS_DIR (default: the
+//     parent of this repository, where CI clones siblings and where the live
+//     workspace keeps them). A sibling that is absent is skipped explicitly.
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const packagesDir = resolve(packageRoot, '..')
-const readClientEntry = (pkg: string) => readFileSync(resolve(packagesDir, pkg, 'src/client/index.tsx'), 'utf8')
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const siblingsDir = process.env.MAESTRO_SIBLINGS_DIR ? resolve(process.env.MAESTRO_SIBLINGS_DIR) : resolve(repoRoot, '..')
 
-// CI and the pre-push rehearse sandbox check out ONLY the siblings declared in
-// ci.yml (`sibling-repos`) — the other Maestro packages are absent there, so
-// this file's cross-package read has nothing to read. Skip the whole block
-// instead of failing: the invariant is checked in any complete workspace
-// checkout (local dev), which is where a same-batch order change is made.
-const siblingEntries = [
-  'dsh-maestro-jobs',
-  'dsh-maestro-sync',
-  'dsh-maestro-gateway',
-].map((pkg) => resolve(packagesDir, pkg, 'src/client/index.tsx'))
-const sutunamEntry = resolve(packagesDir, 'dsh-sutunam-kit', 'src/client/index.tsx')
-const siblingsPresent = [...siblingEntries, sutunamEntry].every((f) => existsSync(f))
-
-/** The number a tab registers, as written in its own source. */
-const orderOf = (source: string, id: string): number => {
-  // Match the registration block for this exact id, then its order field.
+/** The number a tab registers, as written in its own source; undefined when the source lacks the id. */
+const orderOf = (source: string, id: string): number | undefined => {
   const block = new RegExp(`id:\\s*'${id}'[\\s\\S]{0,400}?order:\\s*([A-Za-z_$][\\w$]*|\\d+)`).exec(source)
-  expect(block, `no settings.section registration found for id "${id}"`).not.toBeNull()
-  const raw = block![1]
+  if (!block) return undefined
+  const raw = block[1]
   if (/^\d+$/.test(raw)) return Number(raw)
-  // A named constant: resolve its literal from the same file.
   const constant = new RegExp(`const\\s+${raw}\\s*=\\s*(\\d+)`).exec(source)
   expect(constant, `order constant "${raw}" has no numeric literal in this file`).not.toBeNull()
   return Number(constant![1])
 }
 
-describe.skipIf(!siblingsPresent)('Maestro settings tab ordering', () => {
-  // NOTE: the reads below are lazy (inside a loader called per test), not at
-  // describe-body time. Vitest still executes a skipped suite's body during
-  // collection, so an eager read would throw ENOENT in CI/rehearse instead of
-  // skipping — exactly the failure this skip exists to avoid.
-  const loadOrders = (): Record<'maestro' | 'maestro-jobs' | 'maestro-sync' | 'maestro-gateway', number> => {
-    const entries = {
-      maestro: readClientEntry('dsh-maestro-config'),
-      'maestro-jobs': readClientEntry('dsh-maestro-jobs'),
-      'maestro-sync': readClientEntry('dsh-maestro-sync'),
-      'maestro-gateway': readClientEntry('dsh-maestro-gateway'),
-    }
-    return Object.fromEntries(
-      Object.entries(entries).map(([id, source]) => [id, orderOf(source, id)]),
-    ) as Record<'maestro' | 'maestro-jobs' | 'maestro-sync' | 'maestro-gateway', number>
+interface Found {
+  id: string
+  order: number
+}
+
+const CORE: Array<{ id: string; file: string }> = [
+  { id: 'maestro', file: resolve(repoRoot, 'src/client/config/index.tsx') },
+  { id: 'maestro-sync', file: resolve(repoRoot, 'src/client/sync/index.tsx') },
+]
+
+const SIBLINGS: Array<{ pkg: string; ids: string[] }> = [
+  { pkg: 'dsh-maestro-jobs', ids: ['maestro-jobs'] },
+  { pkg: 'dsh-maestro-gateway', ids: ['maestro-gateway'] },
+  { pkg: 'dsh-maestro-remote', ids: ['maestro-remote'] },
+  { pkg: 'dsh-maestro-review', ids: ['maestro-review'] },
+  { pkg: 'dsh-maestro-notifier', ids: ['maestro-notifier'] },
+]
+const SUTUNAM_PKG = 'dsh-sutunam-kit'
+
+const EXPECTED: Record<string, number> = {
+  maestro: 26,
+  'maestro-jobs': 27,
+  'maestro-sync': 28,
+  'maestro-gateway': 29,
+  'maestro-remote': 31,
+  'maestro-review': 32,
+  'maestro-notifier': 33,
+}
+
+const siblingEntry = (pkg: string) => resolve(siblingsDir, pkg, 'src/client/index.tsx')
+
+// Lazy loader: nothing is read at describe-body time.
+const load = (): { maestro: Found[]; sutunamOrder: number | undefined } => {
+  const maestro: Found[] = []
+  for (const { id, file } of CORE) {
+    const order = orderOf(readFileSync(file, 'utf8'), id)
+    expect(order, `core section "${id}" must be declared in ${file}`).toBeDefined()
+    maestro.push({ id, order: order! })
   }
+  for (const { pkg, ids } of SIBLINGS) {
+    const file = siblingEntry(pkg)
+    if (!existsSync(file)) {
+      console.info(`[settings-tab-order] skipped sibling ${pkg}: ${file} not found (MAESTRO_SIBLINGS_DIR=${siblingsDir})`)
+      continue
+    }
+    const source = readFileSync(file, 'utf8')
+    for (const id of ids) {
+      const order = orderOf(source, id)
+      if (order === undefined) {
+        console.info(`[settings-tab-order] skipped ${id}: ${pkg} does not declare it yet`)
+        continue
+      }
+      maestro.push({ id, order })
+    }
+  }
+  let sutunamOrder: number | undefined
+  const kit = siblingEntry(SUTUNAM_PKG)
+  if (existsSync(kit)) sutunamOrder = orderOf(readFileSync(kit, 'utf8'), 'sutunam-kit')
+  else console.info(`[settings-tab-order] skipped ${SUTUNAM_PKG}: ${kit} not found`)
+  return { maestro, sutunamOrder }
+}
+
+describe('Maestro settings tab ordering', () => {
+  it('declares core sections maestro=26 and maestro-sync=28 from this repository', () => {
+    const { maestro } = load()
+    expect(maestro.find((s) => s.id === 'maestro')).toMatchObject({ id: 'maestro', order: 26 })
+    expect(maestro.find((s) => s.id === 'maestro-sync')).toMatchObject({ id: 'maestro-sync', order: 28 })
+  })
 
   it('gives every Maestro tab a distinct order', () => {
-    // A duplicate is the defect itself, not a cosmetic detail: equal values
-    // leave the rendered sequence up to the sort implementation.
-    const values = Object.values(loadOrders())
-    expect(new Set(values).size).toBe(values.length)
+    const { maestro, sutunamOrder } = load()
+    const orders = [...maestro.map((s) => s.order), ...(sutunamOrder === undefined ? [] : [sutunamOrder])]
+    expect(new Set(orders).size).toBe(orders.length)
   })
 
-  it('starts the block above the archived-sessions page', () => {
-    // 25 belongs to upstream's ui-settings-unarchive-sessions. Staying strictly
-    // above it is what puts every Maestro tab after "Archived sessions".
-    for (const [id, order] of Object.entries(loadOrders())) {
-      expect(order, `${id} must sort after archived-sessions (order 25)`).toBeGreaterThan(25)
+  it('starts the block above the archived-sessions page (order 25)', () => {
+    for (const s of load().maestro) expect(s.order, `${s.id} must sort after archived-sessions`).toBeGreaterThan(25)
+  })
+
+  it('keeps Sutunam Kit behind the Maestro block and below the next upstream section', () => {
+    const { maestro, sutunamOrder } = load()
+    if (sutunamOrder !== undefined) {
+      for (const s of maestro) expect(s.order, `${s.id} must render before sutunam-kit (${sutunamOrder})`).toBeLessThan(sutunamOrder)
+      expect(sutunamOrder).toBeLessThan(100)
     }
+    for (const s of maestro) expect(s.order, `${s.id} must stay below 100`).toBeLessThan(100)
   })
 
-  it('keeps the block contiguous and ordered Maestro-first', () => {
-    // One contiguous run directly after the archived-sessions page (25), with
-    // the private Sutunam Kit tab sitting last behind it — the operator's
-    // explicit layout, so the Maestro rows never interleave with anything.
-    const sorted = Object.entries(loadOrders()).sort((a, b) => a[1] - b[1])
-    const values = sorted.map(([, order]) => order)
-    expect(values).toEqual([26, 27, 28, 29])
-    expect(sorted.map(([id]) => id)).toEqual(['maestro', 'maestro-jobs', 'maestro-sync', 'maestro-gateway'])
-  })
-
-  it('leaves Sutunam Kit last behind the whole Maestro run', () => {
-    // The Sutunam Kit tab must render after every Maestro tab and share no
-    // number with one: equal numbers leave the relative order undefined, so
-    // this pins the exclusion from the other side. Whatever either side
-    // chooses in the future, a Maestro tab may never tie or pass Sutunam.
-    const sutunam = readFileSync(sutunamEntry, 'utf8')
-    const sutunamOrder = orderOf(sutunam, 'sutunam-kit')
-    for (const [id, order] of Object.entries(loadOrders())) {
-      expect(order, `${id} must render before sutunam-kit (${sutunamOrder})`).toBeLessThan(sutunamOrder)
+  it('matches the declared target order of every owner that is present', () => {
+    for (const s of load().maestro) {
+      if (EXPECTED[s.id] !== undefined) expect(s.order, `${s.id} declared order`).toBe(EXPECTED[s.id])
     }
-  })
-
-  it('stays below the next upstream section so the block cannot drift right', () => {
-    for (const [id, order] of Object.entries(loadOrders())) {
-      expect(order, `${id} must leave room below later upstream sections`).toBeLessThan(100)
-    }
-  })
-})
-
-// Deliberately OUTSIDE the describe above. That block is `skipIf(!siblingsPresent)`,
-// so a wrong sutunam path makes every assertion above vanish while the suite still
-// reports green — the Sutunam tab-order pin would stop being enforced with nothing
-// to say so. These guards run even when the block above is skipped.
-describe('sutunam-kit location', () => {
-  // Pure path computation, no filesystem — so it holds in EVERY checkout,
-  // including CI. A regression back to a `'..'` segment fails here.
-  it('resolves under packages/, not one level above it', () => {
-    expect(sutunamEntry).toBe(resolve(packagesDir, 'dsh-sutunam-kit', 'src/client/index.tsx'))
-    expect(sutunamEntry).not.toContain(`${sep}packages${sep}..${sep}`)
-  })
-
-  // The silent-skip guard, scoped to checkouts where the plugin can legitimately
-  // be present. CI clones ONLY the siblings declared in ci.yml (`dsh-maestro-config-lib`),
-  // and this repo is private and never checked out there — so asserting existence
-  // unconditionally turned this guard into the very CI failure it was added to
-  // prevent. `siblingsPresent` is the same signal the block above uses.
-  it.skipIf(!siblingsPresent)('is present, with no leftover at the old workspace-root path', () => {
-    expect(existsSync(sutunamEntry)).toBe(true)
-    expect(existsSync(resolve(packagesDir, '..', 'dsh-sutunam-kit'))).toBe(false)
   })
 })

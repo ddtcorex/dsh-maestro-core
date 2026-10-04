@@ -12,11 +12,11 @@ describe('Task 3: Settings UI tabs', () => {
     expect(src).toContain('Guard')
   })
 
-  it('Settings has pills for Guard, Supervisor and Notifier (Blacklist merged into Guard)', () => {
+  it('Settings has pills for Guard and Supervisor only (Blacklist merged into Guard)', () => {
     const src = read('MaestroSettings.tsx')
     expect(src).toContain('Guard')
     expect(src).toContain('Supervisor')
-    expect(src).toContain('Notifier')
+    expect(src).not.toContain('Notifier')
     // The standalone Blacklist pill is gone; its editor lives as a section
     // inside the Guard tab.
     expect(src).not.toMatch(/id: 'blacklist'/)
@@ -69,11 +69,6 @@ describe('Task 3: Settings UI tabs', () => {
     expect(src).toContain('intervalMs')
   })
 
-  it('Notifier tab has telegram fields', () => {
-    const src = read('MaestroSettings.tsx')
-    expect(src).toContain('telegram')
-  })
-
   it('host exposes guard/guardBlacklist domains via RPC get/set/unset (generic channel)', () => {
     const host = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../src/host/config/index.ts'), 'utf8')
     expect(host).toContain('/dsh-maestro-config')
@@ -86,18 +81,5 @@ describe('Task 3: Settings UI tabs', () => {
     const entry = read('index.tsx')
     expect(entry).toContain('configRpcCall')
     expect(entry).toContain('/dsh-maestro-config')
-  })
-
-  it('review section has the global Review-on-assign toggle', () => {
-    const src = read('MaestroSettings.tsx')
-    expect(src).toContain('Review on assign')
-    expect(src).toContain('autoReviewOnAssign')
-  })
-
-  it('project rows have per-project push/assign tri-state overrides', () => {
-    const src = read('MaestroSettings.tsx')
-    expect(src).toContain('rereviewOnPush')
-    expect(src).toContain('reviewOnAssign')
-    expect(src).toContain('Inherit (global)')
   })
 })

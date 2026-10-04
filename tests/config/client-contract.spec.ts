@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -23,8 +23,21 @@ describe('settings section registration contract', () => {
     expect(entry).not.toContain('Maestro Config')
   })
 
-  it('speaks the canonical granular review RPC channel', () => {
-    expect(read('api.ts')).toContain("'/dsh-maestro-review'")
+  it('speaks only the config and supervisor channels, never the review channel', () => {
+    expect(entry).toContain("'/dsh-maestro-config'")
+    expect(entry).toContain("'/dsh-maestro-supervisor-resume'")
+    expect(entry).toMatch(/inject:\s*\(\)\s*=>\s*\(\{\s*configRpcCall,\s*supervisorRpcCall\s*\}\)/)
+    expect(entry).not.toContain('dsh-maestro-review')
+    expect(entry).not.toContain('MAESTRO_RPC_CHANNEL')
+    expect(existsSync(resolve(clientDir, 'api.ts'))).toBe(false)
+  })
+
+  it('offers exactly the Guard and Supervisor tabs, Guard first', () => {
+    const live = read('MaestroSettings.tsx')
+    expect(live).toContain("useState('guard')")
+    expect(live).toContain("{ id: 'guard', label: 'Guard', icon: 'shield' }")
+    expect(live).toContain("{ id: 'supervisor', label: 'Supervisor', icon: 'cpu' }")
+    for (const gone of ['tunnel', 'gitlab', 'review', 'notifier']) expect(live).not.toContain(`{ id: '${gone}'`)
   })
 
   it('installs the settings-nav icon marker and disposes it', () => {
@@ -33,27 +46,10 @@ describe('settings section registration contract', () => {
     expect(entry).toMatch(/ctx\.effect\([\s\S]*?registerSettingsNavIcon/)
   })
 
-  it('secret inputs never render mask bullets as the controlled value', () => {
-    const live = read('MaestroSettings.tsx')
-    // Regression pin: `value: config.hasGitlabToken ? '••••••••' : ''` locks a
-    // controlled input to a constant string — keystrokes are swallowed and the
-    // first change saves bullet-contaminated text. Secrets must use an empty
-    // draft committed on blur/Enter (SecretField).
-    expect(live).not.toMatch(/value:\s*config\.has\w+\s*\?\s*'•+/)
-    expect(live).not.toMatch(/value:\s*notifierCfg\.telegram\?\.botToken/)
-    expect(live).toContain('function SecretField')
-    expect(live).toContain("placeholder: 'GitLab token', hasSaved: config.hasGitlabToken")
-    expect(live).toContain("placeholder: 'Webhook secret', hasSaved: config.hasWebhookSecret")
-    expect(live).toContain("placeholder: '123456:ABC-DEF...'")
-  })
-
   it('keeps the card visuals (alias tokens, masked secrets, sections)', () => {
     const card = read('MaestroSettings.tsx')
     expect(card).toContain('--dsw-alias-border-l2')
     expect(card).toContain('--dsw-alias-bg-layer-3')
-    expect(card).toContain("'password'")
-    expect(card).toContain('saved — type new value to replace')
-    expect(card).toContain('Projects —')
     // audio-lines glyph mask from the old bundle. The mask literal lives in
     // maestro-mark.ts — the react-free half of the workspace reference
     // implementation, re-exported by components/BrandMark.tsx; index.tsx builds
@@ -61,33 +57,6 @@ describe('settings section registration contract', () => {
     // literal only in that file.
     expect(card + entry + read('maestro-mark.ts')).toContain('data:image/svg+xml')
     expect(read('settings-nav-icon.ts')).toContain('data-maestro-settings-nav')
-  })
-
-  it('exposes the PIN session duration control wired to the settings RPC', () => {
-    const live = read('MaestroSettings.tsx')
-    expect(live).toContain('data-maestro-pin-ttl-select')
-    expect(live).toContain('data-maestro-pin-ttl-custom')
-    expect(live).toContain("saveField('pinSessionTtlHours'")
-    expect(live).toContain('PIN session duration')
-    expect(read('pin-ttl.ts')).toContain('PIN_TTL_PRESETS')
-  })
-
-  it('says so when there is no LAN listener instead of promising no-PIN access', () => {
-    const live = read('MaestroSettings.tsx')
-    expect(live).toContain('No LAN listener is configured')
-    // The "no PIN needed" copy may only be reached with a real LAN URL list.
-    expect(live).toMatch(/urls\.length === 0[\s\S]{0,400}No LAN listener is configured/)
-  })
-
-  it('renders Public access above the LAN card', () => {
-    // The public tunnel is the entry most visitors arrive through, so its card
-    // leads; the LAN card stays directly below it.
-    const live = read('MaestroSettings.tsx')
-    const publicAt = live.indexOf("}, 'Public access')")
-    const lanAt = live.indexOf("}, 'Remote access — LAN')")
-    expect(publicAt).toBeGreaterThan(-1)
-    expect(lanAt).toBeGreaterThan(-1)
-    expect(publicAt).toBeLessThan(lanAt)
   })
 })
 
@@ -125,12 +94,6 @@ describe('settings UI remediation pins', () => {
     expect(live).toContain('checked: autoResumeChecked')
     // An explicit write keeps that view in step until the next status fetch.
     expect(live).toMatch(/setSupervisorStatus\(\(prev: any\) => \(prev \? \{ \.\.\.prev, autoResumeEnabled/)
-  })
-
-  it('renders the LAN-PIN restart notice from the host requiresRestart flag', () => {
-    expect(live).toContain("saved?.requiresRestart === true")
-    expect(live).toContain('data-maestro-lan-restart-notice')
-    expect(live).toContain('Restart the tunnel')
   })
 
   it('says the blacklist list does not gate live tool calls', () => {

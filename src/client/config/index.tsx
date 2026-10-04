@@ -13,7 +13,6 @@ export const MAESTRO_SETTINGS_ORDER = 26
 
 // DSH-native redesign — reuses DSH tokens & primitive geometry maximally (see MaestroSettings.tsx).
 import { MaestroSettingsTab } from './MaestroSettings.js'
-import { MAESTRO_RPC_CHANNEL } from './api.js'
 import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-icon.js'
 import { maestroMarkMaskUri } from './components/BrandMark.js'
 
@@ -50,7 +49,7 @@ type SlotsApi = {
   inject(name: string, factory: () => unknown): void
   register(
     options: Record<string, unknown>,
-    render: (props: { rpcCall: RpcCall }) => unknown,
+    render: (props: { configRpcCall: RpcCall; supervisorRpcCall: RpcCall }) => unknown,
   ): unknown
 }
 type RpcCall = (endpoint: string, payload?: unknown, signal?: AbortSignal) => Promise<unknown>
@@ -77,15 +76,7 @@ export function apply(ctx: ClientCtx): void {
   const slots = ctx.get?.('slots') as SlotsApi | undefined
   if (slots === undefined) return
 
-  // The card speaks the granular dsh-maestro-review settings-rpc surface.
-  const rpcCall: RpcCall = (endpoint, payload, signal) => {
-    const connection = ctx.get?.('connection') as
-      | { rpc: { call(ch: string, ep: string, p?: unknown, s?: AbortSignal): Promise<unknown> } }
-      | undefined
-    if (!connection?.rpc?.call) return Promise.reject(new Error('RPC not available'))
-    return connection.rpc.call(MAESTRO_RPC_CHANNEL, endpoint, payload, signal)
-  }
-  // Generic config RPC for supervisor (independent of review — works when review not installed)
+  // Generic config RPC: guard, blacklist and supervisor documents
   const configRpcCall: RpcCall = (endpoint, payload, signal) => {
     const connection = ctx.get?.('connection') as
       | { rpc: { call(ch: string, ep: string, p?: unknown, s?: AbortSignal): Promise<unknown> } }
@@ -111,8 +102,8 @@ export function apply(ctx: ClientCtx): void {
 
   slots.inject('settings.section', () =>
     slots.register(
-      { name: 'settings.section', id: 'maestro', order: MAESTRO_SETTINGS_ORDER, label: () => 'Maestro', inject: () => ({ rpcCall, configRpcCall, supervisorRpcCall }) },
-      MaestroSettingsTab as unknown as (props: { rpcCall: RpcCall }) => unknown,
+      { name: 'settings.section', id: 'maestro', order: MAESTRO_SETTINGS_ORDER, label: () => 'Maestro', inject: () => ({ configRpcCall, supervisorRpcCall }) },
+      MaestroSettingsTab as unknown as (props: { configRpcCall: RpcCall; supervisorRpcCall: RpcCall }) => unknown,
     ),
   )
 }
