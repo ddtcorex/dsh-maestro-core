@@ -18,7 +18,7 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 
 ### Absorbed repositories
 
-`dsh-maestro-config-lib`, `dsh-maestro-config`, `dsh-maestro-guard` and `dsh-maestro-sync` were merged here with their history intact (`git log --follow <path>` reaches the original commits). Their changelogs are kept under `docs/history/<name>.md`, and each module's tests run from `tests/<name>/`. A core-side fix for a module belongs to this repository; do not reopen the absorbed repositories.
+`dsh-maestro-config-lib`, `dsh-maestro-config`, `dsh-maestro-guard` and `dsh-maestro-sync` were absorbed here as source, **not as history**: `git log --follow <path>` on an absorbed module stops at the absorbing commit, and `git merge-base --is-ancestor <old-tip> HEAD` is false, because the modules arrived as a fresh start rather than a history merge. Measured 2026-10-05. The per-repository changelogs are the surviving record and are kept under `docs/history/<name>.md`; the git history behind them stays in the original repositories, which is why they are archived rather than deleted. Each module's tests run from `tests/<name>/`. A core-side fix for a module belongs to this repository; do not reopen the absorbed repositories.
 
 ## Architecture
 
