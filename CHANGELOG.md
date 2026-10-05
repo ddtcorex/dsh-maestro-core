@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.11.0] - 2026-10-05
+
+### Security
+
+- **The `/dsh-maestro-config` channel no longer serves other plugins' secrets.**
+  `list`/`get`/`set`/`unset` read and wrote **every** domain of the shared
+  settings store, so any logged-in browser session — including one arriving
+  through the PIN-gated public tunnel — could read the GitLab token, the
+  webhook secret, the Telegram bot token and the tunnel credentials path in
+  clear text, and could write or unset another plugin's keys without that
+  plugin's validator. All four endpoints now accept only `guard`,
+  `guardBlacklist` and `supervisor`, the domains this package's Settings card
+  uses; `list` no longer reveals foreign domain names. In-process consumers of
+  `ctx.maestroConfig` keep the full service.
+
+### Fixed
+
+- **The boot resume scan fires at boot, not minutes later** (0.10.0 and earlier).
+  The window was anchored on `Date.now() - withinMs`, which drifts minutes into
+  the session, so a session interrupted right before a restart was excluded from
+  its own recovery scan. The anchor is now the process start time, and
+  `runAutoResume` takes the boundary as an injectable option so the behaviour is
+  testable rather than clock-dependent.
+- **The Maestro Settings card renders again** (0.10.0 and earlier). A refactor
+  trimmed the tab set and removed the `error` state its surviving handlers still
+  called, so the whole section threw at render time and came up empty.
+
+### Changed
+
+- **The store cache validates mtime, inode and size.** Two copies writing inside
+  one filesystem timestamp tick, or an out-of-band edit that restored the mtime,
+  served a stale document.
+- **Lock stealing is safe.** A lock carries an owner token and is released only
+  by its owner; a stale lock must be older than 30s (longer than the 5s acquire
+  timeout) and is stolen with an atomic rename that is rolled back if the moved
+  file turns out to be a different inode. The settings directory is created 0700
+  and the lock 0600.
+- **A throwing `onChange` callback can no longer fail a write** that already
+  landed, or drop a sibling listener.
+- **`fs.watch` has an `error` listener**, so a watcher failure is logged instead
+  of crashing the process.
+- **A failed store write removes its temp file** instead of leaving it behind.
+
+### Added
+
+- **`systemd/` and `scripts/` ship in the npm tarball.** The manifest's `files`
+  list excluded them, so a fresh `npm install @ddtcorex/dsh-maestro-core` could
+  not install the supervisor daemon it publishes — `scripts/install-systemd.sh`
+  was reachable only from a git checkout.
+
 ## [0.10.0] - 2026-10-05
 
 ### Changed
