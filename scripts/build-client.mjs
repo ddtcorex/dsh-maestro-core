@@ -1,85 +1,48 @@
-// Wrap the tsc-compiled CommonJS client program into the DSH browser loader
+// Bundle every client surface this package owns into the DSH browser loader
 // shape: window.__ModuleLoader__.load({ id, factory: (require) => ... }).
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, posix } from 'node:path'
+//
+// One bundle, one id, one entry point (src/client/index.tsx): the entry
+// decides which surfaces register and in what order, so the per-module build
+// scripts this replaces are gone rather than kept as three ways to produce one
+// artifact. react and the DSH platform modules stay external and resolve from
+// the host's module table at runtime.
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build } from 'esbuild'
 
-const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
-const buildDir = join(root, '.client-build')
-const outputPath = join(root, 'lib', 'client.js')
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const outputPath = resolve(root, 'lib/client.js')
+const id = '@ddtcorex/dsh-maestro-supervisor'
 
-async function collectSources(dir, { rel = '' } = {}) {
-  const sources = new Map()
-  for (const entry of (await readdir(dir, { withFileTypes: true }))) {
-    const abs = join(dir, entry.name)
-    const relPath = rel ? `${rel}/${entry.name}` : entry.name
-    if (entry.isDirectory()) {
-      for (const [k, v] of await collectSources(abs, { rel: relPath })) {
-        sources.set(k, v)
-      }
-    } else if (entry.isFile() && entry.name.endsWith('.js')) {
-      sources.set(
-        relPath,
-        (await readFile(abs, 'utf8')).replace(/\n?\/\/# sourceMappingURL=.*$/u, ''),
-      )
-    }
+const result = await build({
+  entryPoints: [resolve(root, 'src/client/index.tsx')],
+  bundle: true,
+  format: 'cjs',
+  platform: 'browser',
+  target: ['chrome100'],
+  external: ['react', 'react/jsx-runtime', '@deepseek-ai/dsh-client-ui-primitives'],
+  jsx: 'automatic',
+  write: false,
+  minify: process.env.NODE_ENV === 'production',
+  legalComments: 'none',
+})
+
+const bundled = result.outputFiles?.[0]?.text
+if (!bundled) throw new Error('esbuild did not produce a client bundle')
+
+const wrapped = `window.__ModuleLoader__.load({
+  id: '${id}',
+  factory: (require) => {
+    var module = { exports: {} };
+    var exports = module.exports;
+    var React = require("react");
+${bundled}
+    return module.exports;
   }
-  return sources
-}
-
-const sources = await collectSources(buildDir)
-
-const REQUIRE_RE = /require\("(\.[^"]+\.js)"\)/g
-const resolveChild = (parent, rel) => {
-  const joined = posix.join(posix.dirname(parent), rel)
-  const normalized = posix.normalize(joined)
-  return normalized === '.' ? '' : normalized
-}
-
-const visited = new Set()
-const order = []
-const visit = (file) => {
-  if (visited.has(file)) return
-  visited.add(file)
-  const src = sources.get(file)
-  if (!src) throw new Error(`client module not found for require: ${file}`)
-  for (const match of src.matchAll(REQUIRE_RE)) {
-    visit(resolveChild(file, match[1]))
-  }
-  order.push(file)
-}
-visit('index.js')
-
-const modules = order
-  .map((file) => {
-    const src = sources.get(file).replace(REQUIRE_RE, (m, rel) => `require("./${resolveChild(file, rel)}")`)
-    return `__modules[${JSON.stringify(file)}] = function (require, module, exports) {\n${src}\n};`
-  })
-  .join('\n')
-
-const wrapped = [
-  'window.__ModuleLoader__.load({ id: "@ddtcorex/dsh-maestro-supervisor", factory: (require) => {',
-  'var __modules = {};',
-  modules,
-  'var __cache = {};',
-  'function __localRequire(id) {',
-  '  if (id.charCodeAt(0) !== 46) return require(id);',
-  '  id = id.slice(2);',
-  '  var cached = __cache[id];',
-  '  if (cached) return cached.exports;',
-  '  var module = { exports: {} };',
-  '  __cache[id] = module;',
-  '  __modules[id](__localRequire, module, module.exports);',
-  '  return module.exports;',
-  '}',
-  'var module = { exports: {} };',
-  '__modules["index.js"](__localRequire, module, module.exports);',
-  'return module.exports; } });',
-  '',
-].join('\n')
+});
+`
 
 await mkdir(dirname(outputPath), { recursive: true })
-await writeFile(outputPath, wrapped)
-await rm(join(root, 'lib', 'client.js.map'), { force: true })
-await rm(buildDir, { recursive: true, force: true })
-console.log(`client bundle written: ${outputPath} (${order.length} modules inlined)`)
+await writeFile(outputPath, wrapped, 'utf8')
+console.log(`client bundle written: ${outputPath} (${bundled.length} bytes)`)

@@ -1,0 +1,502 @@
+import * as React from 'react'
+import { RPC_CHANNEL } from './ui.js'
+
+/**
+ * Shared Sync state machine — confirmation-first Preview/Apply.
+ * - Preview is read-only; apply exists only inside a confirmation dialog bound
+ *   to the live preview id, with {confirm:true}. Escape cancels; nothing applies
+ *   without confirmation.
+ * - status pages two buckets (localOnly / remoteOnly) with cursors.
+ */
+
+export interface SyncConnection {
+  ok: boolean
+  host: string
+  latencyMs?: number
+  error?: string
+}
+
+export interface PageState {
+  files: string[]
+  total: number
+  next: number | null
+  /** true once the first page has settled — separates "still loading" from "genuinely empty" */
+  loaded?: boolean
+}
+
+export type Bucket = 'localOnly' | 'remoteOnly'
+
+export function useSync(ctx: any) {
+  const [remoteHost, setRemoteHost] = React.useState<string>('…')
+  // Where the SSH target came from: settings (saved) | env | default.
+  const [remoteSource, setRemoteSource] = React.useState<string>('default')
+  const [lastSync, setLastSync] = React.useState<string | null>(() => {
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage.getItem('dsh-maestro-sync:lastSync') : null
+    } catch {
+      return null
+    }
+  })
+  const [status, setStatus] = React.useState<any>(null)
+  const [connection, setConnection] = React.useState<SyncConnection | null>(null)
+  // Machine identity (loaded alongside the connection check; null = not
+  // loaded yet — failures render inline with ok:false + reason, never null,
+  // so the line cannot vanish silently; the tab never blocks on it).
+  const [machines, setMachines] = React.useState<{ localId: string | null; remoteId: string | null; from?: string; to?: string; ok?: boolean; reason?: string } | null>(null)
+  // Idle until the user explicitly checks: entering the tab never probes SSH.
+  const [checking, setChecking] = React.useState<boolean>(false)
+  const [busy, setBusy] = React.useState<boolean>(false)
+  const [result, setResult] = React.useState<{ kind: string; ok: boolean; text: string } | null>(null)
+  const [error, setError] = React.useState<string>('')
+  const [preview, setPreview] = React.useState<any>(null)
+  const [previewDirection, setPreviewDirection] = React.useState<'pull' | 'push'>('pull')
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+  // Tunnel restore: read-only preview + its own confirmation dialog. The
+  // mutation rewrites domains.tunnel in the shared store, so it may never fire
+  // from the button itself.
+  const [tunnelPreview, setTunnelPreview] = React.useState<any>(null)
+  const [tunnelConfirmOpen, setTunnelConfirmOpen] = React.useState(false)
+  // Field-level error for the SSH target — the server validates, but the
+  // message must land under the field it belongs to, not in a generic banner.
+  const [hostFieldError, setHostFieldError] = React.useState<string | null>(null)
+  // Bidirectional round trip: one combined preview (exact push + projected
+  // pull), one confirmation, one server-side push-then-pull apply.
+  const [biPreview, setBiPreview] = React.useState<any>(null)
+  const [biConfirmOpen, setBiConfirmOpen] = React.useState(false)
+  const [actionLimit, setActionLimit] = React.useState(5)
+  const [progress, setProgress] = React.useState<{ phase: string; current: number; total: number; file?: string } | null>(null)
+  const cancelledRef = React.useRef(false)
+  const [pages, setPages] = React.useState<Record<Bucket, PageState>>({
+    localOnly: { files: [], total: 0, next: null, loaded: false },
+    remoteOnly: { files: [], total: 0, next: null, loaded: false },
+  })
+
+  // dsh-client-connection decodes every RPC response as the carrier shape
+  // { ok: true, value } | { ok: false, error: { code, message, details } }.
+  // Unwrap to the payload; normalize the failure error to a string.
+  const call = React.useCallback(async (method: string, payload: any): Promise<any> => {
+    const conn = (ctx as any).connection ?? (ctx as any).get?.('connection')
+    if (!conn?.rpc?.call) throw new Error('RPC not available')
+    const res: any = await conn.rpc.call(RPC_CHANNEL, method, payload)
+    if (res && typeof res === 'object' && 'ok' in res) {
+      if (res.ok) return res.value
+      const err = res.error
+      if (typeof err === 'string') return { ok: false, error: err }
+      return { ok: false, error: err?.message ?? 'RPC failed', code: typeof err?.code === 'string' ? err.code : undefined }
+    }
+    return res
+  }, [ctx])
+
+  const loadPage = React.useCallback(
+    async (bucket: Bucket, cursor: number) => {
+      try {
+        const res: any = await call('status', { bucket, cursor, limit: 10 })
+        if (!res) return
+        setPages((prev) => ({
+          ...prev,
+          [bucket]: {
+            files: cursor === 0 ? (res.files ?? []) : [...prev[bucket].files, ...(res.files ?? [])],
+            total: res.total ?? prev[bucket].total,
+            next: res.nextCursor ?? null,
+            loaded: true,
+          },
+        }))
+      } catch {
+        // page load failure is non-fatal
+      }
+    },
+    [call],
+  )
+
+  const loadStatus = React.useCallback(async () => {
+    // a refresh invalidates previous status/action state (the last announcement
+    // stays visible until the next user action)
+    setError('')
+    setChecking(true)
+    setStatus(null)
+    try {
+      const res: any = await call('status', {})
+      if (res?.ok === false) {
+        setError(res?.error ?? 'status failed')
+        return
+      }
+      setStatus(res)
+      const conn = (res as any)?.connection ?? null
+      if (conn) setConnection(conn)
+      else setConnection({ ok: true, host: (res as any)?.remoteHost ?? 'kai@ssh.ddtcorex.com' })
+      if (typeof (res as any)?.remoteHost === 'string' && (res as any).remoteHost) setRemoteHost((res as any).remoteHost)
+    } catch (e: any) {
+      setError(e?.message ?? String(e))
+    } finally {
+      setChecking(false)
+    }
+    await loadPage('localOnly', 0)
+    await loadPage('remoteOnly', 0)
+  }, [call, loadPage])
+
+  React.useEffect(() => {
+    // Load the saved SSH target only — never probe the connection on mount.
+    void (async () => {
+      try {
+        const v: any = await call('getRemoteConfig', {})
+        if (v?.remoteHost) setRemoteHost(String(v.remoteHost))
+        if (typeof v?.source === 'string') setRemoteSource(v.source)
+      } catch {
+        // leave the placeholder; the user can still type a host and check
+      }
+    })()
+  }, [call])
+
+  const persistLastSync = React.useCallback((ts: string) => {
+    setLastSync(ts)
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('dsh-maestro-sync:lastSync', ts)
+    } catch {}
+  }, [])
+
+  const handlePreview = React.useCallback(
+    async (direction: 'pull' | 'push') => {
+      setBusy(true)
+      setError('')
+      setResult(null)
+      setActionLimit(5)
+      setProgress({ phase: 'listing', current: 0, total: 1 })
+      try {
+        // Asynchronous count-only preview: start the job, poll progress (the
+        // host hashes sessions over ssh, one progress tick per file) until the
+        // preview settles, then open the confirmation dialog.
+        const start: any = await call('previewStart', { direction })
+        const jobId = start?.jobId
+        if (!jobId) {
+          setError(start?.error ?? 'Preview failed to start')
+          setProgress(null)
+          return
+        }
+        let done = false
+        while (!done && !cancelledRef.current) {
+          const st: any = await call('previewStatus', { jobId })
+          if (st?.status === 'running' && st?.progress) {
+            setProgress({ phase: st.progress.phase, current: st.progress.current, total: st.progress.total, file: st.progress.file })
+          }
+          if (st?.status === 'done') {
+            if (st.preview) {
+              setPreview(st.preview)
+              setPreviewDirection(direction)
+              setConfirmOpen(true)
+            } else {
+              setError('Preview finished without a result')
+            }
+            done = true
+          } else if (st?.status === 'error') {
+            setError(st.error ?? 'Preview failed')
+            done = true
+          } else if (st?.ok === false) {
+            setError(st.error ?? 'Preview failed')
+            done = true
+          } else {
+            await new Promise((r) => setTimeout(r, 700))
+          }
+        }
+      } catch (e: any) {
+        setError(e?.message ?? String(e))
+      } finally {
+        setBusy(false)
+        setProgress(null)
+      }
+    },
+    [call],
+  )
+
+  const handleApply = React.useCallback(async () => {
+    if (!preview?.previewId) return
+    setBusy(true)
+    setError('')
+    const previewId = preview.previewId
+    const direction = previewDirection
+    try {
+      const res: any = await call('apply', { previewId, direction, confirm: true })
+      setConfirmOpen(false)
+      setPreview(null)
+      if (res?.ok === false) {
+        const label = typeof res.code === 'string' ? res.code : 'apply failed'
+        setError(`${label}: ${res?.error ?? 'apply failed'}`)
+        setResult({ kind: 'apply', ok: false, text: 'Apply failed' })
+        return
+      }
+      setResult({ kind: 'apply', ok: true, text: `Applied preview ${previewId.slice(0, 8)} — committed ${(res?.committed ?? []).length} file(s), +${res?.summary?.added ?? 0} entries` })
+      persistLastSync(new Date().toISOString())
+      void loadStatus()
+    } catch (e: any) {
+      setConfirmOpen(false)
+      setPreview(null)
+      setError(e?.message ?? String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [preview, previewDirection, call, loadStatus, persistLastSync])
+
+  const cancelDialog = React.useCallback(() => {
+    setConfirmOpen(false)
+    setPreview(null)
+  }, [])
+
+  const handleBidirectionalPreview = React.useCallback(async () => {
+    setBusy(true)
+    setError('')
+    setResult(null)
+    setActionLimit(5)
+    setProgress({ phase: 'planning', current: 0, total: 1 })
+    try {
+      const combined: any = await call('bidirectionalPreview', {})
+      if (combined?.ok === false) {
+        setError(combined?.error ?? 'Bidirectional preview failed')
+        return
+      }
+      if (!combined?.previewId) {
+        setError('Bidirectional preview finished without a result')
+        return
+      }
+      setBiPreview(combined)
+      setBiConfirmOpen(true)
+    } catch (e: any) {
+      setError(e?.message ?? String(e))
+    } finally {
+      setBusy(false)
+      setProgress(null)
+    }
+  }, [call])
+
+  const handleBidirectionalApply = React.useCallback(async () => {
+    if (!biPreview?.previewId) return
+    setBusy(true)
+    setError('')
+    const previewId = biPreview.previewId
+    try {
+      // One RPC runs push, then pull, then the convergence check server-side;
+      // the dialog busy state covers both phases ("Applying both ways…").
+      const res: any = await call('bidirectionalApply', { previewId, confirm: true })
+      setBiConfirmOpen(false)
+      setBiPreview(null)
+      if (res?.ok === false) {
+        const label = typeof res.code === 'string' ? res.code : 'apply failed'
+        setError(`${label}: ${res?.error ?? 'apply failed'}`)
+        setResult({ kind: 'bidirectional', ok: false, text: 'Both-ways apply failed' })
+        return
+      }
+      const pushAdded = res?.push?.summary?.added ?? 0
+      const pullAdded = res?.pull?.summary?.added ?? 0
+      const verification = res?.verification
+      const converged = verification && (verification.copied ?? 0) === 0 && (verification.merged ?? 0) === 0 && (verification.conflicts ?? 0) === 0
+      setResult({
+        kind: 'bidirectional',
+        ok: true,
+        text: `Both ways applied — push +${pushAdded}, pull +${pullAdded} entries · ${converged ? 'converged' : 'remaining delta, review and re-run'}`,
+      })
+      persistLastSync(new Date().toISOString())
+      void loadStatus()
+    } catch (e: any) {
+      setBiConfirmOpen(false)
+      setBiPreview(null)
+      setError(e?.message ?? String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [biPreview, call, loadStatus, persistLastSync])
+
+  const cancelBidirectionalDialog = React.useCallback(() => {
+    setBiConfirmOpen(false)
+    setBiPreview(null)
+  }, [])
+
+  /** Persist the SSH target to the settings store (no probing). */
+  const saveRemoteHost = React.useCallback(
+    async (host: string): Promise<{ ok: boolean; error?: string }> => {
+      setError('')
+      setHostFieldError(null)
+      try {
+        const res: any = await call('saveRemoteHost', { host })
+        if (res?.ok === false) {
+          const msg = res?.error ?? 'save failed'
+          // The failure is about the field the user just typed into: say it
+          // there (aria-describedby) rather than only in the panel banner.
+          setHostFieldError(msg)
+          return { ok: false, error: msg }
+        }
+        if (res?.remoteHost) {
+          setRemoteHost(String(res.remoteHost))
+          setRemoteSource('settings')
+        }
+        return { ok: true }
+      } catch (e: any) {
+        const msg = e?.message ?? String(e)
+        setHostFieldError(msg)
+        return { ok: false, error: msg }
+      }
+    },
+    [call],
+  )
+
+  /**
+   * Explicit connection check (the ONLY auto path is Apply's own refresh).
+   * On success the target is persisted and the status/pages load, unlocking
+   * Preview and the file lists; on failure everything stays gated.
+   * Machine ids load alongside (best-effort: a failure renders the line with
+   * "?" ids plus the reason inline, never blocking the tab and never
+   * vanishing silently — a vanished line is indistinguishable from stale UI).
+   */
+  const loadMachines = React.useCallback(async (): Promise<void> => {
+    try {
+      const res: any = await call('checkMachines', {})
+      if (res && typeof res === 'object' && (res.localId !== undefined || res.remoteId !== undefined)) {
+        setMachines({ localId: res.localId ?? null, remoteId: res.remoteId ?? null, from: res.from, to: res.to, ok: res.ok, reason: res.reason ?? res.error })
+      } else if (res && typeof res === 'object' && (res.ok === false || typeof res.reason === 'string' || typeof res.error === 'string')) {
+        setMachines({ localId: res.localId ?? null, remoteId: res.remoteId ?? null, from: res.from, to: res.to, ok: false, reason: typeof res.reason === 'string' ? res.reason : String(res.error ?? 'machines check failed') })
+      } else {
+        setMachines(null)
+      }
+    } catch (e: any) {
+      setMachines({ localId: null, remoteId: null, ok: false, reason: e?.message ?? String(e) })
+    }
+  }, [call])
+
+  const checkConnection = React.useCallback(async (): Promise<boolean> => {
+    setError('')
+    setResult(null)
+    setChecking(true)
+    try {
+      const res: any = await call('check', {})
+      const conn = res?.connection ?? null
+      if (!conn || conn.ok !== true) {
+        setConnection(conn ?? { ok: false, host: remoteHost, error: res?.error ?? 'connection failed' })
+        return false
+      }
+      setConnection(conn)
+      if (typeof res?.remoteHost === 'string' && res.remoteHost) setRemoteHost(res.remoteHost)
+      await loadStatus()
+      await loadMachines()
+      return true
+    } catch (e: any) {
+      setConnection({ ok: false, host: remoteHost, error: e?.message ?? String(e) })
+      return false
+    } finally {
+      setChecking(false)
+    }
+  }, [call, loadStatus, loadMachines, remoteHost])
+
+  /**
+   * Tunnel restore, step 1 — read-only preview.
+   *
+   * The restore rewrites `domains.tunnel` in the shared settings store; the
+   * host only performs it against a fresh, single-use preview id. So the button
+   * opens a dialog describing exactly what would change, and nothing is
+   * written until the operator confirms inside it.
+   */
+  const handleTunnelRestorePreview = React.useCallback(async (): Promise<void> => {
+    setError('')
+    setResult(null)
+    setBusy(true)
+    try {
+      const res: any = await call('tunnelRestorePreview', { side: 'local' })
+      if (res?.ok === false) {
+        setError(res?.error ?? 'tunnel restore preview failed')
+        return
+      }
+      if (!res?.previewId) {
+        setError('Tunnel restore preview finished without a result')
+        return
+      }
+      setTunnelPreview(res)
+      setTunnelConfirmOpen(true)
+    } catch (e: any) {
+      setError(e?.message ?? String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [call])
+
+  /** Tunnel restore, step 2 — the only call that writes, bound to the preview. */
+  const confirmTunnelRestore = React.useCallback(async (): Promise<void> => {
+    const previewId = tunnelPreview?.previewId
+    if (!previewId) return
+    setError('')
+    setBusy(true)
+    try {
+      const res: any = await call('tunnelRestore', { side: 'local', previewId, confirm: true })
+      setTunnelConfirmOpen(false)
+      setTunnelPreview(null)
+      if (res && res.ok) {
+        setResult({ kind: 'tunnel-restore', ok: true, text: `Tunnel restored from profile ${res.profile ?? 'auto'} (local)` })
+      } else {
+        setError(res?.error ?? 'tunnel restore failed')
+      }
+    } catch (e: any) {
+      setTunnelConfirmOpen(false)
+      setTunnelPreview(null)
+      setError(e?.message ?? String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [tunnelPreview, call])
+
+  const cancelTunnelRestore = React.useCallback(() => {
+    setTunnelConfirmOpen(false)
+    setTunnelPreview(null)
+  }, [])
+
+  React.useEffect(() => {
+    if (!confirmOpen && !biConfirmOpen && !tunnelConfirmOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        cancelDialog()
+        cancelBidirectionalDialog()
+        cancelTunnelRestore()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirmOpen, biConfirmOpen, tunnelConfirmOpen, cancelDialog, cancelBidirectionalDialog, cancelTunnelRestore])
+
+  return {
+    remoteHost,
+    remoteSource,
+    lastSync,
+    status,
+    connection,
+    machines,
+    checking,
+    busy,
+    result,
+    error,
+    hostFieldError,
+    setHostFieldError,
+    preview,
+    previewDirection,
+    confirmOpen,
+    biPreview,
+    biConfirmOpen,
+    tunnelPreview,
+    tunnelConfirmOpen,
+    actionLimit,
+    progress,
+    pages,
+    setActionLimit,
+    setError,
+    setResult,
+    loadStatus,
+    loadPage,
+    saveRemoteHost,
+    checkConnection,
+    loadMachines,
+    handleTunnelRestorePreview,
+    confirmTunnelRestore,
+    cancelTunnelRestore,
+    handlePreview,
+    handleApply,
+    cancelDialog,
+    handleBidirectionalPreview,
+    handleBidirectionalApply,
+    cancelBidirectionalDialog,
+  }
+}
+
+export type SyncState = ReturnType<typeof useSync>

@@ -1,4 +1,5 @@
-import { load, readFlat } from '@ddtcorex/dsh-maestro-config-lib'
+import { load } from './store/index.js'
+import { readFlat } from './store/legacy.js'
 
 export async function readSupervisorConfig(): Promise<Record<string, any>> {
   try {

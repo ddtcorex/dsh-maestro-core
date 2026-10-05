@@ -1,6 +1,6 @@
 # dsh-maestro-supervisor
 
-Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Resume & Auto-Reload**.
+Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Resume & Auto-Reload** — together with the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine that used to be four separate packages.
 
 Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tree crashes, plus **inside** `dsh web` as a host+client Cordis plugin to auto-resume interrupted sessions and auto-reload the browser after restart.
 
@@ -8,33 +8,46 @@ Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tre
 - **Host plugin:** `runAutoResume()` 8s after boot — `findInterrupted` (tail 100) + `findDanglingOpenTurns` (full scan for recent sessions) within `autoResumeWithin` (default 5m) → `agents.resume({resumeSessionId, agentOptions: {provider,model}})` recovered from `request/context` → `followup('continue')`. Loopback RPC `POST /dsh-maestro-supervisor-resume/{scan,resume}` (authority `loopback`) for the daemon (`resumeViaRpc`).
 - **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as `window.__ModuleLoader__.load` bundle at `/plugins/@ddtcorex/dsh-maestro-supervisor/client.js` via `dsh.client`.
 
+## Modules
+
+One package, four host rows and one client bundle.
+
+| Module | Source | Row id | Channel | What it does |
+|---|---|---|---|---|
+| Supervisor | `src/host/*.ts` | `maestro-supervisor` | `/dsh-maestro-supervisor-resume` (loopback) | Crash polling, LKG snapshots, auto-resume, auto-reload |
+| Store | `src/host/store/` | — | — | The namespaced `settings.json` every other module reads and writes |
+| Config | `src/host/config/` | `maestro-config` | `/dsh-maestro-config` | `maestroConfig` service over the store, backing the Maestro settings card |
+| Guard | `src/host/guard/` | `dsh-maestro-guard` | `/dsh-maestro-guard` | Rule classification, the approval gate and its journal |
+| Sync | `src/host/sync/` | `dsh-maestro-sync` | `/dsh-maestro-sync` | Backup, restore, retention GC and two-machine sync |
+
+Row `name`s for the absorbed modules are subpaths of this package (`@ddtcorex/dsh-maestro-supervisor/lib/<module>/index.js`), which is why `exports["./lib/*"]` exists: a row name the exports map cannot resolve is skipped silently at boot.
+
+The store is also published on its own (`@ddtcorex/dsh-maestro-supervisor/store`) and can be vendored into a consumer with `scripts/vendor-store.mjs`, which writes one self-verifying file with a body hash.
+
 ## Install
 
-### 1. Build
+One package, one command:
+
+```bash
+dsh plugin --profile web add @ddtcorex/dsh-maestro-supervisor
+```
+
+In a workspace checkout, build and link instead:
 
 ```bash
 pnpm --dir packages/dsh-maestro-supervisor install
-pnpm --dir packages/dsh-maestro-supervisor build   # tsc host + tsc client + node scripts/build-client.mjs → lib/ + lib/client.js
+pnpm --dir packages/dsh-maestro-supervisor build   # tsc host + tsc client + esbuild bundle -> lib/ + lib/client.js
 pnpm --dir packages/dsh-maestro-supervisor verify  # tsc --noEmit host + client
 pnpm --dir packages/dsh-maestro-supervisor test    # vitest run
 test -f packages/dsh-maestro-supervisor/lib/index.js
 test -f packages/dsh-maestro-supervisor/lib/client.js
-```
-
-`pnpm build` is required after any `src/` change; `lib/` is gitignored build output. The client needs both `tsc` steps and the `build-client.mjs` wrapper — plain `tsc` alone leaves `lib/client.js` as a bare ES module and `dsh web` will fail with `exports no "./client" bundle`.
-
-### 2. Add to DSH Web profile (host + client)
-
-The package declares `dsh.client` (`platform: web`, `inject: ["@deepseek-ai/dsh-client-runtime"]`) so the browser half is auto-loaded — no extra `dsh.client` flag needed.
-
-```bash
-dsh plugin --profile web add @ddtcorex/dsh-maestro-supervisor
-# or manually:
-# edit ~/.dsh/profiles/web/package.json:
-# "@ddtcorex/dsh-maestro-supervisor": "link:<workspace-root>/packages/dsh-maestro-supervisor"
+# link:() the checkout into ~/.dsh/profiles/web/package.json, then
 pnpm --dir ~/.dsh/profiles/web install
-ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-supervisor  # → .../packages/dsh-maestro-supervisor
 ```
+
+`pnpm build` is required after any `src/` change; `lib/` is gitignored build output. The client needs both `tsc` steps and the `build-client.mjs` bundle — plain `tsc` alone leaves `lib/client.js` as a bare ES module and `dsh web` will fail with `exports no "./client" bundle`.
+
+The package declares `dsh.client` (`platform: web`, `inject: ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-slots"]`) so the browser half is auto-loaded — no extra `dsh.client` flag needed.
 
 **Pre-flight (required):** before adding to a live profile's `bundles`, dry-boot must pass:
 
@@ -47,7 +60,7 @@ DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &
 
 This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/index.js`). See `AGENTS.md` Conventions.
 
-### 3. Systemd daemon (optional, for crash detection outside the tree)
+### Systemd daemon (optional, for crash detection outside the tree)
 
 ```bash
 bash packages/dsh-maestro-supervisor/scripts/install-systemd.sh
