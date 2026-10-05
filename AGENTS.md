@@ -92,7 +92,7 @@ One package, four host rows and one client bundle. The four absorbed repositorie
 
 ### Module: store (`src/host/store/`)
 
-The namespaced settings document at `<DSH_HOME>/dsh-maestro-config/settings.json`, written atomically (temp file + `rename`, mode 600) under a 5s `wx` lock.
+The namespaced settings document at `<DSH_HOME>/dsh-maestro-config/settings.json`, written atomically (temp file + `rename`, mode 600, temp file removed on failure) under a `wx` lock (0600, owner token, 5s acquire timeout, stolen only after 30s, released only by its owner). The settings directory is created 0700; modes apply at creation and existing paths are never chmod-ed. The load cache is keyed on mtime, inode and size. A throwing `onChange` callback is logged with `console.warn` and never breaks a write or other listeners.
 
 - **The store owns no domain knowledge.** It exports `defineDomain`, `definedDomains`, `load`, `get`, `set`, `unset`, `onChange`, `resetForTests` and registers **no** validator at import. A domain owner calls `defineDomain(name, validator)` from its own module — the guard validators live in `src/host/guard/validators.ts` and are imported for their side effect by the guard row. A write to an unregistered domain is accepted as-is, by design.
 - `store/legacy.ts` is the flat-key adapter (`DOMAIN_KEY_MAP`, `RUNTIME_KEYS`, `splitLegacyPatch`, `writeLegacyPatch`, `readFlat`). It is a **consumer** view for plugins that still read legacy flat keys; it imports `get`/`set`/`load` from `./index.js` and is vendored together with it.
@@ -103,7 +103,7 @@ The namespaced settings document at `<DSH_HOME>/dsh-maestro-config/settings.json
 
 ### Module: config (`src/host/config/`)
 
-`maestroConfig` over the store, and the `Maestro` settings card client section (`id: maestro`, `order: 26`, tabs Guard and Supervisor). It calls only `/dsh-maestro-config` and `/dsh-maestro-supervisor-resume`. The tunnel, GitLab, review and notifier tabs moved to their owning plugins; the card helpers that had no owner left in core (PIN TTL presets, GitLab webhook secret) are parked in the workspace at `docs/plans/2026-10-05-cross-repo-regroup-wave-1-ports/` for the wave-2 port.
+`maestroConfig` over the store, and the `Maestro` settings card client section (`id: maestro`, `order: 26`, tabs Guard and Supervisor). It calls only `/dsh-maestro-config` and `/dsh-maestro-supervisor-resume`. The `/dsh-maestro-config` channel serves ONLY the domains `guard`, `guardBlacklist` and `supervisor` (`RPC_DOMAINS`) on all four endpoints, `list` included; other domains hold other plugins' secrets and are refused. Do not widen the list without an owner-side review. The tunnel, GitLab, review and notifier tabs moved to their owning plugins; the card helpers that had no owner left in core (PIN TTL presets, GitLab webhook secret) are parked in the workspace at `docs/plans/2026-10-05-cross-repo-regroup-wave-1-ports/` for the wave-2 port.
 
 ### Module: guard (`src/host/guard/`)
 
