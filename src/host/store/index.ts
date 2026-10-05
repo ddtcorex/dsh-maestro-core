@@ -103,6 +103,21 @@ function readSnapshotSync(home: string): Record<string, string> {
   }
 }
 
+/**
+ * Run every listener for one domain. Each callback gets its own try/catch: a
+ * throwing listener must neither reject the write that already committed nor
+ * hide the change from the listeners registered after it.
+ */
+function fire(domain: string): void {
+  for (const cb of [...changeCbs]) {
+    try {
+      cb(domain)
+    } catch (err) {
+      console.warn(`config-lib: onChange callback for '${domain}' threw: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+}
+
 async function checkExternal(): Promise<void> {
   if (changeCbs.size === 0 || watchedHome === null || checking) return
   checking = true
@@ -116,7 +131,7 @@ async function checkExternal(): Promise<void> {
       if (snapshot[domain] !== next[domain]) changed.push(domain)
     }
     snapshot = next
-    for (const domain of changed) for (const cb of [...changeCbs]) cb(domain)
+    for (const domain of changed) fire(domain)
   } catch {
     // A transient read failure must never break boot; the next tick retries.
   } finally {
@@ -154,9 +169,16 @@ function startWatching(): void {
     // fs.watch is not recursive, so it only sees the file when its own
     // directory exists; the store is the only writer of that path either way.
     mkdirSync(dirname(path), { recursive: true })
-    watcher = watch(dirname(path), { persistent: false }, (_event, filename) => {
+    const w = watch(dirname(path), { persistent: false }, (_event, filename) => {
       if (filename === null || filename === FILE_BASENAME) scheduleCheck()
     })
+    // An unhandled 'error' event (EMFILE, directory removed, ...) would crash
+    // the host. Drop the watcher and let the poll below carry on alone.
+    w.on('error', () => {
+      try { w.close() } catch { /* already closed */ }
+      if (watcher === w) watcher = null
+    })
+    watcher = w
   } catch {
     watcher = null // polling below still covers the change
   }
@@ -308,7 +330,7 @@ export async function set(
   })
   // Refresh the watched copy first so the watcher sees no diff for this write.
   if (watchedHome === key) snapshot[domain] = JSON.stringify(written) ?? 'undefined'
-  for (const cb of [...changeCbs]) cb(domain)
+  fire(domain)
 }
 
 /**
@@ -350,7 +372,7 @@ export async function unset(
   })
   if (deleted) {
     if (watchedHome === homeKey) snapshot[domain] = JSON.stringify(written) ?? 'undefined'
-    for (const cb of [...changeCbs]) cb(domain)
+    fire(domain)
   }
   return deleted
 }
