@@ -142,8 +142,6 @@ export async function runCli(args: string[]): Promise<void> {
 Commands:
   daemon     Run supervisor daemon (poll every 3s)
   status     Show health + LKG status
-  logs       Tail supervisor reports
-  rollback --to <ts>  Rollback to LKG <ts>
   resume [--within <dur>]  List interrupted sessions (filter by time, e.g. 5m, 30s, 1h)
   boot-guard acquire|release --pid <pid>  Take/release boot.lock + boot-boundary (used by the safe-restart script)
 `)

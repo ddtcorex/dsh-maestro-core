@@ -103,3 +103,13 @@ describe('rollbackLKG', () => {
     } finally { rmSync(root, { recursive: true, force: true }) }
   })
 })
+describe('cli help text', () => {
+  it('lists only the commands the CLI implements', () => {
+    const out = execSync('node lib/bin.js --help', { encoding: 'utf-8' })
+    for (const cmd of ['daemon', 'status', 'resume [--within <dur>]', 'boot-guard acquire|release --pid <pid>']) {
+      expect(out).toContain(cmd)
+    }
+    expect(out).not.toMatch(/\blogs\b/)
+    expect(out).not.toMatch(/rollback/)
+  })
+})
