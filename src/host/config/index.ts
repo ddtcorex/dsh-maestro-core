@@ -34,40 +34,57 @@ function fail(message: string): RpcResult<never> {
 }
 
 /**
+ * Domains this channel may touch: exactly the ones the core Settings card reads
+ * and writes (Guard and Supervisor tabs). The store is shared with every other
+ * plugin (gitlab token, webhook secret, Telegram bot token, tunnel credentials
+ * path), and this channel is reachable from any logged-in browser session, so
+ * the allowlist is applied to ALL four endpoints, `list` included. Foreign
+ * domains are owned and validated by their own plugins.
+ */
+export const RPC_DOMAINS: readonly string[] = ['guard', 'guardBlacklist', 'supervisor']
+
+function isAllowed(domain: string): boolean {
+  return RPC_DOMAINS.includes(domain)
+}
+
+function refuse(domain: string): RpcResult<never> {
+  return fail(`domain '${domain}' is not available through this channel`)
+}
+
+/**
  * Publish maestroConfig over the shared store + loopback RPC for clients.
- * Exposes guard/guardBlacklist/supervisor/notifier domains (Task 1 validators)
- * via generic get/set — validation is delegated to the lib's domain validators.
- * Host also handles '/dsh-maestro-config/get' and '/dsh-maestro-config/set'
- * style calls through the single channel with endpoint dispatch.
+ * The RPC serves only RPC_DOMAINS; in-process consumers of `ctx.maestroConfig`
+ * keep the full service. Validation is delegated to the store's domain validators.
  */
 export function apply(ctx: Context): void {
   const svc = createMaestroConfigService()
   ctx.provide('maestroConfig', svc)
   ctx.effect(() =>
     ctx.connection.rpc.handle(RPC_CHANNEL, async (endpoint: string, payload: unknown): Promise<RpcResult<unknown>> => {
-      const body = (payload ?? {}) as { domain?: string; patch?: object }
+      const body = (payload ?? {}) as { domain?: string; patch?: object; key?: unknown }
       if (endpoint === 'list') {
-        return ok({ domains: await svc.listDomains() })
+        return ok({ domains: (await svc.listDomains()).filter(isAllowed) })
       }
       if (endpoint === 'get') {
         if (typeof body.domain !== 'string') return fail('domain (string) is required')
-        // guard / guardBlacklist / supervisor / notifier are all valid domains here
+        if (!isAllowed(body.domain)) return refuse(body.domain)
         return ok(await svc.get(body.domain))
       }
       if (endpoint === 'set') {
         if (typeof body.domain !== 'string' || typeof body.patch !== 'object' || body.patch === null) {
           return fail('domain (string) and patch (object) are required')
         }
+        if (!isAllowed(body.domain)) return refuse(body.domain)
         await svc.set(body.domain, body.patch)
         return ok(null)
       }
       if (endpoint === 'unset') {
-        const key = (payload ?? {}) as { key?: unknown }
-        if (typeof body.domain !== 'string' || typeof key.key !== 'string') {
+        if (typeof body.domain !== 'string' || typeof body.key !== 'string') {
           return fail('domain (string) and key (string) are required')
         }
+        if (!isAllowed(body.domain)) return refuse(body.domain)
         try {
-          return ok({ deleted: await svc.unset(body.domain, key.key) })
+          return ok({ deleted: await svc.unset(body.domain, body.key) })
         } catch (e: any) {
           return fail(e?.message ?? String(e))
         }
