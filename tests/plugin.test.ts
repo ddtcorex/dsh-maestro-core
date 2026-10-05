@@ -1,6 +1,24 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, it, expect, vi } from 'vitest'
 import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned, processStartedAtMs } from '../src/host/plugin.js'
 import { SUPERVISOR_SOURCE_KIND } from '../src/host/source.js'
+
+/**
+ * The plugin's own source text. The `inject` contract below is about WHICH
+ * services block activation, and that cannot be asserted from the exported
+ * array alone — the interesting half is that the source resolves each service
+ * lazily instead of reading it off ctx directly.
+ */
+const sourceOfPlugin = readFileSync(
+  fileURLToPath(new URL('../src/host/plugin.ts', import.meta.url)),
+  'utf8',
+)
+
+const restartToolSource = readFileSync(
+  fileURLToPath(new URL('../src/host/restart-tool.ts', import.meta.url)),
+  'utf8',
+)
 
 function makeCtx(overrides: Record<string, any> = {}) {
   const logs: string[] = []
@@ -821,19 +839,95 @@ function makeCtxWithEffect(overrides: Record<string, any> = {}) {
 }
 
 describe('apply', () => {
-  it('waits for the agent registry before starting auto-resume', () => {
-    expect(inject).toContain('agents')
+  it('declares no blocking service dependency, so the boot scan is not gated', () => {
+    // The scan is the thing that must not wait. Cordis holds activation until
+    // every name in `inject` exists, so an empty list is what makes the scan's
+    // timing a property of the boot rather than of plugin load order.
+    // Measured 2026-10-05: 343s from host start to first scan with five names.
+    expect([...inject]).toEqual([])
   })
 
-  it('declares skills in inject so the skills service exists when the provider registers', () => {
-    expect(inject).toContain('skills')
+  // The boot SCAN needs none of the injected services: findInterrupted and
+  // findDanglingOpenTurns read session log files directly, and every ctx.get in
+  // this plugin is an optional lookup with a guarded `typeof` check around each
+  // registration.
+  //
+  // Measured 2026-10-05: the row declared
+  // inject: ['sessions','agents','connection','tools','skills'] and the scan
+  // fired 343s after the host started, because apply() could not run until the
+  // LAST of those five resolved. The scan is not what waits — the ROW does.
+  //
+  // A declared `inject` entry blocks activation until that service exists, so
+  // every entry delays the scan. The late services must instead be resolved
+  // lazily through ctx.get(), which works from an already-activated plugin.
+  it.each(['tools', 'skills', 'connection', 'agents'])(
+    'does not gate activation on %s, resolving it lazily instead',
+    (service) => {
+      // The row must not block on it: Cordis holds activation of the whole
+      // plugin until every name in `inject` exists.
+      expect(inject, `inject still blocks the boot scan on '${service}'`)
+        .not.toContain(service)
+      // The source must still name the service, or the feature it backs would
+      // simply never appear. HOW it is named is the interesting half and is
+      // asserted separately below: a `ctx.get?.(...)` lookup is the lazy path
+      // and stays allowed, while a bare `ctx.<service>.x()` read would only
+      // work when the service was injected.
+      expect(sourceOfPlugin).toContain(`'${service}'`)
+    },
+  )
+
+  it('resolves tools and connection through a lazy lookup before touching ctx', () => {
+    // Both registrations used to depend on the service being injected. Each now
+    // asks ctx.get first, with the property read kept only as a fallback.
+    expect(sourceOfPlugin).toContain("ctx.get?.('tools') as any) ?? ctx.tools")
+    expect(sourceOfPlugin).toContain("ctx.get?.('connection')")
+    // registerRestartTool had four ctx.tools.register calls that would each
+    // throw inside the effect whenever only the lazy lookup answered.
+    expect(restartToolSource).not.toMatch(/\bctx\.tools\.register\b/)
+  })
+  it('still registers the restart tool when tools arrives only via ctx.get', async () => {
+    const registered: any[] = []
+    const disposers: (() => void)[] = []
+    const ctx = makeCtxWithEffect({
+      effect: (fn: any) => { const d = fn(); disposers.push(d); return d },
+      // No `tools` property — only the lazy lookup answers.
+      get: (key: string) => (key === 'tools'
+        ? { register: (def: any) => { registered.push(def); return () => {} } }
+        : undefined),
+    })
+
+    expect(() => apply(ctx)).not.toThrow()
+    expect(registered.some(t => t.name === 'dsh_web_restart'))
+      .toBe(true)
+    for (const d of disposers) { expect(() => d()).not.toThrow() }
   })
 
-  it('declares tools in inject so ctx.tools resolves for the dsh_web_restart registration', () => {
-    // Without 'tools' injected, ctx.tools is undefined and registerRestartTool's
-    // ctx.tools.register throws inside the wrapped effect — the tool silently
-    // never registers and agents cannot find it at runtime.
-    expect(inject).toContain('tools')
+  it('still registers the skills provider when skills arrives only via ctx.get', () => {
+    const registerProviderSpy = vi.fn(() => () => {})
+    const disposers: (() => void)[] = []
+    const ctx = makeCtxWithEffect({
+      effect: (fn: any) => { const d = fn(); disposers.push(d); return d },
+      get: (key: string) => (key === 'skills' ? { registerProvider: registerProviderSpy } : undefined),
+    })
+
+    expect(() => apply(ctx)).not.toThrow()
+    expect(registerProviderSpy).toHaveBeenCalledTimes(1)
+    for (const d of disposers) { expect(() => d()).not.toThrow() }
+  })
+
+  it('resolves skills lazily so the provider registers without a blocking inject', () => {
+    // apply() reads skills through ctx.get('skills'), which works from an
+    // already-activated plugin, so the provider no longer needs 'skills' in
+    // inject to exist first.
+    expect(sourceOfPlugin).toContain("ctx.get?.('skills')")
+  })
+
+  it('resolves tools lazily so the restart tool registers without a blocking inject', () => {
+    // registerRestartTool used to read ctx.tools.register directly, which made
+    // the tool silently never register whenever only ctx.get answered. It now
+    // resolves tools first and throws a clear error if neither path answers.
+    expect(sourceOfPlugin).toContain("ctx.get?.('tools') as any) ?? ctx.tools")
+    expect(restartToolSource).not.toMatch(/\bctx\.tools\.register\b/)
   })
 
   it('registers dsh_web_restart through apply() wiring via ctx.tools', async () => {

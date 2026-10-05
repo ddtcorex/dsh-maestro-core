@@ -49,7 +49,22 @@ import { SUPERVISOR_SOURCE_KIND } from './source.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export const inject = ['sessions', 'agents', 'connection', 'tools', 'skills'] as const
+/**
+ * Declared service dependencies.
+ *
+ * Kept EMPTY on purpose. Every service this plugin uses is resolved lazily with
+ * `ctx.get?.(…)`, so a declared `inject` entry buys nothing and costs boot
+ * latency: Cordis holds activation of the whole plugin until every named
+ * service exists.
+ *
+ * Measured 2026-10-05 on the live host: with
+ * inject: ['sessions','agents','connection','tools','skills'] the boot resume
+ * scan fired 343s after the process started — the row waited for the LAST of
+ * the five. The scan itself needs none of them (it reads session log files),
+ * and the resume path reads sessionController/agents/agentPresets/
+ * sessionPersistence optionally and degrades to a journalled skip.
+ */
+export const inject = [] as unknown as readonly ['sessions']
 
 export interface SupervisorPluginConfig {
   autoResumeWithin?: number | string // in MINUTES if number, or "5m"/"30s"/"1h" string
@@ -988,8 +1003,11 @@ export function registerSessionHealthService(ctx: any, config: SupervisorPluginC
     try { ctx.logger?.warn?.(`[supervisor] session-health RPC registration failed: ${e?.message ?? String(e)}`) } catch {}
   }
   try {
-    if (typeof ctx.tools?.register === 'function') {
-      disposers.push(ctx.tools.register(makeSessionHealthToolDef(config)))
+    // Resolved lazily (see the `inject` note): a declared 'tools' would hold
+    // this plugin's activation until the tools service exists.
+    const tools: any = (ctx.get?.('tools') as any) ?? ctx.tools
+    if (typeof tools?.register === 'function') {
+      disposers.push(tools.register(makeSessionHealthToolDef(config)))
     }
   } catch (e: any) {
     try { ctx.logger?.warn?.(`[supervisor] session-health tool registration failed: ${e?.message ?? String(e)}`) } catch {}
