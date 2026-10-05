@@ -5,7 +5,7 @@ Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Re
 Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tree crashes, plus **inside** `dsh web` as a host+client Cordis plugin to auto-resume interrupted sessions and auto-reload the browser after restart.
 
 - **Daemon:** Polls `:3080` every 3s, keeps last-known-good (LKG) snapshots (`~/.dsh/.supervisor/lkg/`, `rotate 3`, `sha256` verify, `df` >500MB guard), auto-rollbacks on crash (`debounce 60s`, `flock` lock), writes `report-<ts>.md` (health + `git diff` + log tail), and notifies via Telegram (loose, never blocks).
-- **Host plugin:** `runAutoResume()` 8s after boot — `findInterrupted` (tail 100) + `findDanglingOpenTurns` (full scan for recent sessions) within `autoResumeWithin` (default 5m) → `agents.resume({resumeSessionId, agentOptions: {provider,model}})` recovered from `request/context` → `followup('continue')`. Loopback RPC `POST /dsh-maestro-supervisor-resume/{scan,resume}` (authority `loopback`) for the daemon (`resumeViaRpc`).
+- **Host plugin:** `runAutoResume()` 8s after boot — `findInterrupted` (tail 100) + `findDanglingOpenTurns` (full scan for recent sessions) within `autoResumeWithin` (default 5m) → `agents.resume({resumeSessionId, agentOptions: {provider,model}})` recovered from `request/context` → `followup('continue')`. Loopback RPC `POST /dsh-maestro-supervisor-resume/{scan,resume}` (reachable from loopback; `connection.isLoopback` reports it) for the daemon (`resumeViaRpc`).
 - **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as `window.__ModuleLoader__.load` bundle at `/plugins/@ddtcorex/dsh-maestro-core/client.js` via `dsh.client`.
 
 ## Modules
@@ -14,7 +14,7 @@ One package, four host rows and one client bundle.
 
 | Module | Source | Row id | Channel | What it does |
 |---|---|---|---|---|
-| Supervisor | `src/host/*.ts` | `maestro-supervisor` | `/dsh-maestro-supervisor-resume` (loopback) | Crash polling, LKG snapshots, auto-resume, auto-reload |
+| Supervisor | `src/host/*.ts` | `maestro-supervisor` | `/dsh-maestro-supervisor-resume` (loopback-reachable) | Crash polling, LKG snapshots, auto-resume, auto-reload |
 | Store | `src/host/store/` | — | — | The namespaced `settings.json` every other module reads and writes |
 | Config | `src/host/config/` | `maestro-config` | `/dsh-maestro-config` | `maestroConfig` service over the store, backing the Maestro settings card |
 | Guard | `src/host/guard/` | `dsh-maestro-guard` | `/dsh-maestro-guard` | Rule classification, the approval gate and its journal |
@@ -23,6 +23,23 @@ One package, four host rows and one client bundle.
 Row `name`s for the absorbed modules are subpaths of this package (`@ddtcorex/dsh-maestro-core/lib/<module>/index.js`), which is why `exports["./lib/*"]` exists: a row name the exports map cannot resolve is skipped silently at boot.
 
 The store is also published on its own (`@ddtcorex/dsh-maestro-core/store`) and can be vendored into a consumer with `scripts/vendor-store.mjs`, which writes one self-verifying file with a body hash.
+
+## Registered tools
+
+Host tools registered with `ctx.tools.register`:
+
+| Tool | Module | What it does |
+|---|---|---|
+| `dsh_web_restart` | supervisor | Schedule a supervised `dsh web` restart (consent-gated) |
+| `dsh_web_restart_status` | supervisor | Report the state of the last restart request |
+| `dsh_web_dryboot` | supervisor | Dry-boot on an ephemeral port with an isolated `DSH_HOME` |
+| `dsh_web_gc` | supervisor | Preview, then reap, verified dry-boot orphans |
+| `maestro_session_health` | supervisor | Session-log health scan (re-encode or quarantine) |
+| `maestro_resume_tool_health` | supervisor | Tool-view health of a resumed session |
+| `maestro_repair_session_preset` | supervisor | Re-link an agent that joined no preset |
+| `maestro_guard_status`, `maestro_guard_stats`, `maestro_full_scan` | guard | Guard state, counters and a full rule scan |
+| `maestro_sync_status`, `maestro_sync_check_machines`, `maestro_sync_preview`, `maestro_sync_apply`, `maestro_sync_pull`, `maestro_sync_push`, `maestro_sync_bidirectional_preview`, `maestro_sync_bidirectional_apply`, `maestro_sync_tunnel_restore` | sync | Two-machine sync, preview first |
+| `maestro_backup_preview`, `maestro_backup_apply`, `maestro_backup_gc_preview`, `maestro_backup_gc_apply`, `maestro_restore_preview`, `maestro_restore_apply` | sync | Backup, retention GC and restore, preview first |
 
 ## Install
 
@@ -77,7 +94,7 @@ To run without systemd (foreground, for debugging):
 ```bash
 node packages/dsh-maestro-core/lib/index.js daemon   # poll every 3s
 node packages/dsh-maestro-core/lib/index.js status
-node packages/dsh-maestro-core/lib/index.js logs --tail 50
+node packages/dsh-maestro-core/lib/index.js resume --within 5m   # list interrupted sessions
 ```
 
 ## Configuration
@@ -87,7 +104,7 @@ All `autoResumeWithin` values are **minutes** when given as `number` (e.g. `5` �
 1. **Cordis config** (`cordis.patch.yml` `config:` or `apply(ctx, config)`) — explicit per-install.
 2. **Env** `DSH_SUPERVISOR_AUTO_RESUME` / `DSH_SUPERVISOR_RESUME_WITHIN` (bare `5` in env → 5m for ergonomics).
 3. **Supervisor config** `~/.dsh/.supervisor/config.json` (`autoResumeEnabled`, `autoResumeWithin`).
-4. **Maestro settings** `~/.dsh/maestro/settings.json` (`domains.supervisor.*`).
+4. **Maestro settings** `~/.dsh/dsh-maestro-config/settings.json` (`domains.supervisor.*`).
 5. **Default:** `true` / `5`.
 
 | Key | Type | Default | Env | File | Notes |
@@ -110,11 +127,13 @@ Example `~/.dsh/.supervisor/config.json`:
 node packages/dsh-maestro-core/lib/index.js --help
 node packages/dsh-maestro-core/lib/index.js status
 node packages/dsh-maestro-core/lib/index.js daemon   # poll 3s, debounce 60s
-node packages/dsh-maestro-core/lib/index.js logs --tail 50
-node packages/dsh-maestro-core/lib/index.js rollback --latest
+node packages/dsh-maestro-core/lib/index.js resume [--within <dur>]   # list interrupted sessions, e.g. 5m, 30s, 1h
+node packages/dsh-maestro-core/lib/index.js boot-guard acquire|release --pid <pid>   # boot.lock + boot-boundary, used by the safe-restart script
 ```
 
-## RPC (loopback only, `authority: loopback`)
+The CLI has no `logs` or `rollback` command: rollback runs inside the daemon, and reports are files under `~/.dsh/.supervisor/reports/`.
+
+## RPC (reachable from loopback, `connection.isLoopback`)
 
 ```bash
 # Scan (findInterrupted only, tail 100)
@@ -131,7 +150,7 @@ curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/resume -X POST \
 # or {"ok":false,"error":{"code":"bad-request","message":"resume requires at least one session id"}}
 ```
 
-The daemon uses `resumeViaRpc()` (`supervisor.ts:24`) which POSTs the same envelope to `http://127.0.0.1:3080/dsh-maestro-supervisor-resume/resume` with `fetch` and validates `server-response` + `rpcId` + `result.ok`.
+The daemon uses `resumeViaRpc()` (`supervisor.ts`) which POSTs the same envelope to `http://127.0.0.1:3080/dsh-maestro-supervisor-resume/resume` with `fetch` and validates `server-response` + `rpcId` + `result.ok`.
 
 ## Auto-Resume Details
 
@@ -169,7 +188,7 @@ node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh
 |---------|-------|-----|
 | `Cannot find package '.../dsh-maestro-core/index.js'` | `pnpm build` not run or `lib/` stale | `pnpm --dir packages/dsh-maestro-core build && pnpm --dir ~/.dsh/profiles/web install` |
 | `exports no "./client" bundle` / `client bundle not found` | Missing `lib/client.js` or `exports["./client"]` | `pnpm build` (runs `tsc` + `tsc -p tsconfig.client.json` + `node scripts/build-client.mjs`), check `package.json` `exports` and `dsh.client`, `test -f lib/client.js`, `curl .../client.js` |
-| `EADDRINUSE ::3000` on `dsh web --port 0` | Old `MainThread` still holds `:3000`+`:3080` | `ss -tlnp | grep 3080` → pid, `kill <pid>` (same pid holds both), wait `ss` free. Never `pkill -f "dsh web"` — it kills the test shell. |
+| `EADDRINUSE` on a fixed port of `dsh web` | A previous `dsh web` still holds the listener tree: `:3080` (LAN proxy), `:3081` (public proxy), `:3082` (raw webserver); `:3000` is unbound | `ss -tlnp | grep -E ':308[012]'` → pid, hand the restart to the human or `dsh_web_restart`; never kill a live session's process yourself, and never `pkill -f "dsh web"`, it kills the invoking shell. |
 | `uses .jsonl but backend is zstd` | Hand-written `session.jsonl` while backend is `zstd` | Use `zstd -c plain.jsonl > session.jsonl.zstd` or `JsonlSessionPersistence` API. Never hand-write opposite encoding — `listArtifacts` checks every project dir on boot and one stray file blocks all of `dsh web`. |
 | `first frame is not exactly one header line` | zstd without `type: session` header | Use `toHeaderLine` + `compressZstdFrame(header)` + `compressZstdFrame(body)` as in `encodeMaterialization`. |
 | `findDangling` 0 but subagent still open | Tail window too small (before `63b7719`) | Fixed: `findDangling` now full-scans recent sessions (mtime within window). `findInterrupted` stays tail 100. |
@@ -182,9 +201,9 @@ node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh
 
 - **Manual `session.jsonl` vs `zstd`:** One stray opposite-encoding file under `~/.dsh/sessions/` blocks the entire `workspace` `listArtifacts` on every boot (`encodingMismatch`). See Troubleshooting.
 - **Tail vs full scan:** Before `63b7719`, `b6487e33` subagent missed because its only `turn/start` was at seq 6 at the very beginning of a 1906-line log. Fixed, but if you add a new scan variant, reuse `readSessionAllLines` with mtime pre-filter.
-- **Port pair:** One `MainThread` holds `:3080`+`:3000`. Use `ss -tlnp` + `kill <pid>` for the one pid, not `pkill -f`.
+- **Port map:** `:3080` is the LAN proxy (PIN login), `:3081` the public proxy, `:3082` the raw `dsh web` webserver; `:3000` is unbound. Inspect with `ss -tlnp`; never `pkill -f "dsh web"`.
 - **Client bundling:** `lib/client.js` must be `window.__ModuleLoader__.load` wrapper via `scripts/build-client.mjs`, not bare `export`. Add new client files under `src/client/` and ensure `tsconfig.client.json` includes them, then `pnpm build`.
-- **Config precedence:** `cordis.patch.yml` `config:` > env (`DSH_SUPERVISOR_RESUME_WITHIN` bare `5` → 5m) > `config.json` > `settings.json` > default. See `plugin.ts:71` and `supervisor.ts:82`.
+- **Config precedence:** `cordis.patch.yml` `config:` > env (`DSH_SUPERVISOR_RESUME_WITHIN` bare `5` → 5m) > `config.json` > `settings.json` > default. See `getAutoResumeEnabled()` and `getResumeWithinMs()` in `plugin.ts` and `supervisor.ts`.
 
 ## Development
 
@@ -204,6 +223,6 @@ Hard mode (optional): `package.json` add `"@ddtcorex/dsh-maestro-notifier": "wor
 
 ## See Also
 
-- Spec: `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md`
+- Spec: `<workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md`
 - Skill: `skills/dsh-safe-restart/` (`restart-dsh-web.sh` with `dry_boot_and_verify()` and `--auto`)
 - Client bundling: `dsh-maestro-mobile` (`scripts/build-client.mjs` pattern)

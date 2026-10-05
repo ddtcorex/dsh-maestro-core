@@ -66,7 +66,7 @@ validate first and get explicit user consent before a real swap.
    `stat -c '%y' <package>/lib/*.js`; a build newer than the daemon's start
    means the daemon is **stale** and must be reloaded BEFORE the swap.
    `restart-dsh-web.sh --check-supervisor` reports this and changes nothing.
-6. Ask for explicit consent and timing. “restart đi” is consent; silence is
+6. Ask for explicit consent and timing. An explicit “restart now” is consent; silence is
    not.
 
 ## Run the bundled helper only after consent
@@ -127,7 +127,7 @@ touch the live process:
   `detail` also carries the supervisor-daemon verdict and the real swap budget
   (see "Budget the turn, not the tool call").
 
-Settings-staging rule: config-lib memoizes settings per process, so an
+Settings-staging rule: the settings store memoizes settings per process, so an
 out-of-band settings edit is invisible to the host until restart. Stage ALL
 such edits, then restart ONCE. Prefer in-host Settings UI saves — they are
 visible immediately with no restart at all.
