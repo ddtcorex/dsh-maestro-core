@@ -206,7 +206,7 @@ describe('supervisor', () => {
     // Coordination with dsh-safe-web-update's restart-dsh-web.sh: an
     // intentional restart can hold the port down far longer than any
     // consecutive-down threshold tuned for a real crash. See
-    // docs/specs/2026-08-28-supervisor-planned-restart-design.md.
+    // <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md.
     const rollback = vi.fn(async () => {})
     const restartWeb = vi.fn(async () => {})
     const s = new Supervisor({

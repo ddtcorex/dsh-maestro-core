@@ -4,8 +4,8 @@ set -euo pipefail
 
 repo="${DSH_REPO:-}"
 log="${DSH_RESTART_LOG:-/tmp/dsh-web-restart.log}"
-# Coordination with dsh-web-supervisor (see workspace docs/specs/
-# 2026-08-28-supervisor-planned-restart-design.md): the supervisor treats a
+# Coordination with dsh-web-supervisor (see
+# <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md): the supervisor treats a
 # down poll as a crash unless this marker is fresh, so it never races this
 # script's own kill -> dry-boot -> relaunch sequence with its own rollback.
 marker="${DSH_SUPERVISOR_MARKER:-$HOME/.dsh/.supervisor/planned-restart}"
