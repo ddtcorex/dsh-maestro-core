@@ -85,7 +85,7 @@ async function autoFixKnownPatterns(err: string, exec: (c: string, o?: any) => s
   }
   if (lower.includes('syntaxerror') || lower.includes('yamlparseerror') || lower.includes('json')) {
     // corrupted settings.json — try restore from bak
-    try { exec('ls ~/.dsh/maestro/*.bak 2>&1 | head -5', { timeout: 5000 }) } catch {}
+    try { exec('ls ~/.dsh/dsh-maestro-config/*.bak 2>&1 | head -5', { timeout: 5000 }) } catch {}
     return
   }
 }
