@@ -1,6 +1,6 @@
 {
   "name": "@ddtcorex/dsh-maestro-core",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "DSH Web supervisor, settings store, tool guard and sync engine",
   "license": "MIT",
   "repository": {
