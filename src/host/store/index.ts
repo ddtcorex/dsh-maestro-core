@@ -325,8 +325,14 @@ function deepMerge(base: unknown, patch: unknown): unknown {
 async function writeDocLocked(path: string, doc: SettingsDoc): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: DIR_MODE })
   const tmp = `${path}.tmp-${Math.random().toString(16).slice(2, 10)}`
-  await writeFile(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 })
-  await rename(tmp, path) // atomic on the same filesystem; rename carries the 600 mode
+  try {
+    await writeFile(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: FILE_MODE })
+    await rename(tmp, path) // atomic on the same filesystem; rename carries the 600 mode
+  } finally {
+    // After a successful rename the temp name is gone and this is a no-op; after
+    // a failed write or rename it removes the orphan instead of leaking one per try.
+    await rm(tmp, { force: true }).catch(() => {})
+  }
 }
 
 // ---------------------------------------------------------------------------
