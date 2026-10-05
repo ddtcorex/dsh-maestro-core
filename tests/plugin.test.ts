@@ -722,28 +722,6 @@ describe('runAutoResume', () => {
     expect(sinceMs).not.toBe(BOOT + 343_000 - 300_000)
   })
 
-  it('falls back to a now-anchored window when the process start is unknown', async () => {
-    const ctx = makeCtx()
-    let sinceMs: number | undefined
-    const capture = async (_home: any, opts: any) => {
-      sinceMs = opts?.sinceMs
-      return { scanned: 0, interrupted: [] }
-    }
-
-    const NOW = 5_000_000
-    // An absent start must not collapse the window to nothing, and must not
-    // reach arbitrarily far into the past either.
-    await runAutoResume(ctx, {
-      findInterrupted: capture as any,
-      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
-      processStartedAtMs: 0,
-      nowMs: NOW,
-      config: enabledConfig,
-    })
-
-    expect(sinceMs).toBe(NOW - 300_000)
-  })
-
   it('keeps the now-anchored call shape when no boot anchor is supplied', async () => {
     // An explicit non-usable anchor (0) means "I have no boot time": the
     // boundary falls back to now. This is the path the daemon's RPC scan
