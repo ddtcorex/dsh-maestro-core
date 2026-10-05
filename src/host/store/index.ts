@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
-import { mkdir, open, readFile, rename, unlink, stat, rm, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, unlink, stat, rm, writeFile, link } from 'node:fs/promises'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { watch, type FSWatcher } from 'node:fs'
 
@@ -168,7 +169,7 @@ function startWatching(): void {
   try {
     // fs.watch is not recursive, so it only sees the file when its own
     // directory exists; the store is the only writer of that path either way.
-    mkdirSync(dirname(path), { recursive: true })
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     const w = watch(dirname(path), { persistent: false }, (_event, filename) => {
       if (filename === null || filename === FILE_BASENAME) scheduleCheck()
     })
@@ -210,22 +211,62 @@ export function resetForTests(): void {
 // locking + io
 // ---------------------------------------------------------------------------
 
+/**
+ * Lock timing. A lock is only stolen once it is older than STALE_MS, which is
+ * deliberately longer than the time a waiter is willing to wait: a live writer
+ * that is merely slow must time its waiters out, never get robbed.
+ */
+const LOCK_TIMEOUT_MS = 5_000
+const LOCK_STALE_MS = 30_000
+
+/** Settings directory: created 0700, lock file 0600 (the settings file is 0600 too). Modes apply at creation only; existing paths are never chmod-ed. */
+const DIR_MODE = 0o700
+const FILE_MODE = 0o600
+
+/**
+ * Move a stale lock aside and delete it. rename() is atomic, so of several
+ * waiters only one moves the file. If the moved file turns out not to be the
+ * one we judged stale (a new owner took the path between our stat and the
+ * rename), it is put back with link(), which refuses to overwrite.
+ */
+async function stealStaleLock(lockPath: string, observedIno: number): Promise<void> {
+  const aside = `${lockPath}.stale-${randomBytes(4).toString('hex')}`
+  try {
+    await rename(lockPath, aside)
+  } catch {
+    return // someone else removed or stole it first
+  }
+  try {
+    const moved = await stat(aside)
+    if (moved.ino !== observedIno) await link(aside, lockPath).catch(() => {})
+  } catch {
+    /* nothing to restore */
+  } finally {
+    await rm(aside, { force: true }).catch(() => {})
+  }
+}
+
 async function withLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
-  await mkdir(dirname(path), { recursive: true }) // the store dir may not exist on first write
+  await mkdir(dirname(path), { recursive: true, mode: DIR_MODE }) // the store dir may not exist on first write
   const lockPath = `${path}.lock`
-  const deadline = Date.now() + 5_000
-  let handle: Awaited<ReturnType<typeof open>> | null = null
+  const token = `${process.pid}-${randomBytes(8).toString('hex')}`
+  const deadline = Date.now() + LOCK_TIMEOUT_MS
   for (;;) {
     try {
-      handle = await open(lockPath, 'wx')
+      const handle = await open(lockPath, 'wx', FILE_MODE)
+      try {
+        await handle.writeFile(token)
+      } finally {
+        await handle.close()
+      }
       break
     } catch (err: any) {
       if (err?.code !== 'EEXIST') throw err
       // Break stale locks left behind by a crashed writer.
       try {
         const st = await stat(lockPath)
-        if (Date.now() - st.mtimeMs > 5_000) {
-          await rm(lockPath, { force: true })
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          await stealStaleLock(lockPath, st.ino)
           continue
         }
       } catch {
@@ -238,8 +279,13 @@ async function withLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
   } finally {
-    await unlink(lockPath).catch(() => {})
-    void handle // closed fd via unlink; keep handle referenced for GC clarity
+    // Only release a lock that is still ours: if it was stolen and re-acquired
+    // meanwhile, deleting it would break the new owner's mutual exclusion.
+    try {
+      if ((await readFile(lockPath, 'utf8')) === token) await unlink(lockPath)
+    } catch {
+      /* already gone */
+    }
   }
 }
 
@@ -277,7 +323,7 @@ function deepMerge(base: unknown, patch: unknown): unknown {
 }
 
 async function writeDocLocked(path: string, doc: SettingsDoc): Promise<void> {
-  await mkdir(dirname(path), { recursive: true })
+  await mkdir(dirname(path), { recursive: true, mode: DIR_MODE })
   const tmp = `${path}.tmp-${Math.random().toString(16).slice(2, 10)}`
   await writeFile(tmp, JSON.stringify(doc, null, 2) + '\n', { mode: 0o600 })
   await rename(tmp, path) // atomic on the same filesystem; rename carries the 600 mode
