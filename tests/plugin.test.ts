@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned } from '../src/host/plugin.js'
+import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned, processStartedAtMs } from '../src/host/plugin.js'
 import { SUPERVISOR_SOURCE_KIND } from '../src/host/source.js'
 
 function makeCtx(overrides: Record<string, any> = {}) {
@@ -642,6 +642,178 @@ describe('runAutoResume', () => {
     expect(scanEntry).toBeDefined()
     expect(scanEntry.scanned).toBe(9)
     expect(scanEntry.interrupted).toEqual([])
+  })
+
+  // The resume window must be anchored to WHEN THIS PROCESS STARTED, not to
+  // when the scan happens to run.
+  //
+  // Measured 2026-10-05 on the real deployment: turn 22 was interrupted at
+  // 18:10:55, the new host pid started at 18:11:02, and the scan did not run
+  // until 18:16:45 — 343s after boot, by which point the interruption was 349s
+  // old and therefore outside `autoResumeWithin = 5min`. The scan itself costs
+  // 130ms for 234 sessions: it is not slow, it is LATE, and a window measured
+  // from `Date.now()` at scan time silently ages every candidate out before the
+  // scan reads it.
+  //
+  // `withinMs` alone is NOT the contract. `findInterrupted` and
+  // `findDanglingOpenTurns` each derive `sinceMs = Date.now() - withinMs` from
+  // their OWN clock, so passing the same number through cannot move where the
+  // window starts. `sinceMs` is the only input that pins the boundary, which is
+  // why these tests assert on it rather than on `withinMs`.
+  it('anchors the resume window to process start, not to scan time', async () => {
+    const ctx = makeCtx()
+    const since: Array<number | undefined> = []
+    const capture = async (_home: any, opts: any) => {
+      since.push(opts?.sinceMs)
+      return { scanned: 0, interrupted: [] }
+    }
+
+    // This process booted at 1000 and the scan runs at 1000 + 343_000. The
+    // configured window is the 5min default, so the boundary is the boot
+    // instant: a crash can leave an interruption seconds BEFORE the new process
+    // existed (the closer never landed), and those must still be admitted.
+    const BOOT = 1_000
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: capture as any,
+      processStartedAtMs: BOOT,
+      nowMs: BOOT + 343_000,
+      config: enabledConfig,
+    })
+
+    expect(since).toHaveLength(2)
+    for (const sinceMs of since) {
+      expect(sinceMs).toBe(BOOT - 300_000)
+    }
+
+    // The boundary must not drift with the scan: a scan ten minutes into the
+    // same boot still anchors at BOOT, never at `scan - withinMs`.
+    since.length = 0
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: BOOT,
+      nowMs: BOOT + 600_000,
+      config: enabledConfig,
+    })
+    expect(since[0]).toBe(BOOT - 300_000)
+  })
+
+  it('never anchors the window later than the boot boundary', async () => {
+    const ctx = makeCtx()
+    let sinceMs: number | undefined
+    const capture = async (_home: any, opts: any) => {
+      sinceMs = opts?.sinceMs
+      return { scanned: 0, interrupted: [] }
+    }
+
+    // The 2026-10-05 failure expressed as an assertion: a late scan must not
+    // push the boundary forward, because that is exactly what ages real
+    // interruptions out of the window and silently resumes nothing.
+    const BOOT = 1_000
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: BOOT,
+      nowMs: BOOT + 343_000,
+      config: enabledConfig,
+    })
+
+    expect(sinceMs).not.toBe(BOOT + 343_000 - 300_000)
+  })
+
+  it('falls back to a now-anchored window when the process start is unknown', async () => {
+    const ctx = makeCtx()
+    let sinceMs: number | undefined
+    const capture = async (_home: any, opts: any) => {
+      sinceMs = opts?.sinceMs
+      return { scanned: 0, interrupted: [] }
+    }
+
+    const NOW = 5_000_000
+    // An absent start must not collapse the window to nothing, and must not
+    // reach arbitrarily far into the past either.
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: 0,
+      nowMs: NOW,
+      config: enabledConfig,
+    })
+
+    expect(sinceMs).toBe(NOW - 300_000)
+  })
+
+  it('keeps the now-anchored call shape when no boot anchor is supplied', async () => {
+    // An explicit non-usable anchor (0) means "I have no boot time": the
+    // boundary falls back to now. This is the path the daemon's RPC scan
+    // endpoint takes, and it must not collapse the window to nothing.
+    const ctx = makeCtx()
+    let opts: any
+    const capture = async (_home: any, o: any) => {
+      opts = o
+      return { scanned: 0, interrupted: [] }
+    }
+    const before = Date.now()
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: 0,
+      config: enabledConfig,
+    })
+    const after = Date.now()
+    expect(opts.withinMs).toBe(300_000)
+    // The boundary must land inside this run.
+    expect(opts.sinceMs).toBeGreaterThanOrEqual(before - 300_000)
+    expect(opts.sinceMs).toBeLessThanOrEqual(after - 300_000)
+  })
+
+  it('defaults to this process own start when no anchor is passed at all', async () => {
+    // The live path: apply() passes nothing, so the module-load uptime anchor
+    // is used. The boundary must therefore sit near the process start, NOT near
+    // the test's own moment — otherwise the anchor never reaches production.
+    const ctx = makeCtx()
+    let opts: any
+    const capture = async (_home: any, o: any) => {
+      opts = o
+      return { scanned: 0, interrupted: [] }
+    }
+    const now = Date.now()
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      config: enabledConfig,
+    })
+
+    expect(opts.withinMs).toBe(300_000)
+    const anchored = processStartedAtMs()
+    expect(anchored).toBeTypeOf('number')
+    // The vitest worker started moments ago, so its start is within the last
+    // few minutes — a boundary near `now - 300s` would pass, so tighten: the
+    // anchor must be AFTER a point 10 minutes ago whenever the worker is young.
+    const ageMs = now - (anchored as number)
+    expect(ageMs).toBeGreaterThanOrEqual(0)
+    expect(ageMs).toBeLessThan(600_000)
+    expect(opts.sinceMs).toBe((anchored as number) - 300_000)
+  })
+
+  it('records the boot-anchored window in the scan audit detail', async () => {
+    const ctx = makeCtx()
+    const entries: any[] = []
+    await runAutoResume(ctx, {
+      findInterrupted: async () => ({ scanned: 234, interrupted: [] }),
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: 1000,
+      nowMs: 1000 + 343_000,
+      logResume: (e: any) => entries.push(e),
+      config: enabledConfig,
+    })
+
+    const scanEntry = entries.find((e) => e.kind === 'scan')
+    expect(scanEntry.detail).toContain('withinMs=300000')
+    // The audit trail must record WHY the boundary is where it is, otherwise a
+    // future reader cannot tell a boot-anchored window from a scan-anchored one.
+    expect(scanEntry.detail).toContain('sinceMs=')
   })
 })
 

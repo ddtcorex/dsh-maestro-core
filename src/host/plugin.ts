@@ -253,6 +253,29 @@ export function getAutoResumeEnabledExported(config?: SupervisorPluginConfig): b
   return getAutoResumeEnabled(config)
 }
 
+/**
+ * Wall-clock ms at which THIS process started, or `undefined` when it cannot
+ * be established.
+ *
+ * `process.uptime()` is captured once at module load: the plugin module is
+ * imported during plugin-tree load, which is the earliest point the supervisor
+ * has, and the value never needs refreshing. A restart replaces the process, so
+ * the anchor moves with the boot by construction.
+ */
+const PROCESS_STARTED_AT_MS: number | undefined = (() => {
+  try {
+    const up = process.uptime()
+    if (typeof up === 'number' && Number.isFinite(up) && up >= 0) {
+      return Date.now() - Math.round(up * 1000)
+    }
+  } catch {}
+  return undefined
+})()
+
+export function processStartedAtMs(): number | undefined {
+  return PROCESS_STARTED_AT_MS
+}
+
 export async function runAutoResume(
   ctx: any,
   opts: {
@@ -261,6 +284,10 @@ export async function runAutoResume(
     resumeInterrupted?: typeof resumeInterrupted
     logResume?: (entry: ResumeLogEntry) => void
     config?: SupervisorPluginConfig
+    /** Boot anchor for the resume window; defaults to this process's own start. */
+    processStartedAtMs?: number
+    /** Clock seam for tests. */
+    nowMs?: number
   } = {}
 ): Promise<void> {
   try {
@@ -274,7 +301,29 @@ export async function runAutoResume(
       return
     }
     const withinMs = getResumeWithinMs(opts?.config)
-    const { scanned, interrupted } = await doFind(undefined, { withinMs })
+    // The window must be anchored to the BOOT, not to the moment the scan
+    // runs. `withinMs` alone cannot do this: findInterrupted and
+    // findDanglingOpenTurns each compute `sinceMs = Date.now() - withinMs` from
+    // their own clock, so on a host that takes minutes to finish loading
+    // plugins the boundary drifts forward and ages every candidate out before
+    // the scan reads it.
+    //
+    // Measured 2026-10-05: interruption at 18:10:55, new host at 18:11:02,
+    // scan at 18:16:45 (343s after boot). The interruption was then 349s old
+    // against `autoResumeWithin = 5min`, so nothing was resumed — while the
+    // scan itself costs only 130ms for 234 sessions. Passing an explicit
+    // `sinceMs` is the only way to pin the boundary, which is what this does.
+    const nowMs = opts?.nowMs ?? Date.now()
+    const startedAt = opts?.processStartedAtMs ?? PROCESS_STARTED_AT_MS
+    // A caller that cannot supply a boot anchor (the daemon's RPC scan endpoint)
+    // keeps the old behaviour, computed here against the injected clock so the
+    // boundary is identical rather than left to each scan's own Date.now().
+    const anchorMs = (typeof startedAt === 'number' && Number.isFinite(startedAt) && startedAt > 0)
+      ? startedAt
+      : nowMs
+    const sinceMs = anchorMs - withinMs
+    const scanOpts = { withinMs, sinceMs }
+    const { scanned, interrupted } = await doFind(undefined, scanOpts)
     // Only safe to treat a dangling open turn as crashed right after a fresh
     // boot, when this process is the sole live owner of these sessions —
     // exactly the context runAutoResume runs in (called once, 8s after
@@ -282,12 +331,18 @@ export async function runAutoResume(
     // protects any id that happens to be live in *this* process already.
     let dangling: string[] = []
     try {
-      dangling = (await doFindDangling(undefined, { withinMs })).interrupted
+      dangling = (await doFindDangling(undefined, scanOpts)).interrupted
     } catch (e: any) {
       ctx.logger?.warn?.(`[supervisor] auto-resume: dangling-open-turn scan failed, continuing with closed-turn results only: ${e?.message ?? String(e)}`)
     }
     const merged = Array.from(new Set([...interrupted, ...dangling]))
-    doLog({ ts: Date.now(), kind: 'scan', scanned, interrupted: merged, detail: `withinMs=${withinMs}` })
+    doLog({
+      ts: Date.now(),
+      kind: 'scan',
+      scanned,
+      interrupted: merged,
+      detail: `withinMs=${withinMs} sinceMs=${sinceMs} anchoredAtBoot=${startedAt === anchorMs ? 1 : 0} bootAgeMs=${Math.max(0, nowMs - anchorMs)}`,
+    })
     if (!merged.length) {
       ctx.logger?.info?.(`[supervisor] auto-resume: 0/${scanned} interrupted within ${withinMs}ms — nothing to do`)
       return
