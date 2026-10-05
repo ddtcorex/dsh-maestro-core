@@ -4,7 +4,7 @@ import { findInterrupted as defaultFindInterrupted, parseDuration } from './resu
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
-import { resolveHarnessRoot } from './paths.js'
+import { resolveHarnessRoot, readSettingsDocSync } from './paths.js'
 import { readSupervisorConfig } from './config.js'
 import { writePlannedRestart as defaultWritePlannedRestart, checkPlannedRestart as defaultCheckPlannedRestart, clearPlannedRestart } from './restart-guards.js'
 import type { RestartRequest } from './restart-guards.js'
@@ -206,9 +206,8 @@ export class Supervisor {
           if (['0','false','no','off'].includes(v)) return false
         }
       }
-      const maestroPath = path.join(os.homedir(), '.dsh/maestro/settings.json')
-      if (fs.existsSync(maestroPath)) {
-        const j = JSON.parse(fs.readFileSync(maestroPath, 'utf-8'))
+      const j = readSettingsDocSync()
+      if (j) {
         const raw = j?.domains?.supervisor?.autoResumeEnabled ?? j?.supervisor?.autoResumeEnabled ?? j?.domains?.supervisor?.autoResume ?? j?.supervisor?.autoResume
         if (typeof raw === 'boolean') return raw
         if (typeof raw === 'string') {
@@ -247,9 +246,8 @@ export class Supervisor {
           if (v !== undefined) return v
         } else if (typeof raw === 'number') return raw * 60 * 1000 // number is MINUTES
       }
-      const maestroPath = path.join(os.homedir(), '.dsh/maestro/settings.json')
-      if (fs.existsSync(maestroPath)) {
-        const j = JSON.parse(fs.readFileSync(maestroPath, 'utf-8'))
+      const j = readSettingsDocSync()
+      if (j) {
         const raw = j?.domains?.supervisor?.autoResumeWithin ?? j?.supervisor?.autoResumeWithin
         if (typeof raw === 'string') {
           if (/^\d+$/.test(raw.trim())) return parseInt(raw.trim(), 10) * 60 * 1000
