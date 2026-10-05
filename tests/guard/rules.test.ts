@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { classify, RULE_IDS, DEFAULT_TIERS } from '../../src/host/guard/rules.js'
@@ -348,9 +348,17 @@ describe('classify — guard.tamper is scoped to EDITS of the guard config', () 
   })
 })
 
+const HOST_CWD = '/srv/guard-probe-host/a/b/c'
+
 describe('classify — the temp exemption shares the session-cwd base', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
   it('does not exempt a relative path that only looks temporary from the host cwd', () => {
-    const hostCwd = process.cwd()
+    // Pin the host cwd to a fixed location outside the OS temp dir: with the
+    // real cwd the arithmetic below depends on where the checkout lives (it
+    // breaks when the repo itself sits under os.tmpdir()).
+    const hostCwd = HOST_CWD
+    vi.spyOn(process, 'cwd').mockReturnValue(hostCwd)
     const tempFile = join(tmpdir(), 'guard-temp-base-probe.md')
     // Resolves into the OS temp dir when resolved against the HOST cwd …
     const escape = relative(hostCwd, tempFile)
@@ -378,8 +386,10 @@ describe('classify — the temp exemption shares the session-cwd base', () => {
  * temp-dir helper.
  */
 describe('classify — the runtime-spill exemption shares the session-cwd base', () => {
+  afterEach(() => { vi.restoreAllMocks() })
   it('does not exempt a relative path that only looks like a spill from the host cwd', () => {
-    const hostCwd = process.cwd()
+    const hostCwd = HOST_CWD
+    vi.spyOn(process, 'cwd').mockReturnValue(hostCwd)
     const spillFile = join(tmpdir(), 'dsh-spill-base-probe', 'session-1', 'x.txt')
     const escape = relative(hostCwd, spillFile)
     const sessionCwd = join(hostCwd, 'session', 'sub')
