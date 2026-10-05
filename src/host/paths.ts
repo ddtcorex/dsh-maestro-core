@@ -11,7 +11,7 @@ export function resolveHarnessRoot(): string {
   // Walk up from this file's directory (works for both src and lib)
   try {
     // In ESM, __dirname is not available; use import.meta.url if possible, else process.cwd()
-    // Fallback to file path heuristic: supervisor is at packages/dsh-maestro-supervisor/{src,lib}
+    // Fallback to file path heuristic: supervisor is at packages/dsh-maestro-core/{src,lib}
     const candidates: string[] = []
     // Try to derive from current working file via stack-relative: use process.argv[1] or cwd
     // Most reliable: check common locations relative to this file
@@ -25,7 +25,7 @@ export function resolveHarnessRoot(): string {
 
     for (const c of candidates) {
       try {
-        if (fs.existsSync(path.join(c, 'deepseek-harness', 'package.json')) && fs.existsSync(path.join(c, 'packages', 'dsh-maestro-supervisor', 'package.json'))) {
+        if (fs.existsSync(path.join(c, 'deepseek-harness', 'package.json')) && fs.existsSync(path.join(c, 'packages', 'dsh-maestro-core', 'package.json'))) {
           return c
         }
       } catch {}

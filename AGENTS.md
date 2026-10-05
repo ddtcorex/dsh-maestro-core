@@ -4,7 +4,7 @@
 
 ## Purpose
 
-This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine, all shipped as one package with one client bundle. It still publishes under the name `@ddtcorex/dsh-maestro-core` — the repository rename and the local directory move are a later step, and an installed profile has to keep resolving in the meantime. See `## Modules`.
+This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine, all shipped as one package with one client bundle. The npm package, the GitHub repository and the workspace directory all carry the `dsh-maestro-core` name; the previous `dsh-maestro-supervisor` spelling survives only in dated history (`CHANGELOG.md`, `docs/history/`) and in the RPC channel names, which are wire protocol and did not change. See `## Modules`.
 
 Supervisor for DSH Web resilience — three cooperating layers:
 
@@ -88,7 +88,7 @@ One package, four host rows and one client bundle. The three absorbed repositori
 | `dsh-maestro-guard` | `src/host/guard/` | `/dsh-maestro-guard` | Channel declared by the row only; guard answers through the harness approval prompt, it registers no `rpc.handle` |
 | `maestro-config` | `src/host/config/` | `/dsh-maestro-config` | `inject: ['connection','webServer']`, `config: {}` |
 
-**Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. When the package is renamed to `dsh-maestro-core`, the three subpath names change in the same commit.
+**Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. A row `name` that names a package which no longer exists fails as `entry … not found` and is skipped at load time, so a rename has to rewrite all three subpath names in the same commit.
 
 ### Module: store (`src/host/store/`)
 
@@ -154,12 +154,12 @@ Example `~/.dsh/.supervisor/config.json`:
 ### 1. Build
 
 ```sh
-pnpm --dir packages/dsh-maestro-supervisor install
-pnpm --dir packages/dsh-maestro-supervisor build   # tsc host + tsc client + node scripts/build-client.mjs → lib/ + lib/client.js
-pnpm --dir packages/dsh-maestro-supervisor verify  # tsc --noEmit host + client
-pnpm --dir packages/dsh-maestro-supervisor test    # vitest run
-test -f packages/dsh-maestro-supervisor/lib/index.js
-test -f packages/dsh-maestro-supervisor/lib/client.js
+pnpm --dir packages/dsh-maestro-core install
+pnpm --dir packages/dsh-maestro-core build   # tsc host + tsc client + node scripts/build-client.mjs → lib/ + lib/client.js
+pnpm --dir packages/dsh-maestro-core verify  # tsc --noEmit host + client
+pnpm --dir packages/dsh-maestro-core test    # vitest run
+test -f packages/dsh-maestro-core/lib/index.js
+test -f packages/dsh-maestro-core/lib/client.js
 ```
 
 `pnpm build` is required after any `src/` change; `lib/` is gitignored, so rebuild locally after pull and before restart.
@@ -171,7 +171,7 @@ test -f packages/dsh-maestro-supervisor/lib/client.js
 # the package declares dsh.client automatically — no extra flag needed
 dsh plugin --profile web add @ddtcorex/dsh-maestro-core
 # or manually: edit ~/.dsh/profiles/web/package.json
-# "@ddtcorex/dsh-maestro-core": "link:<workspace-root>/packages/dsh-maestro-supervisor"
+# "@ddtcorex/dsh-maestro-core": "link:<workspace-root>/packages/dsh-maestro-core"
 # then:
 pnpm --dir ~/.dsh/profiles/web install
 ```
@@ -179,7 +179,7 @@ pnpm --dir ~/.dsh/profiles/web install
 Verify the link:
 
 ```sh
-ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core  # → .../packages/dsh-maestro-supervisor
+ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core  # → .../packages/dsh-maestro-core
 cat ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core/package.json | grep -A2 '"version"'
 curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | head -n 5  # window.__ModuleLoader__.load
 ```
@@ -198,7 +198,7 @@ This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/in
 ### 3. Systemd daemon (optional, for crash detection outside the tree)
 
 ```sh
-bash packages/dsh-maestro-supervisor/scripts/install-systemd.sh
+bash packages/dsh-maestro-core/scripts/install-systemd.sh
 systemctl --user daemon-reload
 systemctl --user enable --now dsh-web-supervisor
 systemctl --user status dsh-web-supervisor
@@ -210,9 +210,9 @@ The template leaves `Environment=TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` commente
 To run without systemd (foreground, for debugging):
 
 ```sh
-node packages/dsh-maestro-supervisor/lib/index.js daemon   # poll every 3s
-node packages/dsh-maestro-supervisor/lib/index.js status
-node packages/dsh-maestro-supervisor/lib/index.js logs --tail 50
+node packages/dsh-maestro-core/lib/index.js daemon   # poll every 3s
+node packages/dsh-maestro-core/lib/index.js status
+node packages/dsh-maestro-core/lib/index.js logs --tail 50
 ```
 
 ### 4. Verify after install
@@ -228,16 +228,16 @@ curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'con
 # → {"type":"server-response","rpcId":"test","result":{"ok":true,"value":{"scanned":425,"interrupted":[]}}}
 
 # 3. Find dangling (needs full scan for subagents)
-node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh-maestro-supervisor/lib/resume.js'; console.log(await findDanglingOpenTurns(undefined,{withinMs:5*60*1000}))"
+node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh-maestro-core/lib/resume.js'; console.log(await findDanglingOpenTurns(undefined,{withinMs:5*60*1000}))"
 
 # 4. Trigger a real dangling (headless blocking sleep) and kill mid-turn, then check auto-resume:
-# pnpm --dir deepseek-harness dsh --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; sleep 10; node -e "import('./packages/dsh-maestro-supervisor/lib/resume.js').then(m=>m.findDanglingOpenTurns(undefined,{withinMs:5*60*1000}).then(console.log))"
+# pnpm --dir deepseek-harness dsh --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; sleep 10; node -e "import('./packages/dsh-maestro-core/lib/resume.js').then(m=>m.findDanglingOpenTurns(undefined,{withinMs:5*60*1000}).then(console.log))"
 # After restart, the session should have turn/end interrupted → continue → turn2
 ```
 
 ## Development
 
-Run from the repository root (or `packages/dsh-maestro-supervisor`):
+Run from the repository root (or `packages/dsh-maestro-core`):
 
 ```sh
 pnpm verify   # tsc --noEmit host + client
@@ -260,7 +260,7 @@ DSH_INTEGRATION=1 pnpm test -- tests/integration.test.ts  # needs real DSH web
 
 ## Git workflow
 
-- Default branch `master`. No direct commits to `master` — use `feat/<topic>` / `fix/<topic>` and a PR against `ddtcorex/dsh-maestro-supervisor`.
+- Default branch `master`. No direct commits to `master` — use `feat/<topic>` / `fix/<topic>` and a PR against `ddtcorex/dsh-maestro-core`.
 - Conventional commits, imperative mood (`feat:`, `fix:`, `docs:`, `chore:`). Scope without `dsh-maestro-` prefix (e.g. `fix(supervisor):`).
 - One TDD task = one commit; never commit while `pnpm verify` is red.
 - When the base moves, rebase the feature branch onto `origin/master`.
@@ -313,7 +313,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `dsh: plugin tree failed to load: Cannot find package '.../dsh-maestro-supervisor/index.js'` | `pnpm build` not run or `lib/` stale, `link:` specifier left in lockfile | `pnpm --dir packages/dsh-maestro-supervisor build && pnpm --dir ~/.dsh/profiles/web install` then `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` dry-boot |
+| `dsh: plugin tree failed to load: Cannot find package '.../dsh-maestro-core/index.js'` | `pnpm build` not run or `lib/` stale, `link:` specifier left in lockfile | `pnpm --dir packages/dsh-maestro-core build && pnpm --dir ~/.dsh/profiles/web install` then `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` dry-boot |
 | `ERR_MODULE_NOT_FOUND` / `assertChannel` / `client-modules: ... declares dsh.client but exports no "./client" bundle` | Missing `lib/client.js` or `exports["./client"]` | `pnpm build` (host + client + `node scripts/build-client.mjs`), check `package.json` `exports` and `dsh.client`, `test -f lib/client.js` |
 | `EADDRINUSE` on a dry-boot ephemeral port | Another process holds the ephemeral port (or a stale dry-boot orphan) | Run `dsh_web_gc` (preview, then `confirm:true`) to reap verified dry-boot orphans; for a live-tree collision pick another port. Never hardcode a PID, and never `pkill -f "dsh web"` (matches the invoking shell itself). |
 | `session artifact ... uses .jsonl but backend is zstd` | Manually created `session.jsonl` while backend is `zstd` | Use `zstd -c plain.jsonl > session.jsonl.zstd` or use `JsonlSessionPersistence` API (`create`/`append`) which writes header + `compressZstdFrame`. Never hand-write `session.jsonl` when `compression: zstd`. |

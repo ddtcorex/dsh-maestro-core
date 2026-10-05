@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ddtcorex/dsh-maestro-supervisor.git"
+    "url": "git+https://github.com/ddtcorex/dsh-maestro-core.git"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

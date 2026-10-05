@@ -55,11 +55,11 @@ async function autoFixKnownPatterns(err: string, exec: (c: string, o?: any) => s
   const lower = err.toLowerCase()
   // allowBuilds — ensure pnpm-workspace.yaml has allowBuilds.esbuild:true
   if (lower.includes('allowbuilds') || lower.includes('allow_builds')) {
-    try { exec(`pnpm --dir ${harnessRoot}/packages/dsh-maestro-supervisor verify --silent 2>&1 | head -5`, { timeout: 15000 }) } catch {}
+    try { exec(`pnpm --dir ${harnessRoot}/packages/dsh-maestro-core verify --silent 2>&1 | head -5`, { timeout: 15000 }) } catch {}
     // Try to patch any pnpm-workspace.yaml missing allowBuilds by touching it (heuristic)
     // Real fix would edit file; for test we just call exec to satisfy expectation
     try {
-      const ws = `${harnessRoot}/packages/dsh-maestro-supervisor/pnpm-workspace.yaml`
+      const ws = `${harnessRoot}/packages/dsh-maestro-core/pnpm-workspace.yaml`
       const content = readFile(ws)
       if (!content.includes('allowBuilds')) {
         // writeFile patched content
@@ -69,7 +69,7 @@ async function autoFixKnownPatterns(err: string, exec: (c: string, o?: any) => s
     return
   }
   if (err.includes('ERR_MODULE_NOT_FOUND') || err.includes('Cannot find module')) {
-    const candidates = ['dsh-maestro-supervisor', 'dsh-maestro-observe', 'dsh-maestro-memory']
+    const candidates = ['dsh-maestro-core', 'dsh-maestro-observe', 'dsh-maestro-memory']
     for (const pkg of candidates) {
       try {
         const p = `${harnessRoot}/packages/${pkg}/lib/index.js`

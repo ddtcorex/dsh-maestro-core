@@ -34,9 +34,18 @@
 - The `@ddtcorex/dsh-maestro-config-lib` dependency, the sibling checkout in
   `pnpm-workspace.yaml` and the `sibling-repos` entry in CI.
 
-The package name is still `@ddtcorex/dsh-maestro-supervisor`: the repository
-rename and the local directory move happen in a later wave, so an installed
-profile keeps resolving.
+### Changed
+
+- **The package is published as `@ddtcorex/dsh-maestro-core`** — renamed from
+  `@ddtcorex/dsh-maestro-supervisor` in one sweep, because a profile carrying
+  half the rename resolves nothing. The repository and the workspace directory
+  were renamed with it. The three subpath row `name` values in
+  `cordis.patch.yml`, the client loader `id`, the source-kind label the
+  supervisor persists into session logs, and every runnable path in `README.md`
+  and `AGENTS.md` moved in the same commit. The RPC channel names
+  (`/dsh-maestro-supervisor-resume`, `-session-health`, `-reload`) and the
+  `dsh-web-supervisor` binary name are wire protocol and did **not** change, so
+  the earlier sections of this file keep the old spelling on purpose.
 
 ## [0.9.0] - 2026-09-22
 

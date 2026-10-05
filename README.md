@@ -1,4 +1,4 @@
-# dsh-maestro-supervisor
+# dsh-maestro-core
 
 Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Resume & Auto-Reload** — together with the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine that used to be four separate packages.
 
@@ -35,12 +35,12 @@ dsh plugin --profile web add @ddtcorex/dsh-maestro-core
 In a workspace checkout, build and link instead:
 
 ```bash
-pnpm --dir packages/dsh-maestro-supervisor install
-pnpm --dir packages/dsh-maestro-supervisor build   # tsc host + tsc client + esbuild bundle -> lib/ + lib/client.js
-pnpm --dir packages/dsh-maestro-supervisor verify  # tsc --noEmit host + client
-pnpm --dir packages/dsh-maestro-supervisor test    # vitest run
-test -f packages/dsh-maestro-supervisor/lib/index.js
-test -f packages/dsh-maestro-supervisor/lib/client.js
+pnpm --dir packages/dsh-maestro-core install
+pnpm --dir packages/dsh-maestro-core build   # tsc host + tsc client + esbuild bundle -> lib/ + lib/client.js
+pnpm --dir packages/dsh-maestro-core verify  # tsc --noEmit host + client
+pnpm --dir packages/dsh-maestro-core test    # vitest run
+test -f packages/dsh-maestro-core/lib/index.js
+test -f packages/dsh-maestro-core/lib/client.js
 # link:() the checkout into ~/.dsh/profiles/web/package.json, then
 pnpm --dir ~/.dsh/profiles/web install
 ```
@@ -63,7 +63,7 @@ This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/in
 ### Systemd daemon (optional, for crash detection outside the tree)
 
 ```bash
-bash packages/dsh-maestro-supervisor/scripts/install-systemd.sh
+bash packages/dsh-maestro-core/scripts/install-systemd.sh
 systemctl --user daemon-reload
 systemctl --user enable --now dsh-web-supervisor
 systemctl --user status dsh-web-supervisor
@@ -75,9 +75,9 @@ The template leaves `Environment=TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` commente
 To run without systemd (foreground, for debugging):
 
 ```bash
-node packages/dsh-maestro-supervisor/lib/index.js daemon   # poll every 3s
-node packages/dsh-maestro-supervisor/lib/index.js status
-node packages/dsh-maestro-supervisor/lib/index.js logs --tail 50
+node packages/dsh-maestro-core/lib/index.js daemon   # poll every 3s
+node packages/dsh-maestro-core/lib/index.js status
+node packages/dsh-maestro-core/lib/index.js logs --tail 50
 ```
 
 ## Configuration
@@ -107,11 +107,11 @@ Example `~/.dsh/.supervisor/config.json`:
 ## CLI
 
 ```bash
-node packages/dsh-maestro-supervisor/lib/index.js --help
-node packages/dsh-maestro-supervisor/lib/index.js status
-node packages/dsh-maestro-supervisor/lib/index.js daemon   # poll 3s, debounce 60s
-node packages/dsh-maestro-supervisor/lib/index.js logs --tail 50
-node packages/dsh-maestro-supervisor/lib/index.js rollback --latest
+node packages/dsh-maestro-core/lib/index.js --help
+node packages/dsh-maestro-core/lib/index.js status
+node packages/dsh-maestro-core/lib/index.js daemon   # poll 3s, debounce 60s
+node packages/dsh-maestro-core/lib/index.js logs --tail 50
+node packages/dsh-maestro-core/lib/index.js rollback --latest
 ```
 
 ## RPC (loopback only, `authority: loopback`)
@@ -149,16 +149,16 @@ The daemon uses `resumeViaRpc()` (`supervisor.ts:24`) which POSTs the same envel
 
 ```bash
 # Build & unit
-pnpm --dir packages/dsh-maestro-supervisor verify   # host + client
-pnpm --dir packages/dsh-maestro-supervisor test     # vitest run
-test -f packages/dsh-maestro-supervisor/lib/index.js
-test -f packages/dsh-maestro-supervisor/lib/client.js
+pnpm --dir packages/dsh-maestro-core verify   # host + client
+pnpm --dir packages/dsh-maestro-core test     # vitest run
+test -f packages/dsh-maestro-core/lib/index.js
+test -f packages/dsh-maestro-core/lib/client.js
 curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"  # 2
 
 # Live
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3080/  # 200
 curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'content-type: application/json' -d '{"type":"client-request","rpcId":"t","method":"scan","payload":{"withinMs":300000}}' | head -c 200
-node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh-maestro-supervisor/lib/resume.js'; console.log(await findDanglingOpenTurns(undefined,{withinMs:5*60*1000}))"
+node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh-maestro-core/lib/resume.js'; console.log(await findDanglingOpenTurns(undefined,{withinMs:5*60*1000}))"
 # Create a real dangling: pnpm --dir deepseek-harness dsh --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; node -e "...findDangling..."  # should be 1
 # After restart, it should have turn/end interrupted → continue → turn2
 ```
@@ -167,7 +167,7 @@ node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Cannot find package '.../dsh-maestro-supervisor/index.js'` | `pnpm build` not run or `lib/` stale | `pnpm --dir packages/dsh-maestro-supervisor build && pnpm --dir ~/.dsh/profiles/web install` |
+| `Cannot find package '.../dsh-maestro-core/index.js'` | `pnpm build` not run or `lib/` stale | `pnpm --dir packages/dsh-maestro-core build && pnpm --dir ~/.dsh/profiles/web install` |
 | `exports no "./client" bundle` / `client bundle not found` | Missing `lib/client.js` or `exports["./client"]` | `pnpm build` (runs `tsc` + `tsc -p tsconfig.client.json` + `node scripts/build-client.mjs`), check `package.json` `exports` and `dsh.client`, `test -f lib/client.js`, `curl .../client.js` |
 | `EADDRINUSE ::3000` on `dsh web --port 0` | Old `MainThread` still holds `:3000`+`:3080` | `ss -tlnp | grep 3080` → pid, `kill <pid>` (same pid holds both), wait `ss` free. Never `pkill -f "dsh web"` — it kills the test shell. |
 | `uses .jsonl but backend is zstd` | Hand-written `session.jsonl` while backend is `zstd` | Use `zstd -c plain.jsonl > session.jsonl.zstd` or `JsonlSessionPersistence` API. Never hand-write opposite encoding — `listArtifacts` checks every project dir on boot and one stray file blocks all of `dsh web`. |
@@ -189,9 +189,9 @@ node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh
 ## Development
 
 ```sh
-pnpm --dir packages/dsh-maestro-supervisor verify
-pnpm --dir packages/dsh-maestro-supervisor test
-pnpm --dir packages/dsh-maestro-supervisor build
+pnpm --dir packages/dsh-maestro-core verify
+pnpm --dir packages/dsh-maestro-core test
+pnpm --dir packages/dsh-maestro-core build
 ```
 
 For daemon changes: `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` + corrupt `settings.json` → assert `report` + `rollback`.

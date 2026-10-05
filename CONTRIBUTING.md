@@ -1,10 +1,10 @@
-# Contributing to dsh-maestro-supervisor
+# Contributing to dsh-maestro-core
 
-Thank you for contributing to **dsh-maestro-supervisor** (`@ddtcorex/dsh-maestro-core`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
+Thank you for contributing to **dsh-maestro-core** (`@ddtcorex/dsh-maestro-core`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
 
 ## Getting Started
 
-1. **Fork and clone** `github.com/ddtcorex/dsh-maestro-supervisor`.
+1. **Fork and clone** `github.com/ddtcorex/dsh-maestro-core`.
 2. Install dependencies (requires Node.js 22+, pnpm 11+):
 
    ```bash
@@ -109,7 +109,7 @@ This project follows the [Contributor Covenant Code of Conduct](./CODE_OF_CONDUC
 
 - General questions: open a GitHub Discussion or issue.
 - Contact maintainer: [kaido4492@gmail.com](mailto:kaido4492@gmail.com)
-- Security vulnerabilities: use GitHub's private advisory reporting at `https://github.com/ddtcorex/dsh-maestro-supervisor/security/advisories` — do not file a public issue.
+- Security vulnerabilities: use GitHub's private advisory reporting at `https://github.com/ddtcorex/dsh-maestro-core/security/advisories` — do not file a public issue.
 
 ## License
 

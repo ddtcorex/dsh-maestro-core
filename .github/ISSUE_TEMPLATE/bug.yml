@@ -1,12 +1,12 @@
 name: Bug Report
-description: Report a reproducible bug in dsh-maestro-supervisor.
+description: Report a reproducible bug in dsh-maestro-core.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
         Before filing, please search existing issues to avoid duplicates.
-        For security vulnerabilities, use private reporting: https://github.com/ddtcorex/dsh-maestro-supervisor/security/advisories
+        For security vulnerabilities, use private reporting: https://github.com/ddtcorex/dsh-maestro-core/security/advisories
 
   - type: input
     id: version
