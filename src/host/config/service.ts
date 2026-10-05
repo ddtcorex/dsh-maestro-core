@@ -14,8 +14,8 @@ export interface MaestroConfigService {
 }
 
 /**
- * Thin facade over @ddtcorex/dsh-maestro-config-lib. `dshHome` defaults to the
- * lib's resolution (explicit > DSH_HOME env > ~/.dsh); tests inject a tmpdir.
+ * Thin facade over the embedded settings store (`../store`). `dshHome` defaults to the
+ * the store's resolution (explicit > DSH_HOME env > ~/.dsh); tests inject a tmpdir.
  */
 export function createMaestroConfigService(opts?: { dshHome?: string }): MaestroConfigService {
   const libOpts = opts?.dshHome ? { dshHome: opts.dshHome } : undefined
