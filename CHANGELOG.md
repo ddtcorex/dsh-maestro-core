@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: absorbed config-lib, config, guard and sync
+## [0.10.0] - 2026-10-05
 
 ### Changed
 

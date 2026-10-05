@@ -1,6 +1,6 @@
 {
   "name": "@ddtcorex/dsh-maestro-core",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Supervisor daemon for DSH Web resilience — auto-detect crashes, rollback to LKG, report",
   "license": "MIT",
   "repository": {
