@@ -6,14 +6,19 @@
 // scripts this replaces are gone rather than kept as three ways to produce one
 // artifact. react and the DSH platform modules stay external and resolve from
 // the host's module table at runtime.
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputPath = resolve(root, 'lib/client.js')
-const id = '@ddtcorex/dsh-maestro-core'
+// The loader id is the manifest name, read rather than written out. This script
+// is the one the sibling packages copied, and a copy that kept a written-out id
+// shipped that sibling's name instead of its own: the bundle registered under an
+// id the host never asked for, which drops the entry at boot with no error
+// naming the cause.
+const id = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')).name
 
 const result = await build({
   entryPoints: [resolve(root, 'src/client/index.tsx')],
