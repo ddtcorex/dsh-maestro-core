@@ -6,7 +6,7 @@ Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tre
 
 - **Daemon:** Polls `:3080` every 3s, keeps last-known-good (LKG) snapshots (`~/.dsh/.supervisor/lkg/`, `rotate 3`, `sha256` verify, `df` >500MB guard), auto-rollbacks on crash (`debounce 60s`, `flock` lock), writes `report-<ts>.md` (health + `git diff` + log tail), and notifies via Telegram (loose, never blocks).
 - **Host plugin:** `runAutoResume()` 8s after boot — `findInterrupted` (tail 100) + `findDanglingOpenTurns` (full scan for recent sessions) within `autoResumeWithin` (default 5m) → `agents.resume({resumeSessionId, agentOptions: {provider,model}})` recovered from `request/context` → `followup('continue')`. Loopback RPC `POST /dsh-maestro-supervisor-resume/{scan,resume}` (authority `loopback`) for the daemon (`resumeViaRpc`).
-- **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as `window.__ModuleLoader__.load` bundle at `/plugins/@ddtcorex/dsh-maestro-supervisor/client.js` via `dsh.client`.
+- **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as `window.__ModuleLoader__.load` bundle at `/plugins/@ddtcorex/dsh-maestro-core/client.js` via `dsh.client`.
 
 ## Modules
 
@@ -20,16 +20,16 @@ One package, four host rows and one client bundle.
 | Guard | `src/host/guard/` | `dsh-maestro-guard` | `/dsh-maestro-guard` | Rule classification, the approval gate and its journal |
 | Sync | `src/host/sync/` | `dsh-maestro-sync` | `/dsh-maestro-sync` | Backup, restore, retention GC and two-machine sync |
 
-Row `name`s for the absorbed modules are subpaths of this package (`@ddtcorex/dsh-maestro-supervisor/lib/<module>/index.js`), which is why `exports["./lib/*"]` exists: a row name the exports map cannot resolve is skipped silently at boot.
+Row `name`s for the absorbed modules are subpaths of this package (`@ddtcorex/dsh-maestro-core/lib/<module>/index.js`), which is why `exports["./lib/*"]` exists: a row name the exports map cannot resolve is skipped silently at boot.
 
-The store is also published on its own (`@ddtcorex/dsh-maestro-supervisor/store`) and can be vendored into a consumer with `scripts/vendor-store.mjs`, which writes one self-verifying file with a body hash.
+The store is also published on its own (`@ddtcorex/dsh-maestro-core/store`) and can be vendored into a consumer with `scripts/vendor-store.mjs`, which writes one self-verifying file with a body hash.
 
 ## Install
 
 One package, one command:
 
 ```bash
-dsh plugin --profile web add @ddtcorex/dsh-maestro-supervisor
+dsh plugin --profile web add @ddtcorex/dsh-maestro-core
 ```
 
 In a workspace checkout, build and link instead:
@@ -143,7 +143,7 @@ The daemon uses `resumeViaRpc()` (`supervisor.ts:24`) which POSTs the same envel
 ## Auto-Reload Details (Hybrid)
 
 - **Client** (`src/client/auto-reload.ts`, `lib/client.js` via `window.__ModuleLoader__.load`): `ctx.effect` hooks `WebSocket` (patches `window.WebSocket` to catch `close` for same-origin DSH ws), `offline`/`online`, `visibilitychange` → `setInterval(fetch HEAD / 1s)` when down → `200` → `location.reload()` (once, `reloading` guard). Also checks `HEAD /` on load in case the page was opened while down.
-- **Host** (`supervisor.ts` `pollHealth` 3s + `notify`, `plugin.ts` `runAutoResume`): health check + restart + notify is the host half; together with client polling they cover manual, supervisor, and systemd restarts without `F5`. No extra host push channel needed — client polling is primary, host health is secondary; the `window.__ModuleLoader__` bundle is served at `/plugins/@ddtcorex/dsh-maestro-supervisor/client.js` via `ClientModuleRegistry` (`dsh.client` + `exports["./client"]`).
+- **Host** (`supervisor.ts` `pollHealth` 3s + `notify`, `plugin.ts` `runAutoResume`): health check + restart + notify is the host half; together with client polling they cover manual, supervisor, and systemd restarts without `F5`. No extra host push channel needed — client polling is primary, host health is secondary; the `window.__ModuleLoader__` bundle is served at `/plugins/@ddtcorex/dsh-maestro-core/client.js` via `ClientModuleRegistry` (`dsh.client` + `exports["./client"]`).
 
 ## Verification
 
@@ -153,7 +153,7 @@ pnpm --dir packages/dsh-maestro-supervisor verify   # host + client
 pnpm --dir packages/dsh-maestro-supervisor test     # vitest run
 test -f packages/dsh-maestro-supervisor/lib/index.js
 test -f packages/dsh-maestro-supervisor/lib/client.js
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js | grep -c "window.location.reload"  # 2
+curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"  # 2
 
 # Live
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3080/  # 200

@@ -66,8 +66,8 @@ describe('core manifest', () => {
     let absorbed = 0
     for (const match of rows.matchAll(/^\s+name: '(.+)'$/gm)) {
       const name = match[1]
-      if (!name.startsWith('@ddtcorex/dsh-maestro-supervisor/')) continue
-      const subpath = name.slice('@ddtcorex/dsh-maestro-supervisor/'.length)
+      if (!name.startsWith('@ddtcorex/dsh-maestro-core/')) continue
+      const subpath = name.slice('@ddtcorex/dsh-maestro-core/'.length)
       expect(subpath, name).toMatch(/^lib\/.+\.js$/)
       absorbed += 1
     }

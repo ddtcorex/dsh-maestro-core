@@ -6,10 +6,10 @@
 #
 # The supervisor row auto-resumes interrupted sessions after a DSH web restart.
 # The standalone daemon (systemd) handles crash detection and web restart.
-# Install with `dsh plugin --profile web add @ddtcorex/dsh-maestro-supervisor`
+# Install with `dsh plugin --profile web add @ddtcorex/dsh-maestro-core`
 - insert:
     - id: maestro-supervisor
-      name: '@ddtcorex/dsh-maestro-supervisor'
+      name: '@ddtcorex/dsh-maestro-core'
       config:
         autoResumeWithin: 5
 
@@ -18,7 +18,7 @@
     # admit it: a name the exports map does not resolve is skipped silently at
     # boot. The name follows the package rename, not before it.
     - id: dsh-maestro-sync
-      name: '@ddtcorex/dsh-maestro-supervisor/lib/sync/index.js'
+      name: '@ddtcorex/dsh-maestro-core/lib/sync/index.js'
       channel: /dsh-maestro-sync
       # rpc.handle registers a webServer route inside an effect fiber
       # which carries only the row's inject (not the module's);
@@ -29,13 +29,13 @@
     # row only: guard exposes no rpc.handle today, it answers through the
     # harness approval prompt.
     - id: dsh-maestro-guard
-      name: '@ddtcorex/dsh-maestro-supervisor/lib/guard/index.js'
+      name: '@ddtcorex/dsh-maestro-core/lib/guard/index.js'
       channel: /dsh-maestro-guard
 
     # The Maestro settings card service over the shared namespaced store.
     # Same subpath name rule as the rows above.
     - id: maestro-config
-      name: '@ddtcorex/dsh-maestro-supervisor/lib/config/index.js'
+      name: '@ddtcorex/dsh-maestro-core/lib/config/index.js'
       # rpc.handle registers a webServer route inside an effect fiber which
       # carries only the row's inject (not the module's); without webServer
       # the row fails on harnesses that provide webServer after rows apply (DSH 0.1.5-rc.1+).

@@ -1,6 +1,6 @@
 # Contributing to dsh-maestro-supervisor
 
-Thank you for contributing to **dsh-maestro-supervisor** (`@ddtcorex/dsh-maestro-supervisor`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
+Thank you for contributing to **dsh-maestro-supervisor** (`@ddtcorex/dsh-maestro-core`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
 
 ## Getting Started
 
@@ -74,7 +74,7 @@ After touching the client bundle, verify on live DSH Web (`:3080`), not just cur
 
 ```bash
 curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'content-type: application/json' -d '{"type":"client-request","rpcId":"t","method":"scan","payload":{"withinMs":300000}}' | head -c 200
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js | grep -c "window.location.reload"  # 2
+curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"  # 2
 ```
 
 Do not claim verified/done/clean without having actually run the checks — be ready to paste exact command output in the PR.

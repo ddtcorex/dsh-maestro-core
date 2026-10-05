@@ -47,7 +47,7 @@ export function resolveDeepseekHarnessDir(): string {
 /**
  * Resolve this package's own directory (the one holding its package.json),
  * walking up from this file. Works from `src/host/` and from the built `lib/`,
- * and from an npm install under `node_modules/@ddtcorex/dsh-maestro-supervisor`
+ * and from an npm install under `node_modules/@ddtcorex/dsh-maestro-core`
  * — so no call site has to assume a workspace layout.
  */
 export function resolveSupervisorPackageDir(): string {
@@ -56,7 +56,7 @@ export function resolveSupervisorPackageDir(): string {
   for (let i = 0; i < 6; i++) {
     try {
       const pkg = path.join(dir, 'package.json')
-      if (fs.existsSync(pkg) && JSON.parse(fs.readFileSync(pkg, 'utf8')).name === '@ddtcorex/dsh-maestro-supervisor') {
+      if (fs.existsSync(pkg) && JSON.parse(fs.readFileSync(pkg, 'utf8')).name === '@ddtcorex/dsh-maestro-core') {
         return dir
       }
     } catch {}

@@ -1,10 +1,10 @@
-# AGENTS.md — dsh-maestro-core (published as `@ddtcorex/dsh-maestro-supervisor`)
+# AGENTS.md — dsh-maestro-core (published as `@ddtcorex/dsh-maestro-core`)
 
 > `CLAUDE.md` at the repo root is a symlink to `AGENTS.md`. Claude Code follows the same rule set as Codex CLI. Only edit `AGENTS.md` — never edit `CLAUDE.md` directly or replace the symlink with a copy.
 
 ## Purpose
 
-This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine, all shipped as one package with one client bundle. It still publishes under the name `@ddtcorex/dsh-maestro-supervisor` — the repository rename and the local directory move are a later step, and an installed profile has to keep resolving in the meantime. See `## Modules`.
+This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine, all shipped as one package with one client bundle. It still publishes under the name `@ddtcorex/dsh-maestro-core` — the repository rename and the local directory move are a later step, and an installed profile has to keep resolving in the meantime. See `## Modules`.
 
 Supervisor for DSH Web resilience — three cooperating layers:
 
@@ -12,7 +12,7 @@ Supervisor for DSH Web resilience — three cooperating layers:
 2. **In-tree host plugin** (`src/host/plugin.ts`, `src/host/resume.ts`, `src/host/supervisor.ts`): runs **inside** `dsh web` (needs `sessions`/`agents`/`connection` context the daemon cannot reach). Auto-resumes sessions interrupted within the configured window (default 5 minutes) by re-attaching the agent and sending `continue`.
 3. **In-tree client plugin** (`src/client/auto-reload.ts`): runs **in the browser**. Hybrid auto-reload — polls `HEAD /` when the server is down (offline/WebSocket close) and reloads as soon as `200`, plus host push via `runAutoResume` health recovery. Survives `dsh web` restarts without manual `F5`.
 
-Names by boundary: npm package `@ddtcorex/dsh-maestro-supervisor`; binary `dsh-web-supervisor`; Cordis row `maestro-supervisor`; RPC channel `/dsh-maestro-supervisor-resume` (loopback) and `/dsh-maestro-supervisor-reload` (client). The daemon itself is **not** a Cordis plugin — standalone daemon (Phase 1 Guard & Report of `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md`). The host+client plugins are the one deliberate in-tree exception — see `## Conventions`.
+Names by boundary: npm package `@ddtcorex/dsh-maestro-core`; binary `dsh-web-supervisor`; Cordis row `maestro-supervisor`; RPC channel `/dsh-maestro-supervisor-resume` (loopback) and `/dsh-maestro-supervisor-reload` (client). The daemon itself is **not** a Cordis plugin — standalone daemon (Phase 1 Guard & Report of `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md`). The host+client plugins are the one deliberate in-tree exception — see `## Conventions`.
 
 Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and Phase 3 (deterministic debug auto-fix — NO LLM — + Telegram + session resume).
 
@@ -88,7 +88,7 @@ One package, four host rows and one client bundle. The three absorbed repositori
 | `dsh-maestro-guard` | `src/host/guard/` | `/dsh-maestro-guard` | Channel declared by the row only; guard answers through the harness approval prompt, it registers no `rpc.handle` |
 | `maestro-config` | `src/host/config/` | `/dsh-maestro-config` | `inject: ['connection','webServer']`, `config: {}` |
 
-**Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-supervisor/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. When the package is renamed to `dsh-maestro-core`, the three subpath names change in the same commit.
+**Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. When the package is renamed to `dsh-maestro-core`, the three subpath names change in the same commit.
 
 ### Module: store (`src/host/store/`)
 
@@ -169,9 +169,9 @@ test -f packages/dsh-maestro-supervisor/lib/client.js
 ```sh
 # from any shell (profile is at ~/.dsh/profiles/web)
 # the package declares dsh.client automatically — no extra flag needed
-dsh plugin --profile web add @ddtcorex/dsh-maestro-supervisor
+dsh plugin --profile web add @ddtcorex/dsh-maestro-core
 # or manually: edit ~/.dsh/profiles/web/package.json
-# "@ddtcorex/dsh-maestro-supervisor": "link:<workspace-root>/packages/dsh-maestro-supervisor"
+# "@ddtcorex/dsh-maestro-core": "link:<workspace-root>/packages/dsh-maestro-supervisor"
 # then:
 pnpm --dir ~/.dsh/profiles/web install
 ```
@@ -179,9 +179,9 @@ pnpm --dir ~/.dsh/profiles/web install
 Verify the link:
 
 ```sh
-ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-supervisor  # → .../packages/dsh-maestro-supervisor
-cat ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-supervisor/package.json | grep -A2 '"version"'
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js | head -n 5  # window.__ModuleLoader__.load
+ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core  # → .../packages/dsh-maestro-supervisor
+cat ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core/package.json | grep -A2 '"version"'
+curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | head -n 5  # window.__ModuleLoader__.load
 ```
 
 **Critical pre-flight (AGENTS.md Conventions §2):** before adding to a live profile's `bundles`, `pnpm build` must succeed **and** a dry-boot on an ephemeral port with isolated `DSH_HOME` must pass:
@@ -306,7 +306,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 
 - `pnpm verify` + `pnpm test` green before any success claim (a suite needing `DSH_INTEGRATION=1` stays skipped by default). `test -f lib/index.js && test -f lib/client.js` after build.
 - For daemon changes, manual ephemeral check: `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` + corrupt `settings.json` → assert report + rollback within 10s.
-- For plugin changes, live check: `curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST ...` → `scanned`/`interrupted`, and `findDanglingOpenTurns` full scan finds subagent `b6487e33` within 5m. For client, `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js | grep -c "window.location.reload"` → 2, and after `kill` + restart, `fetch HEAD /` polling reloads the page without `F5`.
+- For plugin changes, live check: `curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST ...` → `scanned`/`interrupted`, and `findDanglingOpenTurns` full scan finds subagent `b6487e33` within 5m. For client, `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"` → 2, and after `kill` + restart, `fetch HEAD /` polling reloads the page without `F5`.
 - `pnpm --dir deepseek-harness dsh web --port 0` dry-boot must pass before adding to a live profile (see Conventions).
 
 ## Troubleshooting
@@ -321,7 +321,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 | `findDangling` returns 0 but subagent is still running (open `turn/start` at beginning) | Tail window too small (`tail -20`/`tail -100` misses far-back open turn) | Fixed in `63b7719`: `findDangling` now does **full scan** for recent sessions (mtime within window, 1-2 files) — not tail. `findInterrupted` stays tail 100 (interrupted closer is always at tail). |
 | `RESUME FAILED: loopback unavailable` or `resumed: []` | Activation failed: no `sessionController`, no `sessionPersistence`, no recoverable `provider`/`model`, the preset could not be composed, or the session was not found | Check the session's log exists under `~/.dsh/sessions/<project>/<id>/` (resolve the name with `resolveSessionLogPath`, e.g. `session.v4.jsonl.zstd` today) and `zstd -d -c ... \| head -n 1` is a valid header, then `~/.dsh/.supervisor/resume.log.jsonl` for the journal entry (`resume-failed` names the reason). A routeless session is skipped on purpose rather than continued into a persona failure; a `setup` failure (`agent preset ... could not be composed`) aborts the session so it is never continued without its tools. |
 | `RESUME SKIPPED: no interrupted sessions could be re-attached` | No session within `autoResumeWithin` window or all filtered by `sinceMs` | Increase `autoResumeWithin` (e.g. `10` or `"10m"`), check `~/.dsh/.supervisor/config.json` and `DSH_SUPERVISOR_RESUME_WITHIN` env, verify `findDangling` with `withinMs: 60*60*1000` finds it. |
-| Page does not reload after `dsh web` restart | Client `lib/client.js` not served (missing `exports` or not built) or browser cache | `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js \| grep -c "window.location.reload"` → 2, hard refresh `Ctrl+Shift+R`, check `window.__ModuleLoader__` in devtools console. Client polls `HEAD /` 1s on `offline`/`WebSocket close` — it needs `dsh.client` to be loaded. |
+| Page does not reload after `dsh web` restart | Client `lib/client.js` not served (missing `exports` or not built) or browser cache | `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js \| grep -c "window.location.reload"` → 2, hard refresh `Ctrl+Shift+R`, check `window.__ModuleLoader__` in devtools console. Client polls `HEAD /` 1s on `offline`/`WebSocket close` — it needs `dsh.client` to be loaded. |
 | `dangling` found but `agents.get` says already live (skip) | Session is still live in current process (not a crash) | `findDangling` is only safe right after fresh boot when `dsh web` is sole owner. `resumeInterrupted` additionally checks `agents.get(sessionId)` and skips if live — this is correct, not a bug. Wait for next boot. |
 | Daemon `reports` not written or `lkg` not rotated | `df` guard (<500MB) or `flock` on `~/.dsh/.supervisor/lock` failed | Check `df -h ~/.dsh`, `ls -l ~/.dsh/.supervisor/lkg/`, `cat ~/.dsh/.supervisor/supervisor.log`, `ls -l ~/.dsh/.supervisor/lock`. Daemon never blocks on notifier, but `writeLKG` is throttled to 1 per 5m. |
 | Tests fail with `zstd: command not found` | `zstd` not installed | `sudo apt install zstd` (or `brew install zstd`). Tests skip zstd suites if unavailable, but live `findDangling` needs it. |
