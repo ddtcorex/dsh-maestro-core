@@ -19,7 +19,29 @@ const EMPTY_DOC: SettingsDoc = { version: 1, domains: {} }
 const domainValidators = new Map<string, DomainValidator>()
 const changeCbs = new Set<(domain: string) => void>()
 
-let cached: { key: string; doc: SettingsDoc; mtimeMs: number } | null = null
+/**
+ * Identity of the settings file a cached document was read from. mtime alone is
+ * not enough: two copies writing within one filesystem timestamp tick, or an
+ * editor that restores the mtime, would leave a stale document in the cache.
+ * Every store write is a temp file + rename, so a changed inode is the reliable
+ * signal; size catches an in-place edit that kept the mtime.
+ */
+interface FileSig { mtimeMs: number; ino: number; size: number }
+
+let cached: { key: string; doc: SettingsDoc; sig: FileSig | null } | null = null
+
+async function fileSig(path: string): Promise<FileSig | null> {
+  try {
+    const st = await stat(path)
+    return { mtimeMs: st.mtimeMs, ino: st.ino, size: st.size }
+  } catch {
+    return null
+  }
+}
+
+function sameSig(a: FileSig | null, b: FileSig | null): boolean {
+  return a !== null && b !== null && a.mtimeMs === b.mtimeMs && a.ino === b.ino && a.size === b.size
+}
 
 function resolveDshHome(explicit?: string): string {
   return explicit ?? process.env.DSH_HOME ?? join(homedir(), '.dsh')
@@ -249,17 +271,12 @@ export async function load(opts?: { dshHome?: string }): Promise<SettingsDoc> {
   if (cached && cached.key === homeKey) {
     // One stat per load: out-of-band edits (other processes) must surface
     // without a restart.
-    try {
-      const st = await stat(path)
-      if (st.mtimeMs === cached.mtimeMs) return cached.doc
-    } catch {
-      return cached.doc // stat failed (vanished/locked) — serve stale, never break boot
-    }
+    const now = await fileSig(path)
+    if (now === null) return cached.doc // stat failed (vanished/locked) — serve stale, never break boot
+    if (sameSig(now, cached.sig)) return cached.doc
   }
   const doc = await readDoc(path)
-  let mtimeMs = 0
-  try { mtimeMs = (await stat(path)).mtimeMs } catch {}
-  cached = { key: homeKey, doc, mtimeMs }
+  cached = { key: homeKey, doc, sig: await fileSig(path) }
   return doc
 }
 
@@ -287,9 +304,7 @@ export async function set(
     doc.domains[domain] = merged
     written = merged
     await writeDocLocked(path, doc)
-    let mtimeMs = 0
-    try { mtimeMs = (await stat(path)).mtimeMs } catch {}
-    cached = { key, doc, mtimeMs }
+    cached = { key, doc, sig: await fileSig(path) }
   })
   // Refresh the watched copy first so the watcher sees no diff for this write.
   if (watchedHome === key) snapshot[domain] = JSON.stringify(written) ?? 'undefined'
@@ -330,9 +345,7 @@ export async function unset(
     doc.domains[domain] = next
     written = next
     await writeDocLocked(path, doc)
-    let mtimeMs = 0
-    try { mtimeMs = (await stat(path)).mtimeMs } catch {}
-    cached = { key: homeKey, doc, mtimeMs }
+    cached = { key: homeKey, doc, sig: await fileSig(path) }
     return true
   })
   if (deleted) {
