@@ -12,7 +12,7 @@ Supervisor for DSH Web resilience — three cooperating layers:
 2. **In-tree host plugin** (`src/host/plugin.ts`, `src/host/resume.ts`, `src/host/supervisor.ts`): runs **inside** `dsh web` (needs `sessions`/`agents`/`connection` context the daemon cannot reach). Auto-resumes sessions interrupted within the configured window (default 5 minutes) by re-attaching the agent and sending `continue`.
 3. **In-tree client plugin** (`src/client/auto-reload.ts`): runs **in the browser**. Hybrid auto-reload — polls `HEAD /` when the server is down (offline/WebSocket close) and reloads as soon as `200`, plus host push via `runAutoResume` health recovery. Survives `dsh web` restarts without manual `F5`.
 
-Names by boundary: npm package `@ddtcorex/dsh-maestro-core`; binary `dsh-web-supervisor`; Cordis row `maestro-supervisor`; RPC channel `/dsh-maestro-supervisor-resume` (loopback) and `/dsh-maestro-supervisor-reload` (client). The daemon itself is **not** a Cordis plugin — standalone daemon (Phase 1 Guard & Report of `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md`). The host+client plugins are the one deliberate in-tree exception — see `## Conventions`.
+Names by boundary: npm package `@ddtcorex/dsh-maestro-core`; binary `dsh-web-supervisor`; Cordis row `maestro-supervisor`; RPC channel `/dsh-maestro-supervisor-resume` (reachable from loopback). The daemon itself is **not** a Cordis plugin, it is a standalone daemon (see `<workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md`). The host+client plugins are the one deliberate in-tree exception — see `## Conventions`.
 
 Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and Phase 3 (deterministic debug auto-fix — NO LLM — + Telegram + session resume).
 
@@ -46,7 +46,7 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 
 ## Layout
 
-- `src/host/index.ts` — CLI entry (`daemon|status|logs|rollback`)
+- `src/host/index.ts` — CLI entry (`daemon|status|resume|boot-guard`, plus `--help`)
 - `src/host/cli.ts` — argument parsing and command dispatch
 - `src/host/bin.ts` — daemon binary entry (`dsh-web-supervisor`), wires `Supervisor` and starts poll loop
 - `src/host/paths.ts` — shared `~/.dsh/.supervisor/**` path helpers (LKG, failed, reports, lock, config) + `resolveSupervisorPackageDir()` (walks up from this file to the package root, so `src/host/` and the built `lib/` both resolve it)
@@ -79,11 +79,11 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 
 ## Modules
 
-One package, four host rows and one client bundle. The three absorbed repositories keep their history, their `docs/history/<name>.md` changelog and their own tests under `tests/<name>/`.
+One package, four host rows and one client bundle. The four absorbed repositories keep their history, their `docs/history/<name>.md` changelog and their own tests under `tests/<name>/`.
 
 | Row id | Source | Channel | Notes |
 |---|---|---|---|
-| `maestro-supervisor` | `src/host/*.ts` | `/dsh-maestro-supervisor-resume` (loopback) | `name` is the package root; `config.autoResumeWithin: 5` |
+| `maestro-supervisor` | `src/host/*.ts` | `/dsh-maestro-supervisor-resume` (loopback-reachable) | `name` is the package root; `config.autoResumeWithin: 5` |
 | `dsh-maestro-sync` | `src/host/sync/` | `/dsh-maestro-sync` | `inject: ['tools','connection','webServer']` |
 | `dsh-maestro-guard` | `src/host/guard/` | `/dsh-maestro-guard` | Channel declared by the row only; guard answers through the harness approval prompt, it registers no `rpc.handle` |
 | `maestro-config` | `src/host/config/` | `/dsh-maestro-config` | `inject: ['connection','webServer']`, `config: {}` |
@@ -99,7 +99,7 @@ The namespaced settings document at `<DSH_HOME>/dsh-maestro-config/settings.json
 - **`onChange(cb)` fires for writes made by ANOTHER copy.** Because every plugin embeds its own copy, a listener must also hear a write that went through a different instance (or another process). While at least one listener exists the copy watches the file (`fs.watch`, debounced 50ms) and polls every 2s as a backstop; `checkExternal()` compares a JSON fingerprint per domain and fires once per changed or removed domain. `set()`/`unset()` refresh the fingerprint **before** firing their callbacks, so a local write never fires twice. The disposer is idempotent and the last one stops the watcher.
 - The watcher resolves `DSH_HOME` when it starts. A store pinned to an explicit `dshHome` opts out of notification and never fires.
 - `resetForTests()` stops the watcher and drops listeners.
-- The store's thrown messages still carry the `config-lib:` prefix. That is a retired package name kept on purpose: consumers match on the text, and renaming a prefix that shipped is a breaking change, not a cleanup.
+- The store's thrown messages still carry the `config-lib:` prefix. That is the name of a retired package, kept on purpose: consumers match on the text, and renaming a prefix that shipped is a breaking change, not a cleanup.
 
 ### Module: config (`src/host/config/`)
 
@@ -119,7 +119,7 @@ Backup, restore and retention GC over S3 or SSH, plus the `Maestro Sync` setting
 node scripts/vendor-store.mjs <consumer-package-dir>   # writes src/host/vendor/store.ts
 ```
 
-The consumer's import becomes `./vendor/store.js` and its `config-lib` dependency goes away. A drift test calls `verifyVendored(file, <core>/src/host/store)`: the header hash catches a hand edit, the source comparison catches a copy generated from an older core store.
+The consumer's import becomes `./vendor/store.js` and its dependency on a published settings library goes away. A drift test calls `verifyVendored(file, <core>/src/host/store)`: the header hash catches a hand edit, the source comparison catches a copy generated from an older core store.
 
 ## Configuration
 
@@ -128,7 +128,7 @@ All times are **minutes** when given as `number` (e.g. `5` → 5 minutes). Strin
 1. **Cordis config** (`cordis.patch.yml` `config:` block or `apply(ctx, config)` argument) — explicit per-install, wins over everything.
 2. **Env** `DSH_SUPERVISOR_AUTO_RESUME` (`1`/`true`/`yes`/`on`/`enabled` vs `0`/`false`/`no`/`off`/`disabled`), `DSH_SUPERVISOR_RESUME_WITHIN` (`5`, `5m`, `30s`, … — bare digits in env are minutes for ergonomics), `DSH_SUPERVISOR_RESUME_CORE_TOOL_POLICY` (`warn`/`park`) and `DSH_SUPERVISOR_RESUME_AUTO_REPAIR` (`1`/`true`/`yes`/`on` vs `0`/`false`/`no`/`off`).
 3. **Supervisor config** `~/.dsh/.supervisor/config.json` (`autoResumeEnabled`/`autoResume`, `autoResumeWithin`/`resumeWithin` — number is minutes, string is duration).
-4. **Maestro settings** `~/.dsh/maestro/settings.json` (`domains.supervisor.autoResumeEnabled`, `supervisor.autoResumeEnabled`, `domains.supervisor.autoResumeWithin`, `domains.supervisor.resumeCoreToolPolicy`, `domains.supervisor.resumeAutoRepair`, … — same types).
+4. **Maestro settings** `~/.dsh/dsh-maestro-config/settings.json` (`domains.supervisor.autoResumeEnabled`, `supervisor.autoResumeEnabled`, `domains.supervisor.autoResumeWithin`, `domains.supervisor.resumeCoreToolPolicy`, `domains.supervisor.resumeAutoRepair`, … — same types).
 5. **Default:** `autoResumeEnabled: true`, `autoResumeWithin: 5` (5 minutes), `resumeCoreToolPolicy: warn`, `resumeAutoRepair: true`.
 
 | Key | Type | Default | Env | File | Notes |
@@ -193,7 +193,7 @@ DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &  # or --por
 # See dsh-safe-restart skill for the guarded helper: skills/dsh-safe-restart/scripts/restart-dsh-web.sh
 ```
 
-This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/index.js`, stale `link:`). See `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md`.
+This exact failure class caused `dsh web` outages on 2026-08-27 (missing `lib/index.js`, stale `link:`). See `<workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md`.
 
 ### 3. Systemd daemon (optional, for crash detection outside the tree)
 
@@ -212,7 +212,8 @@ To run without systemd (foreground, for debugging):
 ```sh
 node packages/dsh-maestro-core/lib/index.js daemon   # poll every 3s
 node packages/dsh-maestro-core/lib/index.js status
-node packages/dsh-maestro-core/lib/index.js logs --tail 50
+node packages/dsh-maestro-core/lib/index.js resume --within 5m   # list interrupted sessions
+node packages/dsh-maestro-core/lib/index.js boot-guard acquire|release --pid <pid>   # used by the safe-restart script
 ```
 
 ### 4. Verify after install
@@ -339,15 +340,13 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 - **Subagent resume needs full scan:** Before `63b7719`, `findDangling` used `tail -20`/`tail -100`, missing subagent `b6487e33` whose only `turn/start` was at seq 6 at the very beginning of a 1906-line log. Fixed by full scan for recent sessions (mtime within window). If you add a new scan variant, reuse `readSessionAllLines` with mtime pre-filter, not a new tail.
 - **Session log names are generation-numbered — never enumerate them.** The harness writes the log as `session.jsonl[.zstd]` (generation 0) or `session.v<N>.jsonl[.zstd]`, chosen by `generationLogFilename(version, compression)` with an unbounded `N`. A literal list of names goes blind the moment the harness bumps the generation, and it fails SILENTLY — the scan simply reports "no session". It happened twice: v3 on 2026-09-11 (auto-resume found nothing after a restart, fixed by adding v3 to the list) and v4 on 2026-09-23 (`findInterrupted` reported `0/418` interrupted while an interrupted session sat in the tree, the boot pre-flight had zero files to classify, and `resolveSessionPresetId` read no header — 27 of 418 session dirs were invisible). The durable fix is `resolveSessionLogPath()` in `src/host/session-log-file.ts`, which PARSES the generation and picks the newest: every caller (`resume.ts`, `session-health.ts`, `plugin.ts`, `preset.ts`) resolves through it. When adding a caller, resolve — do not list.
 - **Manual `session.jsonl` vs `zstd`:** Hand-writing `session.jsonl` when the backend is `zstd` crashes the entire `dsh web` at `workspace` init (`encodingMismatch`). Always use the backend's `zstd` path and header (`type: session`) or the `dsh` CLI to create sessions. The workspace `listArtifacts` checks every project dir for opposite-encoding files on every boot — one stray file blocks all of `dsh web`.
-- **Port pair `3000`/`3080`:** One `MainThread` holds both. Killing only the `3080` pid via `ss -tlnp` must also free `3000` (same pid). `pkill -f "dsh web"` matches the test shell itself — use `ss -tlnp | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | xargs kill` instead.
+- **Port map:** `:3080` is the LAN proxy (PIN login), `:3081` the public proxy, `:3082` the raw `dsh web` webserver; `:3000` is unbound. Inspect owners with `ss -tlnp`, and never kill the process serving a live session. `pkill -f "dsh web"` matches the invoking shell itself, so never use it.
 - **Client `lib/client.js` must be `window.__ModuleLoader__.load`:** Plain `export function apply` from `tsc` is not enough; `scripts/build-client.mjs` wraps `.client-build` into the loader shape. If you add a new client file, add it under `src/client/` and ensure `tsconfig.client.json` includes it, then `pnpm build` (which runs the wrapper).
-- **Config precedence is subtle:** `cordis.patch.yml` `config:` wins over env, which wins over `config.json`, which wins over `settings.json`. A bare `5` in `DSH_SUPERVISOR_RESUME_WITHIN` means 5 minutes (env ergonomics), not 5ms. See `plugin.ts:71` and `supervisor.ts:82`.
+- **Config precedence is subtle:** `cordis.patch.yml` `config:` wins over env, which wins over `config.json`, which wins over `settings.json`. A bare `5` in `DSH_SUPERVISOR_RESUME_WITHIN` means 5 minutes (env ergonomics), not 5ms. See `getAutoResumeEnabled()` and `getResumeWithinMs()` in `plugin.ts` and `supervisor.ts`.
 - **Live check needs `zstd`:** `findDangling`/`findInterrupted` decompress via `zstd -d -c ... | tail`. Without `zstd`, tests skip but live resume will fail to find sessions. Install `zstd`.
 
 ## See Also
 
-- Spec: `<workspace-root>/docs/specs/2026-08-27-dsh-web-resilience-design.md` (Maestro Harness workspace, Granularization hybrid)
+- Spec: `<workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md` (Maestro Harness workspace)
 - Skill: `skills/dsh-safe-restart/` (guarded `restart-dsh-web.sh` with `dry_boot_and_verify()` and `--auto`, ephemeral `DSH_HOME`, `ss -tlnp` pid resolution)
-- Plan: `<workspace-root>/docs/plans/2026-08-27-dsh-web-resilience-phase1.md` (transient, deleted after ship)
 - Client bundling: `dsh-maestro-mobile` (`scripts/build-client.mjs` pattern, `window.__ModuleLoader__.load`)
-- Reports: `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md` (load-time failure class)
