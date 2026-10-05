@@ -42,7 +42,7 @@ export interface SupervisorDeps {
   bootGraceMs?: number
   getTime?: () => number
   // Checks the dsh-safe-web-update marker (see
-  // docs/specs/2026-08-28-supervisor-planned-restart-design.md): a down poll
+  // <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md): a down poll
   // while this resolves true is an intentional restart in progress, not a
   // crash — skip rollback/restartWeb entirely rather than racing it.
   isPlannedRestartActive?: () => boolean | Promise<boolean>

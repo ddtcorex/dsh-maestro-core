@@ -56,7 +56,7 @@ export function isSelfCopyError(message: string): boolean {
 }
 
 // Coordination contract with dsh-safe-web-update's restart-dsh-web.sh (see
-// <workspace-root>/docs/specs/2026-08-28-supervisor-planned-restart-design.md):
+// <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md):
 // that script writes this marker right before it intentionally takes dsh-web
 // down, so the supervisor's own health poll does not mistake a deliberate
 // restart (kill -> dry-boot -> relaunch, up to ~130s) for a crash and race it
