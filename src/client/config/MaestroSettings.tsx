@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Maestro Settings — DSH-native redesign.
  * Reuses DeepSeek Harness design tokens & primitive geometry maximally:
@@ -184,116 +183,6 @@ function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement> & { icon?
   )
 }
 
-// DSH DisclosureRow — 24px row, 14px glyph, hover chevron swap, same semantics as host
-function DisclosureRow({
-  icon,
-  title,
-  caption,
-  open,
-  expandable,
-  onToggle,
-  children,
-}: {
-  icon: unknown
-  title: string
-  caption?: string
-  open: boolean
-  expandable: boolean
-  onToggle: () => void
-  children?: unknown
-}) {
-  const rowExpands = expandable
-  return h(
-    'div',
-    { style: { display: 'flex', flexDirection: 'column', width: '100%', minWidth: 0 } },
-    h(
-      'div',
-      {
-        role: rowExpands ? 'button' : undefined,
-        tabIndex: rowExpands ? 0 : undefined,
-        'aria-expanded': rowExpands ? open : undefined,
-        onClick: rowExpands ? onToggle : undefined,
-        onKeyDown: rowExpands
-          ? (e: any) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                onToggle()
-              }
-            }
-          : undefined,
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          minHeight: 40,
-          padding: '8px 10px',
-          borderRadius: 12,
-          cursor: rowExpands ? 'pointer' : 'default',
-          background: open ? 'var(--dsw-specific-sidebar-nav-item-active)' : 'transparent',
-          border: `1px solid ${open ? t.borderL2 : 'transparent'}`,
-          boxSizing: 'border-box' as const,
-        },
-        onMouseEnter: (e: any) => {
-          if (!open) (e.currentTarget as HTMLElement).style.background = 'var(--dsw-specific-sidebar-nav-item-hover)'
-        },
-        onMouseLeave: (e: any) => {
-          if (!open) (e.currentTarget as HTMLElement).style.background = 'transparent'
-        },
-      },
-      expandable
-        ? h(
-            'button',
-            {
-              type: 'button',
-              'aria-expanded': open,
-              onClick: (e: any) => {
-                e.stopPropagation()
-                onToggle()
-              },
-              style: {
-                flex: 'none',
-                width: 20,
-                height: 20,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                color: t.labelTertiary,
-                padding: 0,
-              },
-            },
-            open
-              ? h('span', { style: { fontSize: 12, lineHeight: 1 } }, '▾')
-              : h('span', { style: { fontSize: 12, lineHeight: 1 } }, '▸'),
-          )
-        : h('span', { style: { width: 20, display: 'inline-flex', justifyContent: 'center', color: t.labelTertiary, flex: 'none' } }, icon as any),
-      h('span', { style: { flex: 1, minWidth: 0 } },
-        h('span', { style: { display: 'block', fontSize: 14, lineHeight: '20px', fontWeight: 500, color: t.labelPrimary } }, title),
-        caption ? h('span', { style: { display: 'block', fontSize: 12, lineHeight: '16px', color: t.labelSecondary, marginTop: 1 } }, caption) : null,
-      ),
-      !open && expandable
-        ? h('span', { style: { color: t.labelTertiary, fontSize: 12 } }, '›')
-        : null,
-    ),
-    open ? h('div', { style: { padding: '10px 0 14px 30px', display: 'flex', flexDirection: 'column', gap: 10 } }, children as any) : null,
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Shared field helpers — DSH-native label / caption rhythm
-// ---------------------------------------------------------------------------
-const fieldLabelStyle: Record<string, string> = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-  fontSize: '12px',
-  lineHeight: '16px',
-  fontWeight: '500',
-  color: t.labelSecondary as string,
-  margin: '12px 0 0',
-}
 const captionStyle: Record<string, string> = {
   fontSize: '12px',
   lineHeight: '16px',
@@ -340,23 +229,6 @@ const rowDescStyle: Record<string, string> = {
   fontWeight: '400',
   lineHeight: '18px',
   color: t.labelTertiary as string,
-}
-// Pill selector — same as LanguageRow/EnterBehaviorRow: h36 r18 bg-module-platform
-const pillSelectorStyle: Record<string, string> = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '12px',
-  height: '36px',
-  padding: '0 14px',
-  border: 'none',
-  borderRadius: '18px',
-  background: 'var(--dsw-alias-bg-module-platform, #F5F6F7)',
-  font: 'inherit',
-  fontSize: '14px',
-  lineHeight: '22px',
-  color: t.labelPrimary as string,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
 }
 function SettingRow({ title, description, control }: { title: string; description?: string; control: unknown }) {
   return h(
@@ -483,15 +355,6 @@ function ListEditor({ values, placeholder, onCommit, ariaLabel, emptyHint }: { v
   )
 }
 
-function ToggleField({ label, caption, checked, onChange }: { label: string; caption?: string; checked?: boolean; onChange: (v: boolean) => void }) {
-  return h(
-    'label',
-    { style: { display: 'flex', alignItems: 'flex-start', gap: 10, margin: '8px 0', cursor: 'pointer' } },
-    h('input', { type: 'checkbox', checked: checked === true, onChange: (e: any) => onChange(e.target.checked), style: { marginTop: 4, width: 16, height: 16, accentColor: t.primaryFill as string } }),
-    h('span', null, h('div', { style: { fontSize: 13, color: t.labelPrimary as string, lineHeight: '18px' } }, label), caption ? h('div', { style: captionStyle }, caption) : null),
-  )
-}
-
 export function MaestroSettingsTab({ configRpcCall, supervisorRpcCall }: { configRpcCall?: any; supervisorRpcCall?: any }) {
   const [guard, setGuard] = useState<any>({})
   const [patterns, setPatterns] = useState<string[]>([])
@@ -502,6 +365,10 @@ export function MaestroSettingsTab({ configRpcCall, supervisorRpcCall }: { confi
   const [supervisorStatus, setSupervisorStatus] = useState<any>(null)
   const [supervisorCfg, setSupervisorCfg] = useState<any>({})
   const [activeTab, setActiveTab] = useState('guard')
+  // Every save in this tab reports its failure here, and the render reads it
+  // back. The declaration is load-bearing: without it the render raises
+  // `ReferenceError` and the whole section mounts empty.
+  const [error, setError] = useState<string | null>(null)
   // Mobile: inject responsive overrides once (mirrors dsh-maestro-mobile settings-sheet pill pattern + market catsWrap)
   useEffect(() => {
     const css = `
