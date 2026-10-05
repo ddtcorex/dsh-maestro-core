@@ -8,7 +8,7 @@
  * a session records, how to compose it on a fresh agent context, and whether a
  * live agent is actually joined to one — the roster's own answer
  * (`agentPresets.composedPreset`), never a tool count.
- * @module @ddtcorex/dsh-maestro-supervisor/preset
+ * @module @ddtcorex/dsh-maestro-core/preset
  */
 
 import * as fs from 'node:fs'

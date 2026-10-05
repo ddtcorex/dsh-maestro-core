@@ -1,5 +1,5 @@
 /**
- * dsh-maestro-supervisor — host plugin for auto-resume inside DSH web.
+ * dsh-maestro-core — host plugin for auto-resume inside DSH web.
  * Runs inside the DSH host process (outside the daemon's tree) and
  * auto-resumes sessions interrupted within the configured window after
  * a restart. The standalone daemon (systemd) handles crash detection

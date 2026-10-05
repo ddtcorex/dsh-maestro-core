@@ -7,7 +7,7 @@
  * (2026-09-14), so `registry: 'unreachable'` is part of the result rather than
  * an empty list. Composition questions are answered by the preset roster
  * (`agentPresets.composedPreset`), never by a tool count.
- * @module @ddtcorex/dsh-maestro-supervisor/tool-view
+ * @module @ddtcorex/dsh-maestro-core/tool-view
  */
 
 /** Core tools a resumed session must resolve; the probe reports each one it does not. */

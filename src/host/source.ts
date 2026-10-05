@@ -16,4 +16,4 @@
  * site and tracked as a follow-up in
  * `docs/specs/2026-09-28-cross-repo-upstream-v4-lessons-design.md`.
  */
-export const SUPERVISOR_SOURCE_KIND = 'plugin:@ddtcorex/dsh-maestro-supervisor'
+export const SUPERVISOR_SOURCE_KIND = 'plugin:@ddtcorex/dsh-maestro-core'

@@ -13,7 +13,7 @@ import { build } from 'esbuild'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outputPath = resolve(root, 'lib/client.js')
-const id = '@ddtcorex/dsh-maestro-supervisor'
+const id = '@ddtcorex/dsh-maestro-core'
 
 const result = await build({
   entryPoints: [resolve(root, 'src/client/index.tsx')],

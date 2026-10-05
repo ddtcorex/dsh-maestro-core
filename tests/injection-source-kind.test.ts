@@ -10,7 +10,7 @@ import { warnCoreToolLoss } from '../src/host/resume-tools.js'
 // A bare 'plugin' is not an option: session format v4 rejects it outright.
 describe('supervisor message attribution', () => {
   it('has a producer-owned kind and never claims a human prompt', () => {
-    expect(SUPERVISOR_SOURCE_KIND).toBe('plugin:@ddtcorex/dsh-maestro-supervisor')
+    expect(SUPERVISOR_SOURCE_KIND).toBe('plugin:@ddtcorex/dsh-maestro-core')
     expect(SUPERVISOR_SOURCE_KIND).not.toBe('user')
     expect(SUPERVISOR_SOURCE_KIND).not.toBe('plugin')
 

@@ -1,10 +1,10 @@
-# Contributing to dsh-maestro-supervisor
+# Contributing to dsh-maestro-core
 
-Thank you for contributing to **dsh-maestro-supervisor** (`@ddtcorex/dsh-maestro-supervisor`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
+Thank you for contributing to **dsh-maestro-core** (`@ddtcorex/dsh-maestro-core`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
 
 ## Getting Started
 
-1. **Fork and clone** `github.com/ddtcorex/dsh-maestro-supervisor`.
+1. **Fork and clone** `github.com/ddtcorex/dsh-maestro-core`.
 2. Install dependencies (requires Node.js 22+, pnpm 11+):
 
    ```bash
@@ -74,7 +74,7 @@ After touching the client bundle, verify on live DSH Web (`:3080`), not just cur
 
 ```bash
 curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'content-type: application/json' -d '{"type":"client-request","rpcId":"t","method":"scan","payload":{"withinMs":300000}}' | head -c 200
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-supervisor/client.js | grep -c "window.location.reload"  # 2
+curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"  # 2
 ```
 
 Do not claim verified/done/clean without having actually run the checks — be ready to paste exact command output in the PR.
@@ -109,7 +109,7 @@ This project follows the [Contributor Covenant Code of Conduct](./CODE_OF_CONDUC
 
 - General questions: open a GitHub Discussion or issue.
 - Contact maintainer: [kaido4492@gmail.com](mailto:kaido4492@gmail.com)
-- Security vulnerabilities: use GitHub's private advisory reporting at `https://github.com/ddtcorex/dsh-maestro-supervisor/security/advisories` — do not file a public issue.
+- Security vulnerabilities: use GitHub's private advisory reporting at `https://github.com/ddtcorex/dsh-maestro-core/security/advisories` — do not file a public issue.
 
 ## License
 
