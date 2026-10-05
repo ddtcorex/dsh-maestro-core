@@ -23,7 +23,8 @@ export interface SnapshotDeps {
 }
 
 /**
- * DSH-home entries the last-known-good snapshot deliberately never copies.
+ * Entries under the harness home directory that the last-known-good snapshot
+ * deliberately never copies.
  *
  * The LKG exists to recover a boot that fails while loading the plugin tree, so
  * it holds boot **configuration**: `profiles/` (the plugin tree with its
@@ -53,7 +54,7 @@ export const LKG_EXCLUDED_ENTRIES: readonly string[] = [
 ]
 
 /**
- * True when a DSH-home-relative path must never enter (or leave) the LKG.
+ * True when a path relative to the harness home must never enter (or leave) the LKG.
  *
  * The named entries match the first path segment; `*.log` matches by basename
  * anywhere, because append-only logs are data at any depth and a restored stale
