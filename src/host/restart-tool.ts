@@ -300,12 +300,20 @@ export function registerRestartTool(ctx: any, deps: {
   const doRead = deps.readRestartRequest ?? readRestartRequest
   const doSessionId = deps.sessionIdOf ?? currentSessionId
   const readDaemonState = deps.daemonState ?? supervisorDaemonState
+  // `tools` is resolved through ctx.get rather than read off ctx directly.
+  // A declared `inject` entry blocks the whole plugin's activation until that
+  // service exists, and 'tools' was one of the five that delayed the boot
+  // resume scan by minutes on a real host (measured 2026-10-05: 343s). The
+  // lookup below works from an already-activated plugin, so the tool can
+  // register as soon as `tools` exists without the scan waiting for it.
+  const tools: any = (ctx.get?.('tools') as any) ?? ctx.tools
   let dispose: (() => void) | undefined
   let disposeDryboot: (() => void) | undefined
   let disposeGc: (() => void) | undefined
   let disposeStatus: (() => void) | undefined
   try {
-    dispose = ctx.tools.register({
+    if (typeof tools?.register !== 'function') throw new Error('tools service unavailable')
+    dispose = tools.register({
       name: 'dsh_web_restart',
       description: 'Schedule a safe restart of the dsh web host: dry-boots the plugin tree when it changed, records an intent for the calling session, and hands the swap to the supervisor daemon (out-of-band — it never restarts in-tree). Returns immediately; the swap lands ~1-5 min later and kills the calling turn, so call this as the LAST action of the turn and verify with dsh_web_restart_status in the NEXT one (never sleep here). Do not call dsh_web_dryboot first — this tool already dry-boots. The result carries the supervisor daemon verdict: a "stale" line means run its `kill -TERM <pid>` before the swap lands.',
       parameters: {
@@ -373,7 +381,7 @@ export function registerRestartTool(ctx: any, deps: {
     try { ctx.logger?.warn?.(`[supervisor] dsh_web_restart tool failed: ${e?.message ?? String(e)}`) } catch {}
   }
   try {
-    disposeDryboot = ctx.tools.register({
+    disposeDryboot = tools.register({
       name: 'dsh_web_dryboot',
       description: 'Validate the plugin tree by booting a copy of the live profile on an ephemeral port. Never schedules or performs a restart; temp home removed afterwards.',
       parameters: {
@@ -398,7 +406,7 @@ export function registerRestartTool(ctx: any, deps: {
   }
   try {
     const doKill = deps.killPid ?? ((pid: number, sig: string) => process.kill(pid, sig as NodeJS.Signals))
-    disposeGc = ctx.tools.register({
+    disposeGc = tools.register({
       name: 'dsh_web_gc',
       description: 'Reap orphaned dry-boot dsh web processes (temp DSH_HOME + ephemeral port). Preview-first: returns candidates without killing unless confirm:true.',
       parameters: {
@@ -434,7 +442,7 @@ export function registerRestartTool(ctx: any, deps: {
     try { ctx.logger?.warn?.(`[supervisor] dsh_web_gc tool failed: ${e?.message ?? String(e)}`) } catch {}
   }
   try {
-    disposeStatus = ctx.tools.register({
+    disposeStatus = tools.register({
       name: 'dsh_web_restart_status',
       description: 'Read the outcome of the calling session\u2019s latest scheduled dsh web restart (pending until the daemon swaps and health-checks).',
       parameters: {

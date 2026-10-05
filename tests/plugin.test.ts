@@ -1,6 +1,24 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, it, expect, vi } from 'vitest'
-import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned } from '../src/host/plugin.js'
+import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned, processStartedAtMs } from '../src/host/plugin.js'
 import { SUPERVISOR_SOURCE_KIND } from '../src/host/source.js'
+
+/**
+ * The plugin's own source text. The `inject` contract below is about WHICH
+ * services block activation, and that cannot be asserted from the exported
+ * array alone — the interesting half is that the source resolves each service
+ * lazily instead of reading it off ctx directly.
+ */
+const sourceOfPlugin = readFileSync(
+  fileURLToPath(new URL('../src/host/plugin.ts', import.meta.url)),
+  'utf8',
+)
+
+const restartToolSource = readFileSync(
+  fileURLToPath(new URL('../src/host/restart-tool.ts', import.meta.url)),
+  'utf8',
+)
 
 function makeCtx(overrides: Record<string, any> = {}) {
   const logs: string[] = []
@@ -643,6 +661,156 @@ describe('runAutoResume', () => {
     expect(scanEntry.scanned).toBe(9)
     expect(scanEntry.interrupted).toEqual([])
   })
+
+  // The resume window must be anchored to WHEN THIS PROCESS STARTED, not to
+  // when the scan happens to run.
+  //
+  // Measured 2026-10-05 on the real deployment: turn 22 was interrupted at
+  // 18:10:55, the new host pid started at 18:11:02, and the scan did not run
+  // until 18:16:45 — 343s after boot, by which point the interruption was 349s
+  // old and therefore outside `autoResumeWithin = 5min`. The scan itself costs
+  // 130ms for 234 sessions: it is not slow, it is LATE, and a window measured
+  // from `Date.now()` at scan time silently ages every candidate out before the
+  // scan reads it.
+  //
+  // `withinMs` alone is NOT the contract. `findInterrupted` and
+  // `findDanglingOpenTurns` each derive `sinceMs = Date.now() - withinMs` from
+  // their OWN clock, so passing the same number through cannot move where the
+  // window starts. `sinceMs` is the only input that pins the boundary, which is
+  // why these tests assert on it rather than on `withinMs`.
+  it('anchors the resume window to process start, not to scan time', async () => {
+    const ctx = makeCtx()
+    const since: Array<number | undefined> = []
+    const capture = async (_home: any, opts: any) => {
+      since.push(opts?.sinceMs)
+      return { scanned: 0, interrupted: [] }
+    }
+
+    // This process booted at 1000 and the scan runs at 1000 + 343_000. The
+    // configured window is the 5min default, so the boundary is the boot
+    // instant: a crash can leave an interruption seconds BEFORE the new process
+    // existed (the closer never landed), and those must still be admitted.
+    const BOOT = 1_000
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: capture as any,
+      processStartedAtMs: BOOT,
+      nowMs: BOOT + 343_000,
+      config: enabledConfig,
+    })
+
+    expect(since).toHaveLength(2)
+    for (const sinceMs of since) {
+      expect(sinceMs).toBe(BOOT - 300_000)
+    }
+
+    // The boundary must not drift with the scan: a scan ten minutes into the
+    // same boot still anchors at BOOT, never at `scan - withinMs`.
+    since.length = 0
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: BOOT,
+      nowMs: BOOT + 600_000,
+      config: enabledConfig,
+    })
+    expect(since[0]).toBe(BOOT - 300_000)
+  })
+
+  it('never anchors the window later than the boot boundary', async () => {
+    const ctx = makeCtx()
+    let sinceMs: number | undefined
+    const capture = async (_home: any, opts: any) => {
+      sinceMs = opts?.sinceMs
+      return { scanned: 0, interrupted: [] }
+    }
+
+    // The 2026-10-05 failure expressed as an assertion: a late scan must not
+    // push the boundary forward, because that is exactly what ages real
+    // interruptions out of the window and silently resumes nothing.
+    const BOOT = 1_000
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: BOOT,
+      nowMs: BOOT + 343_000,
+      config: enabledConfig,
+    })
+
+    expect(sinceMs).not.toBe(BOOT + 343_000 - 300_000)
+  })
+
+  it('keeps the now-anchored call shape when no boot anchor is supplied', async () => {
+    // An explicit non-usable anchor (0) means "I have no boot time": the
+    // boundary falls back to now. This is the path the daemon's RPC scan
+    // endpoint takes, and it must not collapse the window to nothing.
+    const ctx = makeCtx()
+    let opts: any
+    const capture = async (_home: any, o: any) => {
+      opts = o
+      return { scanned: 0, interrupted: [] }
+    }
+    const before = Date.now()
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: 0,
+      config: enabledConfig,
+    })
+    const after = Date.now()
+    expect(opts.withinMs).toBe(300_000)
+    // The boundary must land inside this run.
+    expect(opts.sinceMs).toBeGreaterThanOrEqual(before - 300_000)
+    expect(opts.sinceMs).toBeLessThanOrEqual(after - 300_000)
+  })
+
+  it('defaults to this process own start when no anchor is passed at all', async () => {
+    // The live path: apply() passes nothing, so the module-load uptime anchor
+    // is used. The boundary must therefore sit near the process start, NOT near
+    // the test's own moment — otherwise the anchor never reaches production.
+    const ctx = makeCtx()
+    let opts: any
+    const capture = async (_home: any, o: any) => {
+      opts = o
+      return { scanned: 0, interrupted: [] }
+    }
+    const now = Date.now()
+    await runAutoResume(ctx, {
+      findInterrupted: capture as any,
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      config: enabledConfig,
+    })
+
+    expect(opts.withinMs).toBe(300_000)
+    const anchored = processStartedAtMs()
+    expect(anchored).toBeTypeOf('number')
+    // The vitest worker started moments ago, so its start is within the last
+    // few minutes — a boundary near `now - 300s` would pass, so tighten: the
+    // anchor must be AFTER a point 10 minutes ago whenever the worker is young.
+    const ageMs = now - (anchored as number)
+    expect(ageMs).toBeGreaterThanOrEqual(0)
+    expect(ageMs).toBeLessThan(600_000)
+    expect(opts.sinceMs).toBe((anchored as number) - 300_000)
+  })
+
+  it('records the boot-anchored window in the scan audit detail', async () => {
+    const ctx = makeCtx()
+    const entries: any[] = []
+    await runAutoResume(ctx, {
+      findInterrupted: async () => ({ scanned: 234, interrupted: [] }),
+      findDanglingOpenTurns: async () => ({ scanned: 0, interrupted: [] }),
+      processStartedAtMs: 1000,
+      nowMs: 1000 + 343_000,
+      logResume: (e: any) => entries.push(e),
+      config: enabledConfig,
+    })
+
+    const scanEntry = entries.find((e) => e.kind === 'scan')
+    expect(scanEntry.detail).toContain('withinMs=300000')
+    // The audit trail must record WHY the boundary is where it is, otherwise a
+    // future reader cannot tell a boot-anchored window from a scan-anchored one.
+    expect(scanEntry.detail).toContain('sinceMs=')
+  })
 })
 
 function makeCtxWithEffect(overrides: Record<string, any> = {}) {
@@ -671,19 +839,95 @@ function makeCtxWithEffect(overrides: Record<string, any> = {}) {
 }
 
 describe('apply', () => {
-  it('waits for the agent registry before starting auto-resume', () => {
-    expect(inject).toContain('agents')
+  it('declares no blocking service dependency, so the boot scan is not gated', () => {
+    // The scan is the thing that must not wait. Cordis holds activation until
+    // every name in `inject` exists, so an empty list is what makes the scan's
+    // timing a property of the boot rather than of plugin load order.
+    // Measured 2026-10-05: 343s from host start to first scan with five names.
+    expect([...inject]).toEqual([])
   })
 
-  it('declares skills in inject so the skills service exists when the provider registers', () => {
-    expect(inject).toContain('skills')
+  // The boot SCAN needs none of the injected services: findInterrupted and
+  // findDanglingOpenTurns read session log files directly, and every ctx.get in
+  // this plugin is an optional lookup with a guarded `typeof` check around each
+  // registration.
+  //
+  // Measured 2026-10-05: the row declared
+  // inject: ['sessions','agents','connection','tools','skills'] and the scan
+  // fired 343s after the host started, because apply() could not run until the
+  // LAST of those five resolved. The scan is not what waits — the ROW does.
+  //
+  // A declared `inject` entry blocks activation until that service exists, so
+  // every entry delays the scan. The late services must instead be resolved
+  // lazily through ctx.get(), which works from an already-activated plugin.
+  it.each(['tools', 'skills', 'connection', 'agents'])(
+    'does not gate activation on %s, resolving it lazily instead',
+    (service) => {
+      // The row must not block on it: Cordis holds activation of the whole
+      // plugin until every name in `inject` exists.
+      expect(inject, `inject still blocks the boot scan on '${service}'`)
+        .not.toContain(service)
+      // The source must still name the service, or the feature it backs would
+      // simply never appear. HOW it is named is the interesting half and is
+      // asserted separately below: a `ctx.get?.(...)` lookup is the lazy path
+      // and stays allowed, while a bare `ctx.<service>.x()` read would only
+      // work when the service was injected.
+      expect(sourceOfPlugin).toContain(`'${service}'`)
+    },
+  )
+
+  it('resolves tools and connection through a lazy lookup before touching ctx', () => {
+    // Both registrations used to depend on the service being injected. Each now
+    // asks ctx.get first, with the property read kept only as a fallback.
+    expect(sourceOfPlugin).toContain("ctx.get?.('tools') as any) ?? ctx.tools")
+    expect(sourceOfPlugin).toContain("ctx.get?.('connection')")
+    // registerRestartTool had four ctx.tools.register calls that would each
+    // throw inside the effect whenever only the lazy lookup answered.
+    expect(restartToolSource).not.toMatch(/\bctx\.tools\.register\b/)
+  })
+  it('still registers the restart tool when tools arrives only via ctx.get', async () => {
+    const registered: any[] = []
+    const disposers: (() => void)[] = []
+    const ctx = makeCtxWithEffect({
+      effect: (fn: any) => { const d = fn(); disposers.push(d); return d },
+      // No `tools` property — only the lazy lookup answers.
+      get: (key: string) => (key === 'tools'
+        ? { register: (def: any) => { registered.push(def); return () => {} } }
+        : undefined),
+    })
+
+    expect(() => apply(ctx)).not.toThrow()
+    expect(registered.some(t => t.name === 'dsh_web_restart'))
+      .toBe(true)
+    for (const d of disposers) { expect(() => d()).not.toThrow() }
   })
 
-  it('declares tools in inject so ctx.tools resolves for the dsh_web_restart registration', () => {
-    // Without 'tools' injected, ctx.tools is undefined and registerRestartTool's
-    // ctx.tools.register throws inside the wrapped effect — the tool silently
-    // never registers and agents cannot find it at runtime.
-    expect(inject).toContain('tools')
+  it('still registers the skills provider when skills arrives only via ctx.get', () => {
+    const registerProviderSpy = vi.fn(() => () => {})
+    const disposers: (() => void)[] = []
+    const ctx = makeCtxWithEffect({
+      effect: (fn: any) => { const d = fn(); disposers.push(d); return d },
+      get: (key: string) => (key === 'skills' ? { registerProvider: registerProviderSpy } : undefined),
+    })
+
+    expect(() => apply(ctx)).not.toThrow()
+    expect(registerProviderSpy).toHaveBeenCalledTimes(1)
+    for (const d of disposers) { expect(() => d()).not.toThrow() }
+  })
+
+  it('resolves skills lazily so the provider registers without a blocking inject', () => {
+    // apply() reads skills through ctx.get('skills'), which works from an
+    // already-activated plugin, so the provider no longer needs 'skills' in
+    // inject to exist first.
+    expect(sourceOfPlugin).toContain("ctx.get?.('skills')")
+  })
+
+  it('resolves tools lazily so the restart tool registers without a blocking inject', () => {
+    // registerRestartTool used to read ctx.tools.register directly, which made
+    // the tool silently never register whenever only ctx.get answered. It now
+    // resolves tools first and throws a clear error if neither path answers.
+    expect(sourceOfPlugin).toContain("ctx.get?.('tools') as any) ?? ctx.tools")
+    expect(restartToolSource).not.toMatch(/\bctx\.tools\.register\b/)
   })
 
   it('registers dsh_web_restart through apply() wiring via ctx.tools', async () => {
