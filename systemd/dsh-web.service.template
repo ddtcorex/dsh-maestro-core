@@ -16,6 +16,10 @@ WorkingDirectory=%MAESTRO_ROOT%/deepseek-harness
 ExecStart=/bin/bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; exec node --import tsx/esm apps/cli/src/bin.ts web --no-open'
 Restart=always
 RestartSec=5
+# Wait (up to 30 x 5s) for the previous instance to release the raw webserver
+# port before starting, so a restart never races its predecessor into EADDRINUSE.
+# Fails the start (exit 1) if the port is still held after the wait.
+ExecStartPre=/bin/bash -c "for i in {1..30}; do ss -tln 2>/dev/null | grep -q 127.0.0.1:3082 || exit 0; sleep 5; done; exit 1"
 Environment=DSH_HOME=%h/.dsh
 Environment=NODE_ENV=production
 # Log to file for supervisor health tail (append keeps history across restarts)
