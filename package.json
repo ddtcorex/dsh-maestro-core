@@ -49,6 +49,8 @@
     "lib",
     "src",
     "skills",
+    "scripts",
+    "systemd",
     "README.md",
     "cordis.patch.yml"
   ],
