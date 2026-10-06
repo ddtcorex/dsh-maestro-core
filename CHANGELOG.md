@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.1] - 2026-10-06
+
+### Fixed
+
+- **Settings fields share one box.** Fields adopt the host's own `ConfigField` declaration plus a 44px touch floor, so the dialog no longer shows several geometries. The SSH target buttons stay on a row of their own below the field, the Maestro tab dropdowns keep 13px text, and the SSH label states a whole-pixel line-height so the hairline border cannot land on a half pixel.
+
 ## [0.11.0] - 2026-10-05
 
 ### Security
