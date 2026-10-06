@@ -1076,6 +1076,41 @@ function ensureSystemdKeepalive(ctx: any): void {
   } catch {}
 }
 
+/**
+ * Run `body` once every service in `names` is active, without holding up this row.
+ *
+ * `inject` is empty on purpose (see its declaration), so the row activates as soon
+ * as its entry loads — before the `tools` and `skills` fibers are active.
+ * `ctx.get` is strict: ReflectService resolves a service only while the fiber
+ * providing it is active, so reading those services during `apply()` returned
+ * undefined and every tool and skill registration was dropped — silently, because
+ * each registration guards on the lookup answering. A child fiber carries its own
+ * inject list and activates on those services independently, which keeps them off
+ * the boot resume scan's dependency path. A host without the registry mixin has no
+ * child-fiber primitive and registers immediately, which is correct when the
+ * services are already active.
+ *
+ * @param ctx — the row's context.
+ * @param names — service names the body needs; each is a separate child fiber's
+ *   dependency list, so one absent service cannot suppress the others.
+ * @param body — registration callback, receiving the scoped child context.
+ */
+function whenServicesActive(ctx: any, names: string[], body: (scoped: any) => void): void {
+  try {
+    if (typeof ctx.inject === 'function') {
+      ctx.inject(names, body)
+      return
+    }
+  } catch (e: any) {
+    try { ctx.logger?.warn?.(`[supervisor] ${names.join('/')} fiber failed: ${e?.message ?? String(e)}`) } catch {}
+  }
+  try {
+    body(ctx)
+  } catch (e: any) {
+    try { ctx.logger?.warn?.(`[supervisor] ${names.join('/')} registration failed: ${e?.message ?? String(e)}`) } catch {}
+  }
+}
+
 export function apply(ctx: any, config: SupervisorPluginConfig = {}): void {
   // The whole body is wrapped: per AGENTS.md, apply() must never throw
   // synchronously or let a rejected promise escape, no matter what fails
@@ -1083,37 +1118,39 @@ export function apply(ctx: any, config: SupervisorPluginConfig = {}): void {
   // error-reporting logger call itself throwing).
   try {
     try { ensureSystemdKeepalive(ctx) } catch {}
-    try {
-      const skills: any = ctx.get?.('skills')
-      if (skills?.registerProvider) {
-        ctx.effect(() => {
-          let unregister: (() => void) | undefined
-          try {
-            // Package-root skills/ is resolved at runtime by walking to the
-            // nearest package.json (robust to lib/ vs src/host/ layouts).
-            unregister = skills.registerProvider(() => makeSkillProvider(resolveSkillsDir(__dirname)))
-          } catch (e: any) { ctx.logger?.warn?.(`[supervisor] skill provider failed: ${e?.message ?? String(e)}`) }
-          return () => { try { unregister?.() } catch {} }
-        }, 'supervisor:skill')
-      }
-    } catch {}
 
-    try {
-      ctx.effect(() => registerRestartTool(ctx), 'supervisor:restart-tool')
-    } catch (e: any) {
-      try { ctx.logger?.warn?.(`[supervisor] restart tool effect failed: ${e?.message ?? String(e)}`) } catch {}
-    }
+    whenServicesActive(ctx, ['skills'], (scoped) => {
+      const skills: any = scoped.get?.('skills') ?? scoped.skills
+      if (!skills?.registerProvider) return
+      scoped.effect(() => {
+        let unregister: (() => void) | undefined
+        try {
+          // Package-root skills/ is resolved at runtime by walking to the
+          // nearest package.json (robust to lib/ vs src/host/ layouts).
+          unregister = skills.registerProvider(() => makeSkillProvider(resolveSkillsDir(__dirname)))
+        } catch (e: any) { scoped.logger?.warn?.(`[supervisor] skill provider failed: ${e?.message ?? String(e)}`) }
+        return () => { try { unregister?.() } catch {} }
+      }, 'supervisor:skill')
+    })
+
+    whenServicesActive(ctx, ['tools'], (scoped) => {
+      try {
+        scoped.effect(() => registerRestartTool(scoped), 'supervisor:restart-tool')
+      } catch (e: any) {
+        try { scoped.logger?.warn?.(`[supervisor] restart tool effect failed: ${e?.message ?? String(e)}`) } catch {}
+      }
+
+      try {
+        scoped.effect(() => registerResumeToolHealthService(scoped), 'supervisor:resume-tool-health')
+      } catch (e: any) {
+        try { scoped.logger?.warn?.(`[supervisor] resume-tool-health effect failed: ${e?.message ?? String(e)}`) } catch {}
+      }
+    })
 
     try {
       ctx.effect(() => registerSessionHealthService(ctx, config), 'supervisor:session-health')
     } catch (e: any) {
       try { ctx.logger?.warn?.(`[supervisor] session-health effect failed: ${e?.message ?? String(e)}`) } catch {}
-    }
-
-    try {
-      ctx.effect(() => registerResumeToolHealthService(ctx), 'supervisor:resume-tool-health')
-    } catch (e: any) {
-      try { ctx.logger?.warn?.(`[supervisor] resume-tool-health effect failed: ${e?.message ?? String(e)}`) } catch {}
     }
 
     ctx.effect(() => {

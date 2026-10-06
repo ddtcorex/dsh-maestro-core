@@ -916,10 +916,11 @@ describe('apply', () => {
   })
 
   it('resolves skills lazily so the provider registers without a blocking inject', () => {
-    // apply() reads skills through ctx.get('skills'), which works from an
-    // already-activated plugin, so the provider no longer needs 'skills' in
-    // inject to exist first.
-    expect(sourceOfPlugin).toContain("ctx.get?.('skills')")
+    // The lookup moved into the `['skills']` child fiber, where `skills` is
+    // guaranteed active; what the assertion protects is a lazy lookup rather
+    // than a bare property read that only works under a declared inject.
+    expect(sourceOfPlugin).toContain("get?.('skills')")
+    expect(sourceOfPlugin).toContain("['skills']")
   })
 
   it('resolves tools lazily so the restart tool registers without a blocking inject', () => {
@@ -981,6 +982,90 @@ describe('apply', () => {
   it('does not throw when ctx.tools is missing entirely (restart tool degrades to a logged skip)', () => {
     const ctx = makeCtxWithEffect() // no tools key
     expect(() => apply(ctx)).not.toThrow()
+  })
+
+  /**
+   * Models the LIVE boot ordering: `inject` is empty, so this row activates as
+   * soon as its entry loads, which is before the `tools`/`skills` fibers are
+   * ACTIVE. `ctx.get` is strict — ReflectService only resolves an ACTIVE
+   * providing fiber — so reading those services during apply() yields
+   * undefined. Every other apply() test hands the services over synchronously
+   * and therefore cannot observe a registration dropped for a late service.
+   */
+  function makeDeferredServiceCtx() {
+    const logs: string[] = []
+    const registered: any[] = []
+    const providers: any[] = []
+    const active = new Set<string>()
+    const waiting: { names: string[]; body: (scoped: any) => void }[] = []
+
+    const service = (name: string) => (name === 'skills'
+      ? { registerProvider: (factory: any) => { providers.push(factory); return () => {} } }
+      : { register: (def: any) => { registered.push(def); return () => {} } })
+
+    const ctx: any = {
+      logger: { info: (m: string) => logs.push(`info:${m}`), warn: (m: string) => logs.push(`warn:${m}`) },
+      effect: (fn: any) => fn(),
+      connection: { rpc: { handle: () => () => {} } },
+      sessions: { get: () => undefined },
+      get: (key: string) => (active.has(key) ? service(key) : undefined),
+      // A child fiber carries its own inject list and activates independently
+      // once those services exist; the parent row is not held up by it.
+      inject: (names: string[], body: (scoped: any) => void) => { waiting.push({ names, body }) },
+      _logs: logs,
+    }
+
+    return {
+      ctx,
+      registered,
+      providers,
+      /** Activate the named services, then run every waiting child fiber. */
+      arrive(names: string[]) {
+        for (const n of names) active.add(n)
+        for (let i = waiting.length - 1; i >= 0; i--) {
+          const w = waiting[i]!
+          if (!w.names.every((n) => active.has(n))) continue
+          waiting.splice(i, 1)
+          const scoped: any = { ...ctx, get: (k: string) => (active.has(k) ? service(k) : undefined) }
+          for (const n of w.names) scoped[n] = service(n)
+          w.body(scoped)
+        }
+      },
+    }
+  }
+
+  it('registers dsh_web_restart once tools arrives after the row has activated', () => {
+    const h = makeDeferredServiceCtx()
+    expect(() => apply(h.ctx)).not.toThrow()
+    // Nothing may be claimed before the service exists.
+    expect(h.registered.map((t) => t.name)).not.toContain('dsh_web_restart')
+
+    h.arrive(['tools'])
+    expect(h.registered.map((t) => t.name)).toContain('dsh_web_restart')
+  })
+
+  it('registers the dsh-safe-restart skill provider once skills arrives late', () => {
+    const h = makeDeferredServiceCtx()
+    apply(h.ctx)
+    expect(h.providers).toHaveLength(0)
+
+    h.arrive(['skills'])
+    expect(h.providers).toHaveLength(1)
+  })
+
+  it('registers the restart tool when skills is absent, so a missing skill service cannot suppress it', () => {
+    const h = makeDeferredServiceCtx()
+    apply(h.ctx)
+    h.arrive(['tools']) // skills never activates
+    expect(h.registered.map((t) => t.name)).toContain('dsh_web_restart')
+  })
+
+  it('defers tool registration to a child fiber instead of gating the row on tools', () => {
+    const h = makeDeferredServiceCtx()
+    apply(h.ctx)
+    // The row finished activating while tools was still unavailable, so the
+    // boot resume scan kept its own timing.
+    expect(h.ctx._logs.filter((l: string) => l.includes('tools service unavailable'))).toHaveLength(0)
   })
 
   it('registers a tools/pre-execute self-kill guard via apply when ctx.on exists', () => {
