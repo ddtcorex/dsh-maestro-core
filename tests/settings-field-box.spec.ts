@@ -36,10 +36,15 @@ function ruleBody(source: string, selector: string): string {
  * Anchored on the select's own `h('select', …)` call: a bare `/style:\s*\{…\}/`
  * takes the FIRST match in the file, which is an unrelated control, so the
  * assertion would have been measuring the wrong element entirely.
+ *
+ * Matched with `\s*` between the call and the tag rather than a literal run of
+ * spaces, so a reformat of the call site does not read as a missing control. It
+ * still fails loudly if the select is gone, which is the property that matters.
  */
 function guardSelectStyle(): string {
-  const selectIndex = settingsTsx.indexOf("h(\n                  'select',")
-  expect(selectIndex, 'the guard-tier select render').toBeGreaterThan(-1)
+  const at = /h\(\s*'select',/.exec(settingsTsx)
+  expect(at, 'the guard-tier select render').not.toBeNull()
+  const selectIndex = at!.index
   const slice = settingsTsx.slice(selectIndex, selectIndex + 1200)
   const object = /style:\s*\{([^{}]*)\}/.exec(slice)?.[1]
   expect(object, 'the guard-tier select style object').toBeDefined()
@@ -130,13 +135,58 @@ describe('shared settings field box', () => {
   it('keeps the field rules inside their existing media context', () => {
     // Both field rules sit outside the iOS floor's `@media`, so that block — not
     // them — decides when the 16px hold applies.
+    //
+    // This resolves the MEDIA BLOCK and asks whether each field rule falls
+    // inside it. The previous version compared two `indexOf` positions instead,
+    // which cannot express the property: moving a field rule to sit after the
+    // closing brace left it green, because the floor's opening string was still
+    // later in the file. Ordering is not containment — the question is only
+    // answerable by locating the block and testing membership.
     const floorIndex = css.indexOf('html[data-mobile-nav-ios]')
-    const sshIndex = css.indexOf('[data-sync-ssh-input]')
-    const r2Index = css.indexOf('[data-r2-field-input]')
-    expect(floorIndex).toBeGreaterThan(-1)
-    expect(sshIndex).toBeGreaterThan(-1)
-    expect(r2Index).toBeGreaterThan(-1)
-    expect(sshIndex).toBeLessThan(floorIndex)
-    expect(r2Index).toBeLessThan(floorIndex)
+    expect(floorIndex, 'the iOS floor rule').toBeGreaterThan(-1)
+
+    // Walk back from the floor rule to the `{` of its enclosing block; that
+    // brace belongs to the `@media (...) {` header immediately before it.
+    let depth = 0
+    let blockOpen = -1
+    for (let i = floorIndex - 1; i >= 0; i -= 1) {
+      const ch = css[i]
+      if (ch === '}') depth += 1
+      else if (ch === '{') {
+        if (depth === 0) { blockOpen = i; break }
+        depth -= 1
+      }
+    }
+    expect(blockOpen, 'the @media header owning the iOS floor').toBeGreaterThan(-1)
+
+    const header = /@media[^{]*\{/.exec(css.slice(Math.max(0, blockOpen - 80), blockOpen + 2))
+    expect(header, 'the floor must live inside an @media block').not.toBeNull()
+    expect(header![0], 'the phone media predicate').toContain('pointer: coarse')
+
+    // Walk forward to the matching `}` of that block.
+    let blockEnd = -1
+    let d = 0
+    for (let i = blockOpen; i < css.length; i += 1) {
+      if (css[i] === '{') d += 1
+      else if (css[i] === '}') { d -= 1; if (d === 0) { blockEnd = i; break } }
+    }
+    expect(blockEnd, 'the @media block must close').toBeGreaterThan(blockOpen)
+
+    for (const selector of ['[data-sync-ssh-input]', '[data-r2-field-input]']) {
+      // Resolve the FIELD RULE specifically, not the first mention of the
+      // selector: `[data-sync-ssh-input]` also occurs in its `:focus-visible`,
+      // `:disabled` and `[aria-invalid]` siblings.
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const at = new RegExp(`${escaped}\\s*\\{`).exec(css)
+      expect(at, `the field rule for ${selector}`).not.toBeNull()
+      const ruleAt = at!.index
+      const insideBlock = ruleAt > blockOpen && ruleAt < blockEnd
+      expect(
+        insideBlock,
+        `${selector} must sit OUTSIDE the iOS floor's @media — inside it, the`
+        + ' floor (not this rule) would own the phone size, and the field would'
+        + ' read 16px instead of the standard 44px',
+      ).toBe(false)
+    }
   })
 })
