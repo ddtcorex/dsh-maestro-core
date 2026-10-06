@@ -156,7 +156,7 @@ export function SyncPanel(props: { ctx: any }): React.ReactElement {
           aria-invalid={hostFieldError ? 'true' : undefined}
         />
         {hostFieldError ? (
-          <span data-sync-field-error="" role="alert" data-testid="sync-ssh-host-error" style={{ gridColumn: '1 / -1', fontSize: 12, lineHeight: '16px', color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' }}>
+          <span data-sync-field-error="" role="alert" data-testid="sync-ssh-host-error" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' }}>
             {hostFieldError}
           </span>
         ) : null}
