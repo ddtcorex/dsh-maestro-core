@@ -3,12 +3,21 @@ import { readFileSync } from 'node:fs'
 import { describe, it } from 'vitest'
 
 /**
- * The SSH target's Save / Check-connection buttons must sit INLINE with the
- * field, not on a row of their own underneath it.
+ * The SSH target's Save / Check-connection buttons sit on a row of their OWN,
+ * BELOW the field.
  *
- * A marker assertion proves nothing here: `div[data-sync-ssh] > input` and a
- * separate `div[data-sync-ssh-row] > button` were already true on the stacked
- * layout. These assertions read the declaration and the inline style instead.
+ * This is a deliberate product decision, taken by the human on 2026-10-06 after
+ * an earlier commit in this same batch moved them inline with the field. That
+ * earlier layout is REVERTED here: the field keeps the full column width and the
+ * actions span the row beneath it.
+ *
+ * The assertions below read the STRUCTURE, never a marker. Both layouts contain
+ * `div[data-sync-ssh] > input` and `div[data-sync-ssh-row] > button`, so a marker
+ * assertion passes on either one and proves nothing.
+ *
+ * Note this file's assertions are the OPPOSITE of what the reverted commit's own
+ * test asserted. That test was deleted on purpose — it encoded a decision the
+ * human has overruled — and its replacement states the new decision instead.
  */
 const css = readFileSync(new URL('../src/client/sync/index.tsx', import.meta.url), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -33,126 +42,153 @@ function ruleBody(source: string, selector: string): string {
 }
 
 /**
- * The markup of the field row element itself.
+ * The markup of the SSH block element itself, walked to its matching close.
  *
- * The slice must span the row's whole element INCLUDING its children. Slicing to
- * the first `</div>` returns only the opening tag plus the first child, so an
- * input relocated anywhere else in the row is invisible — the assertion reads as
- * armed while the old stacked layout passes it.
+ * `indexOf('</div>')` returns only the opening tag plus the FIRST child, so a
+ * field relocated anywhere else in the block is invisible and the assertion reads
+ * as armed while the wrong layout passes it. Brace-walking is what makes the
+ * nesting question answerable.
  */
-function rowMarkup(): string {
-  const start = panel.indexOf('<div data-sync-ssh-row=')
-  assert.ok(start > -1, 'the field row wrapper is missing from the markup')
-  // Walk braces from the row's opening tag to its matching close.
+function sshBlockMarkup(): string {
+  const start = panel.indexOf('<div data-sync-ssh=""')
+  assert.ok(start > -1, 'the SSH block is missing from the markup')
   let depth = 0
   for (let i = start; i < panel.length; i += 1) {
     if (panel[i] === '{') depth += 1
     else if (panel[i] === '}') depth -= 1
     if (panel.startsWith('/>', i) && depth === 1) {
-      return panel.slice(start, i + 2)
+      // From the block's opening tag, walk to the `</div>` that closes it.
+      const close = panel.indexOf('</div>', i)
+      return panel.slice(start, close + 6)
     }
   }
   return panel.slice(start, panel.indexOf('</div>', start) + 6)
 }
 
-describe('the SSH field row', () => {
-  it('lays the field row out as a row, not a column', () => {
-    const body = ruleBody(css, '[data-sync-ssh-row]')
-    assert.match(body, /display:\s*flex/)
-    assert.match(
-      body,
-      /flex-direction:\s*row/,
-      'the row must stay horizontal; a column would stack the buttons again',
-    )
-    assert.doesNotMatch(body, /flex-direction:\s*column/)
-  })
+/** The markup of the button row wrapper only, walked to its matching close. */
+function rowMarkup(): string {
+  const start = panel.indexOf('<div data-sync-ssh-row=')
+  assert.ok(start > -1, 'the button row wrapper is missing from the markup')
+  let depth = 0
+  for (let i = start; i < panel.length; i += 1) {
+    if (panel[i] === '{') depth += 1
+    else if (panel[i] === '}') depth -= 1
+    if (panel.startsWith('/>', i) && depth === 1) {
+      const close = panel.indexOf('</div>', i)
+      return panel.slice(start, close + 6)
+    }
+  }
+  return panel.slice(start, panel.indexOf('</div>', start) + 6)
+}
 
-  it('puts the input and the buttons in the SAME row element', () => {
-    const markup = rowMarkup()
+describe('the SSH field block', () => {
+  it('keeps the field OUTSIDE the button row', () => {
+    // The decision being pinned: the input is a SIBLING of the button row, not
+    // a child of it. Read from the row's own subtree — if the input moved back
+    // inside, this slice would contain it and the assertion fails.
+    const row = rowMarkup()
     assert.ok(
-      /data-sync-ssh-input/.test(markup),
-      'the input must live inside the row wrapper, beside the buttons',
-    )
-    assert.ok(
-      /sync-check-connection/.test(markup),
+      /sync-check-connection/.test(row),
       'the buttons must live inside the row wrapper',
     )
-    // The input must precede the buttons so the field reads first.
-    assert.ok(
-      markup.indexOf('data-sync-ssh-input') < markup.indexOf('sync-check-connection'),
-      'the field comes first on the row, the actions at the right',
+    assert.doesNotMatch(
+      row,
+      /data-sync-ssh-input/,
+      'the field must NOT be inside the button row — it is a sibling above it',
     )
   })
 
-  it('keeps the field flexible and the buttons fixed', () => {
-    assert.match(
-      ruleBody(css, '[data-sync-ssh-row] input'),
-      /flex:\s*1/,
-      'the input must take the free width',
+  it('lists the field before the button row among the block children', () => {
+    const block = sshBlockMarkup()
+    const inputAt = block.indexOf('data-sync-ssh-input')
+    const rowAt = block.indexOf('data-sync-ssh-row=')
+    assert.ok(inputAt > -1, 'the SSH field is missing')
+    assert.ok(rowAt > -1, 'the button row is missing')
+    assert.ok(
+      inputAt < rowAt,
+      `the field must come before the button row in the block (input at ${inputAt}, row at ${rowAt})`,
     )
-    assert.match(
-      ruleBody(css, '[data-sync-ssh-row] input'),
-      /min-width:\s*0/,
-      'the input needs min-width:0 or it will not shrink on a narrow phone',
-    )
+  })
+
+  it('orders the block: field, then error, then button row, then source line', () => {
+    // Order inside the block is the structure: the field and the error come
+    // BEFORE the row opens, so neither can be a child of it.
+    const block = sshBlockMarkup()
+    const at = (needle: string): number => {
+      const i = block.indexOf(needle)
+      assert.ok(i > -1, `${needle} is missing from the SSH block`)
+      return i
+    }
+    const input = at('data-sync-ssh-input')
+    const error = at('data-sync-field-error=""')
+    const row = at('<div data-sync-ssh-row=')
+    const src = at('data-sync-ssh-src=""')
+    assert.ok(input < error && error < row && row < src, `unexpected order: ${[input, error, row, src]}`)
+  })
+
+  it('lets the buttons span their own row', () => {
+    // The stacked layout is what the human asked to restore, so the buttons take
+    // the free width of their row instead of sitting at the right edge.
     const buttons = ruleBody(css, '[data-sync-ssh-row] > [data-sync-btn]')
-    assert.match(
+    assert.match(buttons, /flex:\s*1\s+1\s+0/, 'the buttons fill the width of their own row')
+    assert.doesNotMatch(
       buttons,
       /flex:\s*none/,
-      'the buttons must not grow, or they eat the field width',
+      'flex:none is the inline layout the human overruled',
     )
-    assert.doesNotMatch(buttons, /flex:\s*1\s+1\s+0/, 'flex:1 1 0 was the full-width stacked row')
   })
 
-  it('keeps the 48px touch floor on the buttons at the narrow breakpoint', () => {
-    // Anchored on the rule inside the media block, not on the media body and
-    // not with a loose `[\s\S]*?` bridge: a loose bridge matches the EARLIER
-    // non-media `[data-sync-ssh-row] > [data-sync-btn]` rule, whose body is
-    // `flex: 1 1 0`, and the assertion then passes on the wrong declaration.
-    // `[^@]*?` cannot cross another `@media`, so the first such block wins.
+  it('does not treat the input as a row child', () => {
+    // The inline layout needed `input { flex: 1 1 auto; min-width: 0 }` to sit it
+    // beside the buttons. With the field back in its own block child, that rule
+    // is dead and would mislead the next reader.
+    assert.equal(
+      ruleBody(css, '[data-sync-ssh-row] input'),
+      '',
+      'no input styling inside the button row — the field is not a row child',
+    )
+  })
+
+  it('matches the button height to the field height at the narrow breakpoint', () => {
+    // Anchored on the rule inside the media block, not on the media body and not
+    // with a loose `[\s\S]*?` bridge: a loose bridge matches the EARLIER non-media
+    // rule, whose body is `flex: 1 1 0`, and the assertion then passes on the
+    // wrong declaration. `[^@]*?` cannot cross another `@media`.
     const narrow = /@media \(max-width: 640px\) \{[^@]*?\[data-sync-ssh-row\] > \[data-sync-btn\] \{([^}]*)\}/
       .exec(css)
     assert.ok(narrow, 'the 640px media block must still carry the button touch floor')
+    // Compared to the FIELD rule rather than hardcoding 44 twice: a later change
+    // to the shared field box must fail here instead of silently desyncing the
+    // buttons again (they measured 48 against a 44 field before this).
+    const fieldHeight = /min-height:\s*(\d+px)/.exec(ruleBody(css, '[data-sync-ssh-input]'))?.[1]
+    assert.ok(fieldHeight, 'the field rule must declare a min-height')
     assert.match(
       narrow[1],
-      /min-height:\s*48px/,
-      'the narrow-viewport touch floor must survive this change',
+      new RegExp(`min-height:\\s*${fieldHeight}`),
+      `the narrow-viewport button height must equal the field height (${fieldHeight})`,
     )
     assert.match(narrow[1], /!important/, 'the floor relies on !important to beat the button rule')
   })
 
-  it('lets the error message span the full row width', () => {
-    // It must sit OUTSIDE the row wrapper so it keeps the full width instead of
-    // being squeezed beside a button. "Outside" means the element is a SIBLING
-    // of the row, so compare nesting rather than source order: the row may
-    // legitimately come before it in the document.
-    const rowStart = panel.indexOf('<div data-sync-ssh-row=')
-    const rowEnd = panel.indexOf('</div>', panel.indexOf('sync-check-connection'))
-    const errStart = panel.indexOf('data-sync-field-error=""')
-    assert.ok(errStart > -1, 'the field error is missing')
-    assert.ok(
-      errStart > rowEnd,
-      `the error message must sit after the row wrapper closes (row ends ${rowEnd}, error at ${errStart})`,
-    )
-    // And it must not have needed a grid hack any more: the container is a
-    // flex column, where a child spans the full width by default.
+  it('keeps the error message out of the button row', () => {
+    const row = rowMarkup()
+    assert.doesNotMatch(row, /data-sync-field-error/, 'the error must stay a sibling of the row')
     assert.doesNotMatch(
       panel,
       /gridColumn:\s*'1 \/ -1'/,
-      'the grid span was dead — this container is a flex column, never a grid',
+      'the container is a flex column; a grid span there is dead weight',
     )
   })
 
   it('keeps the actions disabled until the field holds something', () => {
-    const markup = rowMarkup()
     assert.ok(
-      /disabled=\{checking \|\| busy \|\| hostInput\.trim\(\)\.length === 0\}/.test(markup),
+      /disabled=\{checking \|\| busy \|\| hostInput\.trim\(\)\.length === 0\}/.test(panel),
       'Save and Check connection must stay disabled while the field is empty',
     )
   })
 
   it('leaves the field box and its typography alone', () => {
-    // A previous batch standardised this rule; the layout change must not touch it.
+    // A previous batch standardised this rule; a layout change must not touch it.
     const field = ruleBody(css, '[data-sync-ssh-input]')
     assert.match(field, /border-radius:\s*var\(--dsw-radius-md\)/)
     assert.match(field, /padding:\s*6px 12px/)

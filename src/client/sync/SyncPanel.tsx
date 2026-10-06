@@ -141,26 +141,26 @@ export function SyncPanel(props: { ctx: any }): React.ReactElement {
           Checks. Nothing below unlocks until the check passes. */}
       <div data-sync-ssh="">
         <label data-sync-ssh-label="" htmlFor="sync-ssh-host">SSH target</label>
-        {/* Field and actions share ONE row: the field takes the free width and
-            the two actions sit at its right edge. They used to live on a row of
-            their own below the input, which split the control from the buttons
-            that act on it. The error span stays OUTSIDE this wrapper so it keeps
-            the full row width instead of being squeezed beside a button. */}
+        <input
+          id="sync-ssh-host"
+          data-sync-ssh-input=""
+          data-testid="sync-ssh-host"
+          value={hostInput}
+          onChange={(e) => { setHostInput(e.target.value); void s.setHostFieldError?.(null) }}
+          placeholder="user@host"
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          disabled={checking || busy}
+          aria-describedby="sync-ssh-src"
+          aria-invalid={hostFieldError ? 'true' : undefined}
+        />
+        {hostFieldError ? (
+          <span data-sync-field-error="" role="alert" data-testid="sync-ssh-host-error" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' }}>
+            {hostFieldError}
+          </span>
+        ) : null}
         <div data-sync-ssh-row="">
-          <input
-            id="sync-ssh-host"
-            data-sync-ssh-input=""
-            data-testid="sync-ssh-host"
-            value={hostInput}
-            onChange={(e) => { setHostInput(e.target.value); void s.setHostFieldError?.(null) }}
-            placeholder="user@host"
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            disabled={checking || busy}
-            aria-describedby="sync-ssh-src"
-            aria-invalid={hostFieldError ? 'true' : undefined}
-          />
           <Button variant="outline" data-testid="sync-save-host" disabled={checking || busy || hostInput.trim().length === 0} onClick={() => void s.saveRemoteHost(hostInput.trim())}>
             Save
           </Button>
@@ -168,11 +168,6 @@ export function SyncPanel(props: { ctx: any }): React.ReactElement {
             {checking ? 'Checking…' : 'Check connection'}
           </Button>
         </div>
-        {hostFieldError ? (
-          <span data-sync-field-error="" role="alert" data-testid="sync-ssh-host-error" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' }}>
-            {hostFieldError}
-          </span>
-        ) : null}
         <span id="sync-ssh-src" data-sync-ssh-src="">{sourceLabel}</span>
       </div>
 
