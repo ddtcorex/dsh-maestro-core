@@ -42,46 +42,43 @@ function ruleBody(source: string, selector: string): string {
 }
 
 /**
- * The markup of the SSH block element itself, walked to its matching close.
+ * The markup of the element whose opening tag starts with `openTag`, cut at its
+ * own matching `</div>` by counting `<div` against `</div>`.
  *
- * `indexOf('</div>')` returns only the opening tag plus the FIRST child, so a
- * field relocated anywhere else in the block is invisible and the assertion reads
- * as armed while the wrong layout passes it. Brace-walking is what makes the
- * nesting question answerable.
+ * Counting tags, not braces or the first `</div>`: the first close belongs to a
+ * child, and brace-walking ran on to the end of the file, so a slice could
+ * swallow the connection banner and an assertion could pass or fail for the wrong
+ * region. Every element read here is a `<div>` with children, so nesting depth of
+ * `<div` / `</div>` is the whole question.
  */
-function sshBlockMarkup(): string {
-  const start = panel.indexOf('<div data-sync-ssh=""')
-  assert.ok(start > -1, 'the SSH block is missing from the markup')
+function elementMarkup(openTag: string): string {
+  const start = panel.indexOf(openTag)
+  assert.ok(start > -1, `${openTag} is missing from the markup`)
+  const tag = /<div\b|<\/div>/g
+  tag.lastIndex = start
   let depth = 0
-  for (let i = start; i < panel.length; i += 1) {
-    if (panel[i] === '{') depth += 1
-    else if (panel[i] === '}') depth -= 1
-    if (panel.startsWith('/>', i) && depth === 1) {
-      // From the block's opening tag, walk to the `</div>` that closes it.
-      const close = panel.indexOf('</div>', i)
-      return panel.slice(start, close + 6)
-    }
+  for (let m = tag.exec(panel); m !== null; m = tag.exec(panel)) {
+    depth += m[0] === '</div>' ? -1 : 1
+    if (depth === 0) return panel.slice(start, m.index + m[0].length)
   }
-  return panel.slice(start, panel.indexOf('</div>', start) + 6)
+  throw new Error(`${openTag} has no matching </div>`)
 }
 
-/** The markup of the button row wrapper only, walked to its matching close. */
-function rowMarkup(): string {
-  const start = panel.indexOf('<div data-sync-ssh-row=')
-  assert.ok(start > -1, 'the button row wrapper is missing from the markup')
-  let depth = 0
-  for (let i = start; i < panel.length; i += 1) {
-    if (panel[i] === '{') depth += 1
-    else if (panel[i] === '}') depth -= 1
-    if (panel.startsWith('/>', i) && depth === 1) {
-      const close = panel.indexOf('</div>', i)
-      return panel.slice(start, close + 6)
-    }
-  }
-  return panel.slice(start, panel.indexOf('</div>', start) + 6)
-}
+const sshBlockMarkup = (): string => elementMarkup('<div data-sync-ssh=""')
+const rowMarkup = (): string => elementMarkup('<div data-sync-ssh-row=')
 
 describe('the SSH field block', () => {
+  it('cuts each slice at its own closing tag, not at the end of the file', () => {
+    // The structure assertions below read these slices; a slice that runs on into
+    // the connection banner would let them fail or pass for the wrong region.
+    const block = sshBlockMarkup()
+    assert.doesNotMatch(block, /data-sync-conn/, 'the SSH block must stop before the connection banner')
+    assert.match(block, /data-sync-ssh-src/, 'the SSH block must still contain its source line')
+    const row = rowMarkup()
+    assert.doesNotMatch(row, /data-sync-ssh-src/, 'the button row must stop before the source line')
+    assert.match(row, /sync-save-host/, 'the button row must still contain its buttons')
+  })
+
   it('keeps the field OUTSIDE the button row', () => {
     // The decision being pinned: the input is a SIBLING of the button row, not
     // a child of it. Read from the row's own subtree — if the input moved back
