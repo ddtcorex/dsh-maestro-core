@@ -256,7 +256,7 @@ button[data-sync-stat]:focus-visible { outline: 2px solid var(--dsw-alias-border
 /* SSH configuration — user-filled target, explicit check, nothing auto-probes */
 [data-sync-ssh] { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); }
 [data-sync-ssh-label] { font-size: 11px; color: var(--dsw-alias-label-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-[data-sync-ssh-input] { min-height: 44px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; width: 100%; box-sizing: border-box; }
+[data-sync-ssh-input] { min-height: 44px; padding: 6px 12px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; width: 100%; box-sizing: border-box; }
 [data-sync-ssh-input]:focus-visible { outline: 2px solid var(--dsw-alias-border-l2); outline-offset: 2px; }
 [data-sync-ssh-input]:disabled { opacity: 0.6; }
 [data-sync-ssh-row] { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -269,7 +269,7 @@ button[data-sync-stat]:focus-visible { outline: 2px solid var(--dsw-alias-border
 [data-r2-config-label] { font-size: 11px; color: var(--dsw-alias-label-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 [data-r2-field] { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 [data-r2-field-label] { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
-[data-r2-field-input] { min-height: 44px; padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; width: 100%; box-sizing: border-box; }
+[data-r2-field-input] { min-height: 44px; padding: 6px 12px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; width: 100%; box-sizing: border-box; }
 [data-r2-field-input]:focus-visible { outline: 2px solid var(--dsw-alias-border-l2); outline-offset: 2px; }
 [data-r2-field-input]:disabled { opacity: 0.6; }
 [data-r2-field-hint] { font-size: 11px; line-height: 14px; color: var(--dsw-alias-label-tertiary); }
