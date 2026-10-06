@@ -259,8 +259,15 @@ button[data-sync-stat]:focus-visible { outline: 2px solid var(--dsw-alias-border
 [data-sync-ssh-input] { min-height: 44px; padding: 6px 12px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; width: 100%; box-sizing: border-box; }
 [data-sync-ssh-input]:focus-visible { outline: 2px solid var(--dsw-alias-border-l2); outline-offset: 2px; }
 [data-sync-ssh-input]:disabled { opacity: 0.6; }
-[data-sync-ssh-row] { display: flex; gap: 8px; flex-wrap: wrap; }
-[data-sync-ssh-row] > [data-sync-btn] { flex: 1 1 0; }
+/* The field and its actions share ONE row: the field takes the free width, the
+   actions sit at its right edge and centre against it. The buttons were
+   flex: 1 1 0 on a row of their own, so they stretched across the full width
+   below the input and the field read as unrelated to the control that acts on
+   it. The field's own box (radius, padding, min-height, monospace family) is
+   untouched — this is layout only. */
+[data-sync-ssh-row] { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+[data-sync-ssh-row] input { flex: 1 1 auto; min-width: 0; }
+[data-sync-ssh-row] > [data-sync-btn] { flex: none; align-self: center; }
 [data-sync-ssh-src] { font-size: 11px; line-height: 14px; color: var(--dsw-alias-label-secondary); }
 /* R2 status banner — badge + hint need a real gap (was running together) */
 [data-r2-summary] { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
