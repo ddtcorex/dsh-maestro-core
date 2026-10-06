@@ -177,6 +177,13 @@ describe('the SSH field block', () => {
     )
   })
 
+  it('keeps the field on a whole pixel under its label', () => {
+    // An 11px label inheriting the root's 1.5 line-height is 16.5px tall, which put
+    // the field on y=418.5 at 390px; a 0.5px hairline on a half pixel can lose its
+    // top edge on iOS. The label states a whole-pixel line-height.
+    assert.match(ruleBody(css, '[data-sync-ssh-label]'), /line-height:\s*\d+px/)
+  })
+
   it('keeps the actions disabled until the field holds something', () => {
     assert.ok(
       /disabled=\{checking \|\| busy \|\| hostInput\.trim\(\)\.length === 0\}/.test(panel),

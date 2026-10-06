@@ -255,7 +255,7 @@ button[data-sync-stat]:focus-visible { outline: 2px solid var(--dsw-alias-border
 }
 /* SSH configuration — user-filled target, explicit check, nothing auto-probes */
 [data-sync-ssh] { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); }
-[data-sync-ssh-label] { font-size: 11px; color: var(--dsw-alias-label-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+[data-sync-ssh-label] { font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 [data-sync-ssh-input] { min-height: 44px; padding: 6px 12px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; width: 100%; box-sizing: border-box; }
 [data-sync-ssh-input]:focus-visible { outline: 2px solid var(--dsw-alias-border-l2); outline-offset: 2px; }
 [data-sync-ssh-input]:disabled { opacity: 0.6; }
