@@ -622,7 +622,7 @@ export function MaestroSettingsTab({ configRpcCall, supervisorRpcCall }: { confi
                     style: {
                       minHeight: 44, padding: '6px 12px', border: '0.5px solid var(--dsw-alias-border-l4)',
                       borderRadius: 'var(--dsw-radius-md)', background: t.bgLayer3 as string,
-                      color: t.labelPrimary as string, font: 'inherit',
+                      color: t.labelPrimary as string, font: 'inherit', fontSize: 13,
                     },
                   },
                   h('option', { value: 'default' }, `Default (${meta.defaultTier})`),

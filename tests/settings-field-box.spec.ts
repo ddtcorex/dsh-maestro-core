@@ -108,12 +108,16 @@ describe('shared settings field box', () => {
     expect(style).toMatch(/font:\s*'inherit'/)
   })
 
-  it('leaves the inline select no fixed height, no literal size and no hex', () => {
+  it('leaves the inline select no fixed height, a stated 13px size and no hex', () => {
     // A fixed height would defeat the touch target; a hex would break the
     // token rule the standard exists to enforce.
     const style = guardSelectStyle()
     expect(style, 'a fixed height replaces the floor').not.toMatch(/(^|[^\w])height:/)
-    expect(style, 'a literal font size overrides font:inherit').not.toMatch(/fontSize:/)
+    // `font: inherit` alone resolves to the dialog's 16px body size here (this tab's
+    // root sets none, the other sections set 13px on theirs), which made these
+    // dropdowns the only 16px fields. The size must be stated, and AFTER the
+    // shorthand: a longhand written before `font` is reset by it.
+    expect(style).toMatch(/font:\s*'inherit',\s*fontSize:\s*13/)
     expect(style, 'a hardcoded hex replaces the token').not.toMatch(/#[0-9a-fA-F]{3,8}/)
     expect(style, 'the retired platform surface token').not.toMatch(/bg-module-platform/)
   })
