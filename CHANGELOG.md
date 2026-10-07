@@ -9,6 +9,7 @@
 - **BREAKING: `<dsh home>/maestro/settings.json` is no longer read.** The supervisor consults only `<dsh home>/dsh-maestro-config/settings.json`.
 - **BREAKING: the mtime-only `~/.dsh/.supervisor/planned-restart` file is no longer honoured.** Only the JSON `planned-restart.json` marker counts. `restart-dsh-web.sh` now writes that JSON marker (default path `planned-restart.json`, 180s ttl); a custom `DSH_SUPERVISOR_MARKER` must point at a JSON marker too.
 - **BREAKING: `SyncService.pull()` and `SyncService.push()` and the `PullResult` and `PushResult` types.** Use `preview({ direction })` then `apply({ previewId, direction, confirm: true })`.
+- **BREAKING: the `maestro_sync_pull` and `maestro_sync_push` tools and the `pull` and `push` sync RPC methods.** They were preview-only aliases that never wrote. Agents call `maestro_sync_preview` then `maestro_sync_apply`; the Sync tab already uses `previewStart` and `apply`.
 - The duplicate `MaestroMark` in the sync UI kit; the sync surface imports the one in `config/components/BrandMark.tsx`.
 
 ## [0.11.2] - 2026-10-07

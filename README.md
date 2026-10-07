@@ -38,7 +38,7 @@ Host tools registered with `ctx.tools.register`:
 | `maestro_resume_tool_health` | supervisor | Tool-view health of a resumed session |
 | `maestro_repair_session_preset` | supervisor | Re-link an agent that joined no preset |
 | `maestro_guard_status`, `maestro_guard_stats`, `maestro_full_scan` | guard | Guard state, counters and a full rule scan |
-| `maestro_sync_status`, `maestro_sync_check_machines`, `maestro_sync_preview`, `maestro_sync_apply`, `maestro_sync_pull`, `maestro_sync_push`, `maestro_sync_bidirectional_preview`, `maestro_sync_bidirectional_apply`, `maestro_sync_tunnel_restore` | sync | Two-machine sync, preview first |
+| `maestro_sync_status`, `maestro_sync_check_machines`, `maestro_sync_preview`, `maestro_sync_apply`, `maestro_sync_bidirectional_preview`, `maestro_sync_bidirectional_apply`, `maestro_sync_tunnel_restore` | sync | Two-machine sync, preview first |
 | `maestro_backup_preview`, `maestro_backup_apply`, `maestro_backup_gc_preview`, `maestro_backup_gc_apply`, `maestro_restore_preview`, `maestro_restore_apply` | sync | Backup, retention GC and restore, preview first |
 
 ## Requirements

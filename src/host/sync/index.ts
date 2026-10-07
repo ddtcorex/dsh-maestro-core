@@ -1,6 +1,5 @@
 // dsh-maestro-sync — Host index: preview/apply tools + loopback RPC (Task 6).
-// Mutation exists only through preview-bound apply(confirm:true); the legacy
-// pull/push endpoints and tools are preview-only compatibility aliases.
+// Mutation exists only through preview-bound apply(confirm:true).
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
@@ -307,38 +306,6 @@ export default {
       ),
     );
 
-    // maestro_sync_pull / maestro_sync_push — preview-only compatibility aliases
-    ctx.effect(() =>
-      ctx.tools.register(
-        textTool(
-          'maestro_sync_pull',
-          'Deprecated: preview-only pull alias (never writes). Use preview + apply.',
-          { dryRun: { type: 'boolean', description: 'ignored — always preview-only' } },
-          async () => {
-            const svc = await makeService();
-            const preview = await svc.preview({ direction: 'pull' });
-            return JSON.stringify({ ok: true, previewId: preview.previewId, revision: preview.revision, summary: preview.summary });
-          },
-        ),
-      ),
-    );
-
-    ctx.effect(() =>
-      ctx.tools.register(
-        textTool(
-          'maestro_sync_push',
-          'Deprecated: preview-only push alias (never writes). Use preview + apply.',
-          { dryRun: { type: 'boolean', description: 'ignored — always preview-only' } },
-          async () => {
-            const svc = await makeService();
-            const preview = await svc.preview({ direction: 'push' });
-            return JSON.stringify({ ok: true, previewId: preview.previewId, revision: preview.revision, summary: preview.summary });
-          },
-        ),
-      ),
-    );
-
-
     // Backup / restore / GC tools (R2 Sync tab; mutation routes are
     // preview-bound apply(confirm:true) — mirroring the sync tools).
     ctx.effect(() =>
@@ -403,12 +370,6 @@ export default {
           const svc = await makeService();
           try {
             switch (String(method)) {
-              case 'pull':
-              case 'push': {
-                // preview-only compatibility: no argument (including dryRun) can apply
-                const preview = await svc.preview({ direction: method === 'push' ? 'push' : 'pull' });
-                return okCarrier({ previewId: preview.previewId, revision: preview.revision, expiresAt: preview.expiresAt, summary: preview.summary });
-              }
               case 'status': {
                 if (args && typeof args.bucket === 'string') {
                   const page = await svc.statusPage({ bucket: args.bucket, cursor: args.cursor, limit: args.limit });
