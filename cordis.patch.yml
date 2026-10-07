@@ -41,3 +41,13 @@
       # the row fails on harnesses that provide webServer after rows apply (DSH 0.1.5-rc.1+).
       inject: ['connection', 'webServer']
       config: {}
+
+# DSH 0.2.x resolves `webServer` for `ctx.connection.rpc.handle` on the
+# `connection` row own fiber, so a row-level inject cannot reach it. `inject`
+# replaces the base list, hence `webRuntime` (the base row needs it for
+# trustedHosts) is repeated. Identical in every maestro package that registers
+# RPC channels, so each one stays installable alone.
+- id: connection
+  inject:
+    - webRuntime
+    - webServer
