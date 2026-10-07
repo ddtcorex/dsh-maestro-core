@@ -16,7 +16,6 @@ const savedHome = process.env.HOME
 const savedUserProfile = process.env.USERPROFILE
 beforeAll(() => {
   process.env.HOME = tmpHome
-  // Also clear the legacy plain file path that checkPlannedRestart falls back to
   if (process.env.USERPROFILE !== undefined) process.env.USERPROFILE = tmpHome
 })
 afterAll(() => {

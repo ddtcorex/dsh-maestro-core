@@ -60,8 +60,8 @@ export function isSelfCopyError(message: string): boolean {
 // that script writes this marker right before it intentionally takes dsh-web
 // down, so the supervisor's own health poll does not mistake a deliberate
 // restart (kill -> dry-boot -> relaunch, up to ~130s) for a crash and race it
-// with its own rollback + restartWeb(). Presence + freshness is authoritative;
-// the marker's content is never parsed.
+// with its own rollback + restartWeb(). The marker is the JSON {ts, ttl}
+// document at planned-restart.json; a plain mtime-only file is no longer read.
 export const PLANNED_RESTART_TTL_MS = 180_000
 
 export function isPlannedRestartFresh(mtimeMs: number, nowMs: number, ttlMs: number = PLANNED_RESTART_TTL_MS): boolean {
@@ -100,26 +100,11 @@ export function checkPlannedRestart(markerPath?: string): boolean {
       return Date.now() - j.ts < j.ttl
     }
   } catch {}
-  // Fallback: legacy plain file written by dsh-safe-web-update (no .json, mtime-based)
-  try {
-    const legacy = path.join(os.homedir(), '.dsh/.supervisor/planned-restart')
-    const stat = fs.statSync(legacy)
-    return isPlannedRestartFresh(stat.mtimeMs, Date.now())
-  } catch {}
   return false
 }
 
 export function clearPlannedRestart(): void {
   try { fs.unlinkSync(plannedRestartPath()) } catch {}
-  // also clear legacy plain file if present (best-effort, avoids stale suppression)
-  try {
-    const legacy = path.join(os.homedir(), '.dsh/.supervisor/planned-restart')
-    if (fs.existsSync(legacy) && legacy !== plannedRestartPath()) {
-      // only remove legacy if it was created as test artifact; keep conservative
-      // but clearing both ensures checkPlannedRestart() returns false after clear
-      try { fs.unlinkSync(legacy) } catch {}
-    }
-  } catch {}
 }
 
 // Restart-request variant of planned-restart.json: carries the caller's
