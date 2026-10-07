@@ -82,16 +82,7 @@ export function writePlannedRestart(ttlMs = 30000): void {
   markBootBoundary()
 }
 
-export function checkPlannedRestart(markerPath?: string): boolean {
-  // Legacy path explicit: check mtime of that file
-  if (markerPath) {
-    try {
-      const stat = fs.statSync(markerPath)
-      return isPlannedRestartFresh(stat.mtimeMs, Date.now())
-    } catch {
-      return false
-    }
-  }
+export function checkPlannedRestart(): boolean {
   // New JSON marker with {ts, ttl}
   try {
     const raw = fs.readFileSync(plannedRestartPath(), 'utf8')
