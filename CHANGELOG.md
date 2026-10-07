@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.2] - 2026-10-07
+
+### Fixed
+
+- **RPC rows activate on DSH 0.2.x.** The bundle patch declares `webServer` on the `connection` entry, so rows that call `rpc.handle` no longer fail with `cannot get property "webServer" without inject` and their channels no longer answer 405.
+
 ## [0.11.1] - 2026-10-06
 
 ### Fixed
