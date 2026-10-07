@@ -15,8 +15,11 @@
  *     import another's;
  *   - dsh-maestro-remote's copy is a host-side HTML string (the PIN login
  *     badge in `src/host/remote-proxy.ts`), which no client module reaches;
- *   - dsh-maestro-gateway, -jobs and -sync each carry it in their own client
- *     bundle for the same reason.
+ *   - dsh-maestro-gateway and -jobs each carry it in their own client bundle
+ *     for the same reason.
+ *
+ * This package's own sync surface shares the single client bundle, so it
+ * imports `MaestroMark` from here instead of declaring a second copy.
  *
  * Mark:  `M2 11 L5 4 L8 9 L11 4 L14 11`, currentColor, strokeWidth 1.6.
  * Badge: `data-maestro-logo`, outer 28 / size 16 / radius 8, `#0A84FF` tile.

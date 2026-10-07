@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { MaestroMark } from '../config/components/BrandMark.js'
 
 /**
  * Sync UI kit — DSH-native primitives, Minimalism & Swiss (design-system/MASTER.md).
@@ -35,15 +36,6 @@ export const t = {
 } as const
 
 // --- Shared Maestro logo (branding rule: same mark/path everywhere) -------------
-export function MaestroMark(props: { size?: number }) {
-  const s = props.size ?? 16
-  return (
-    <svg width={s} height={s} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2 11 L5 4 L8 9 L11 4 L14 11" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
 export function MaestroLogo(props: { outer?: number; size?: number; radius?: number }) {
   const outer = props.outer ?? 28
   const size = props.size ?? 16
