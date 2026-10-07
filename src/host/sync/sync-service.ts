@@ -12,7 +12,6 @@
  *   fsync. Push materializes every output below a private operation dir, uploads
  *   to <root>/.maestro-sync/stage/<op>/ and commits through the fixed remote
  *   CAS helper (expectedTargetSha256); a mismatch is CONCURRENT_MODIFICATION.
- * - Legacy pull()/push() are preview-only compatibility aliases and never write.
  */
 import * as nodeFs from 'node:fs';
 import * as path from 'node:path';
@@ -20,13 +19,13 @@ import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mergeDelimited } from './merge.js';
 import { mergeSessionBuffers } from './session-plan.js';
-import { snapshotFile, kindForPath } from './snapshot.js';
+import { kindForPath } from './snapshot.js';
 import { hashFiles } from './hashing.js';
 import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint } from './fingerprint.js';
 import type { RemoteManifestEntry } from './remote-manifest.js';
 import { buildPlan, buildPreview, getPreview, getPreviewDirection, deletePreview, storePreview } from './sync-plan.js';
 import { normalizeEligiblePath, validateRemoteTarget, validateHost } from './validation.js';
-import type { RemoteTarget, SyncDirection, SyncPreview, SyncSummary, SyncFailure, SyncPlan, FileSnapshot, PlannedAction, SyncProgress, SyncScope } from './sync-types.js';
+import type { RemoteTarget, SyncDirection, SyncPreview, SyncSummary, SyncFailure, FileSnapshot, PlannedAction, SyncProgress, SyncScope } from './sync-types.js';
 import { createProcessRunner, type ProcessRunner } from './process-runner.js';
 import { createTransport, type SyncTransport } from './transport.js';
 
@@ -78,20 +77,6 @@ export interface StatusPage {
   nextCursor: number | null;
   connection: ConnectionStatus;
   remoteHost: string;
-}
-
-export interface PullResult {
-  copied: number;
-  merged: number;
-  added: number;
-  conflicts: number;
-}
-
-export interface PushResult {
-  copied: number;
-  merged: number;
-  added: number;
-  conflicts: number;
 }
 
 export interface PreviewResult extends SyncPreview {
@@ -195,7 +180,6 @@ export class SyncService {
     const result: string[] = [];
     const fsMod = this.fs;
     const walk = (dir: string, base: string) => {
-      let entries: any[] = [];
       try {
         if (typeof fsMod.readdirSync !== 'function') return;
         const raw = fsMod.readdirSync(dir, { withFileTypes: true } as any);
@@ -716,20 +700,6 @@ export class SyncService {
     } finally {
       cleanup();
     }
-  }
-
-  // ---- legacy preview-only compatibility (never writes) ----
-
-  /** Deprecated: preview-only alias. `dryRun` is ignored; nothing is ever applied here. */
-  async pull(_opts: { dryRun?: boolean } = {}): Promise<PullResult> {
-    const preview = await this.preview({ direction: 'pull' });
-    return { copied: preview.summary.copied, merged: preview.summary.merged, added: preview.summary.added, conflicts: preview.summary.conflicts };
-  }
-
-  /** Deprecated: preview-only alias. `dryRun` is ignored; nothing is ever applied here. */
-  async push(_opts: { dryRun?: boolean } = {}): Promise<PushResult> {
-    const preview = await this.preview({ direction: 'push' });
-    return { copied: preview.summary.copied, merged: preview.summary.merged, added: preview.summary.added, conflicts: preview.summary.conflicts };
   }
 
   // ---- status ----

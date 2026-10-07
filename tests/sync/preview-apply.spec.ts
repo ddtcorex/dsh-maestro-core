@@ -148,8 +148,6 @@ describe('preview/apply contract', () => {
     const previewSpy = vi.spyOn(SyncService.prototype, 'preview').mockResolvedValue(fakePreview as any);
     const applySpy = vi.spyOn(SyncService.prototype, 'apply').mockResolvedValue({ ok: true, revision: 'rev', summary: fakePreview.summary, committed: [], failures: [] } as any);
     vi.spyOn(SyncService.prototype, 'status').mockResolvedValue({ localOnly: 0, remoteOnly: 0, both: 0, localOnlyFiles: [], remoteOnlyFiles: [], bothFiles: [], connection: { ok: true, host: 'h' }, remoteHost: 'h' } as any);
-    vi.spyOn(SyncService.prototype, 'pull').mockResolvedValue({ copied: 0, merged: 0, added: 0, conflicts: 0 } as any);
-    vi.spyOn(SyncService.prototype, 'push').mockResolvedValue({ copied: 0, merged: 0, added: 0, conflicts: 0 } as any);
     vi.spyOn(SyncService.prototype, 'checkConnection').mockResolvedValue({ ok: true, host: 'h' } as any);
 
     const resPreview = await rpcHandler('preview', { direction: 'pull' });

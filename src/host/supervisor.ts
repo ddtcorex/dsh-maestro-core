@@ -285,14 +285,6 @@ export class Supervisor {
     return 5
   }
 
-  private async getEffectivePollTimeoutMs(): Promise<number> {
-    try {
-      const cfg = await readSupervisorConfig()
-      if (typeof (cfg as any).pollTimeoutMs === 'number' && (cfg as any).pollTimeoutMs > 0) return (cfg as any).pollTimeoutMs
-    } catch {}
-    return 20000
-  }
-
   private async getEffectiveBootGraceMs(): Promise<number> {
     if (this.deps.bootGraceMs !== undefined) return this.deps.bootGraceMs
     try {

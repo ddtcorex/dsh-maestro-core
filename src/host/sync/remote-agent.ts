@@ -32,7 +32,6 @@
  *   renames the staged artifact into place (`mv` on the same filesystem).
  * - Any failure exits non-zero; no partial overwrite ever occurs.
  */
-export const REMOTE_AGENT_NAME = 'maestro-sync-commit';
 export const REMOTE_AGENT_REL = '.maestro-sync/bin/maestro-sync-commit';
 
 export function remoteAgentSource(): string {

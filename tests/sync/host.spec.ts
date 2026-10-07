@@ -36,7 +36,7 @@ describe('host', () => {
     const definitions = register.mock.calls.map((call: any[]) => call[0]);
     const names = definitions.map((definition: any) => definition.name);
     expect(names).toEqual(
-      expect.arrayContaining(['maestro_sync_preview', 'maestro_sync_apply', 'maestro_sync_pull', 'maestro_sync_push', 'maestro_sync_status', 'maestro_backup_preview', 'maestro_backup_apply', 'maestro_restore_preview', 'maestro_restore_apply', 'maestro_backup_gc_preview', 'maestro_backup_gc_apply']),
+      expect.arrayContaining(['maestro_sync_preview', 'maestro_sync_apply', 'maestro_sync_status', 'maestro_backup_preview', 'maestro_backup_apply', 'maestro_restore_preview', 'maestro_restore_apply', 'maestro_backup_gc_preview', 'maestro_backup_gc_apply']),
     );
     for (const definition of definitions) {
       expect(definition.parameters).toMatchObject({ type: 'object' });
@@ -50,29 +50,6 @@ describe('host', () => {
     // handle() takes exactly (channel, handler) — there is no authority option.
     expect(handle).toHaveBeenCalledWith('/dsh-maestro-sync', expect.any(Function));
     expect(handle.mock.calls[0]).toHaveLength(2);
-  });
-
-  it('legacy pull/push RPC are preview-only: no dryRun can apply, apply is never implied', async () => {
-    const { rpcHandler } = await bootPlugin();
-    const previewSpy = vi.spyOn(SyncService.prototype, 'preview').mockResolvedValue({
-      previewId: 'x'.repeat(32),
-      expiresAt: new Date(Date.now() + 60000).toISOString(),
-      revision: 'r',
-      actions: [],
-      summary: { copied: 0, merged: 0, skipped: 0, conflicts: 0, added: 0 },
-    } as any);
-    const applySpy = vi.spyOn(SyncService.prototype, 'apply').mockResolvedValue({ ok: true, revision: 'r', summary: {} as any, committed: [], failures: [] } as any);
-
-    // omitted dryRun must still be preview-only
-    const resPull = await rpcHandler('pull', {});
-    expect(resPull.ok).toBe(true);
-    expect(previewSpy).toHaveBeenCalledWith({ direction: 'pull' });
-    const resPush = await rpcHandler('push', { dryRun: false });
-    expect(resPush.ok).toBe(true);
-    expect(previewSpy).toHaveBeenCalledWith({ direction: 'push' });
-    expect(applySpy).not.toHaveBeenCalled();
-
-    vi.restoreAllMocks();
   });
 
   it('status RPC pages with cursor and stays bounded', async () => {

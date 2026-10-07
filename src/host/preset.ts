@@ -125,7 +125,7 @@ export function makePresetSetup(
     if (typeof presets?.mount !== 'function') return Promise.resolve(undefined)
     return presets.mount(agentCtx, presetId)
   })
-  return async (agentCtx: unknown, agent?: unknown) => { await mount(agentCtx, presetId) }
+  return async (agentCtx: unknown) => { await mount(agentCtx, presetId) }
 }
 
 /** Outcome of one repair attempt; `reason` is the operator-facing classification. */

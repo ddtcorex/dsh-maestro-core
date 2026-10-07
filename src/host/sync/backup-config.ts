@@ -10,7 +10,6 @@ import { createHash } from 'node:crypto';
 import * as os from 'node:os';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
-import { load } from '../store/index.js';
 
 export interface BackupProviderConfig {
   provider: 'r2' | 'aws';

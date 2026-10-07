@@ -40,7 +40,6 @@ export function collectSnapshots(root: string, fs: any): FileSnapshot[] {
   }
 
   const walk = (dir: string, base: string) => {
-    let entries: any[] = [];
     try {
       if (typeof fsMod.readdirSync !== 'function') return;
       const raw = fsMod.readdirSync(dir, { withFileTypes: true } as any);
@@ -114,35 +113,6 @@ export function collectSnapshots(root: string, fs: any): FileSnapshot[] {
   // Deterministic sort
   result.sort((a, b) => a.path.localeCompare(b.path));
   return result;
-}
-
-/**
- * Snapshot a specific list of validated eligible paths under root.
- * Useful for hashing staged remote files where we already know the manifest.
- */
-export function snapshotPaths(root: string, paths: string[], fs: any): FileSnapshot[] {
-  const fsMod = fs ?? {};
-  const out: FileSnapshot[] = [];
-  for (const p of paths) {
-    let normalized: string;
-    try {
-      normalized = normalizeEligiblePath(p);
-    } catch {
-      continue;
-    }
-    const full = path.join(root, normalized);
-    try {
-      if (fsMod.existsSync && !fsMod.existsSync(full)) continue;
-      if (typeof fsMod.readFileSync !== 'function') continue;
-      const data = fsMod.readFileSync(full);
-      const buf = Buffer.isBuffer(data) ? data : Buffer.from(String(data), 'utf-8');
-      out.push(snapshotFile(normalized, buf));
-    } catch {
-      continue;
-    }
-  }
-  out.sort((a, b) => a.path.localeCompare(b.path));
-  return out;
 }
 
 /**

@@ -31,7 +31,6 @@ export * from './resume-tools.js'
 import {
   probeToolView,
   defaultResolveToolScope,
-  type ToolViewProbe,
   type ToolViewProbeFn,
   type ToolScopeResolver,
 } from './tool-view.js'
@@ -262,10 +261,6 @@ function getResumeWithinMs(config?: SupervisorPluginConfig): number {
  */
 export function isAutoResumePinned(config?: SupervisorPluginConfig): boolean {
   return typeof config?.autoResumeEnabled === 'boolean'
-}
-
-export function getAutoResumeEnabledExported(config?: SupervisorPluginConfig): boolean {
-  return getAutoResumeEnabled(config)
 }
 
 /**

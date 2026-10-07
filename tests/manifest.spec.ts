@@ -29,10 +29,17 @@ describe('core manifest', () => {
     // project sets a declarationDir, so lib/types holds client types alone.
     const tsClient = JSON.parse(readFileSync(join(root, 'tsconfig.client.json'), 'utf8'))
     expect(pkg.exports['.'].types).toBe('./lib/index.d.ts')
+    // The legacy top-level field must agree with the exports map.
+    expect(pkg.types).toBe(pkg.exports['.'].types)
     expect(pkg.exports['./store'].types).toBe('./lib/store/index.d.ts')
     expect(pkg.exports['./client'].types).toBe(
       `./${tsClient.compilerOptions.declarationDir}/index.d.ts`.replace(/^\.\//, './'),
     )
+  })
+
+  it.skipIf(!existsSync(join(root, 'lib/index.js')))('points every declared types path at a file the build emits', () => {
+    const paths = [pkg.types, pkg.exports['.'].types, pkg.exports['./store'].types, pkg.exports['./client'].types]
+    for (const rel of paths) expect(existsSync(join(root, rel)), rel).toBe(true)
   })
 
   it('keeps rootDir src/host and has no dependency on config-lib', () => {

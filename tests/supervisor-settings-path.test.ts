@@ -6,9 +6,8 @@ import { Supervisor } from '../src/host/supervisor.js'
 
 /**
  * The supervisor reads its auto-resume keys from the canonical settings store
- * path (`<dsh home>/dsh-maestro-config/settings.json`). The retired
- * `<dsh home>/maestro/settings.json` is only a fallback when it is the only
- * file present.
+ * path (`<dsh home>/dsh-maestro-config/settings.json`) and never consults the
+ * retired `<dsh home>/maestro/settings.json`.
  */
 describe('Supervisor settings path', () => {
   const saved = { HOME: process.env.HOME, DSH_HOME: process.env.DSH_HOME, EN: process.env.DSH_SUPERVISOR_AUTO_RESUME, WI: process.env.DSH_SUPERVISOR_RESUME_WITHIN }
@@ -46,12 +45,12 @@ describe('Supervisor settings path', () => {
     expect(sup().getResumeWithinMs()).toBe(9 * 60 * 1000)
   })
 
-  it('falls back to the legacy path only when the canonical file is absent', () => {
+  it('ignores the retired maestro path', () => {
     write('maestro/settings.json', { domains: { supervisor: { autoResumeEnabled: false } } })
-    expect(sup().getAutoResumeEnabled()).toBe(false)
+    expect(sup().getAutoResumeEnabled()).toBe(true)
   })
 
-  it('prefers the canonical file over the legacy one', () => {
+  it('prefers the canonical file over the retired one', () => {
     write('maestro/settings.json', { domains: { supervisor: { autoResumeEnabled: false } } })
     write('dsh-maestro-config/settings.json', { version: 1, domains: { supervisor: { autoResumeEnabled: true } } })
     expect(sup().getAutoResumeEnabled()).toBe(true)

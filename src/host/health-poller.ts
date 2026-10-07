@@ -32,11 +32,6 @@ export function getActiveEnterMs(): number | undefined {
   return undefined
 }
 
-/** @deprecated kept for callers; identical to getActiveEnterMs(). */
-export function getActiveEnterWallMs(): number | undefined {
-  return getActiveEnterMs()
-}
-
 export interface PollHealthOpts {
   fetch?: () => Promise<{ status: number; text: () => Promise<string> }>
   psAlive?: () => Promise<boolean>

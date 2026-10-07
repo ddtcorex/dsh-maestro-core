@@ -17,7 +17,7 @@ import {
 } from '../src/host/restart-guards.js'
 
 // Point os.homedir() at a per-file temp home so every restart marker (the
-// planned-restart.json JSON AND the legacy plain file) lands under the temp
+// planned-restart.json JSON) lands under the temp
 // dir instead of the real ~/.dsh. Without this the restart-guards tests
 // collided with the LIVE dsh-web-supervisor daemon: under parallel vitest it
 // reads/writes the real ~/.dsh/.supervisor/planned-restart.json at the same

@@ -12,7 +12,7 @@
   },
   "type": "module",
   "main": "./lib/index.js",
-  "types": "./lib/types/index.d.ts",
+  "types": "./lib/index.d.ts",
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -50,6 +50,9 @@
     "src",
     "skills",
     "scripts",
+    "!scripts/sync/bench-preview.mjs",
+    "!scripts/sync/cdp-sync-probe.mjs",
+    "!scripts/sync/cdp-sync-verify.mjs",
     "systemd",
     "README.md",
     "cordis.patch.yml"

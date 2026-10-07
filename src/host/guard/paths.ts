@@ -120,17 +120,6 @@ export function pathSpellings(p: string, dshHome?: string): string[] {
 }
 
 /**
- * The guard's own paths in every spelling a command may carry — the absolute
- * form plus the `~`/`$HOME` forms — derived from {@link guardConfigPaths}, so a
- * new guarded file is covered by every spelling at once.
- */
-export function guardPathSpellings(dshHome?: string): string[] {
-  const out = new Set<string>()
-  for (const p of guardConfigPaths(dshHome)) for (const s of pathSpellings(p, dshHome)) out.add(s)
-  return [...out]
-}
-
-/**
  * True if path points to a blocked credential / secret location.
  * Covers: the DSH auth file (any expansion), the tunnel auth dir, the registry
  * token name, and the auth-file name as a substring.

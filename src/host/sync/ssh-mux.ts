@@ -7,7 +7,6 @@
 // and is torn down with `-O exit`; a dead master degrades to a fresh handshake.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import type { ProcessRunner } from './process-runner.js';
 
 export interface SshMux {

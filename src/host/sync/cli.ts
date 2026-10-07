@@ -128,15 +128,6 @@ export function parseArgs(argv: string[], err: (s: string) => void): CliOpts | n
     opts.subcommand = rest.shift() as 'check-machines' | 'tunnel-restore' | 'set-peer-host';
   }
 
-  const takeValue = (a: string, i: number, flag: string): string | null => {
-    const v = rest[i];
-    if (!v || v.startsWith('-')) {
-      fail(`${flag} requires a value`);
-      return null;
-    }
-    return v;
-  };
-
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i]!;
     if (a === '--pull' || a === '--push' || a === '--bidirectional') {

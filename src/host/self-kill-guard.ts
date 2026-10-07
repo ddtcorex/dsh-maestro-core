@@ -67,11 +67,6 @@ export function treeBoundaryKind(commandLine: string): TreeBoundaryKind {
   return 'none'
 }
 
-/** Convenience boolean form of {@link treeBoundaryKind}. */
-export function isTreeBoundary(commandLine: string): boolean {
-  return treeBoundaryKind(commandLine) !== 'none'
-}
-
 export interface ProcessRow { pid: number; ppid: number }
 
 /**

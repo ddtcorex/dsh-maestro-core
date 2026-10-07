@@ -5,8 +5,7 @@ import { Journal, type AskOutcome } from './journal.js'
 import { redact } from './redact.js'
 import { classify } from './rules.js'
 import { decide, renderReason } from './decide.js'
-import { DEFAULT_CONFIG, loadGuardConfig, loadGuardConfigWithMigration, type GuardConfigV2 } from './config.js'
-import { retireLegacyStore } from './migrate.js'
+import { DEFAULT_CONFIG, loadGuardConfig, type GuardConfigV2 } from './config.js'
 import { apply as applyFullScan } from './full-scan-tool.js'
 import { applyStatusTools } from './status-tool.js'
 import './validators.js'
@@ -180,59 +179,15 @@ interface NativeApproval {
   request(req: { agent: unknown; toolName: string; callId?: string; reason: string; signal?: AbortSignal }): Promise<string>
 }
 
-/**
- * Journal an ALREADY-COMPUTED migration result. Split out of
- * {@link journalLegacyConfigMigration} so `apply()` can reuse the single
- * boot-time config read for both the journal knobs and this note. Never throws.
- */
-export async function journalConfigMigration(journal: Journal, migratedKeys: string[]): Promise<string[]> {
-  try {
-    if (migratedKeys.length === 0) return []
-    const target = migratedKeys.join(',')
-    await journal.append({
-      tool: 'guard',
-      rule: 'config-legacy',
-      tier: 'journal',
-      target,
-      outcome: 'passed',
-      note: `legacy domains.guard keys migrated onto schema v2: ${target}`,
-    })
-    return migratedKeys
-  } catch (e) {
-    console.error('[dsh-maestro-guard] legacy config migration failed:', (e as Error)?.message)
-    return []
-  }
-}
-
-/**
- * Journal the schema-v1 → v2 config migration ONCE per boot. The handler's
- * per-call config read (`loadGuardConfig`) is deliberately mute, so without
- * this a persisted `domains.guard` written for schema v1 would change what the
- * guard gates without leaving any trace of why.
- *
- * Exported so the boot effect body is unit-testable. Never throws: a failed
- * read or a failed journal write must not stop the guard from booting, and
- * `migratedKeys.length === 0` writes nothing at all.
- */
-export async function journalLegacyConfigMigration(journal: Journal, dshHome?: string): Promise<string[]> {
-  try {
-    const { migratedKeys } = await loadGuardConfigWithMigration(dshHome)
-    return await journalConfigMigration(journal, migratedKeys)
-  } catch (e) {
-    console.error('[dsh-maestro-guard] legacy config migration failed:', (e as Error)?.message)
-    return []
-  }
-}
-
 export default {
   inject: ['tools'] as const,
   async apply(ctx: Context) {
     // `domains.guard.journal` is a BOOT-TIME block: it decides whether the
     // journal writes at all and which retention defaults `rotate()` uses, so it
     // is read once here — unlike the per-call rule config, a settings change
-    // needs a host restart. The same read feeds the one-shot migration note.
-    const boot = await loadGuardConfigWithMigration().catch(() => ({ config: DEFAULT_CONFIG, migratedKeys: [] as string[] }))
-    const journal = new Journal(undefined, Date.now, boot.config.journal)
+    // needs a host restart.
+    const bootConfig = await loadGuardConfig().catch(() => DEFAULT_CONFIG)
+    const journal = new Journal(undefined, Date.now, bootConfig.journal)
     const policy = new PermissionPolicy({ deny: ['danger-tool'] })
     const requestApproval = async (req: { agent?: unknown; toolName: string; callId?: string; reason: string; signal?: AbortSignal }): Promise<ApprovalResult> => {
       const approval = ctx.get('approval') as NativeApproval | undefined
@@ -267,10 +222,6 @@ export default {
       const stop = journal.startDailyRotation()
       return () => stop()
     }, 'guard-journal-rotation')
-    ctx.effect(() => { void retireLegacyStore(journal); return () => {} }, 'guard-retire-legacy-store')
-    // Journal the v1 -> v2 config migration once per boot, from the boot read
-    // above; the per-call read stays the cheap `loadGuardConfig`.
-    ctx.effect(() => { void journalConfigMigration(journal, boot.migratedKeys); return () => {} }, 'guard-journal-legacy-config')
     // register on-demand full-scan tool (Task 4) alongside guard handler
     applyFullScan(ctx, {})
     // Read-only introspection of the journal the handler above writes: the

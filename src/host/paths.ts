@@ -73,18 +73,14 @@ export function resolveSupervisorPackageDir(): string {
 /**
  * Read the shared settings document synchronously from the canonical store
  * path, `<dsh home>/dsh-maestro-config/settings.json` (`DSH_HOME` wins over
- * `~/.dsh`, matching the store). The retired `<dsh home>/maestro/settings.json`
- * is consulted only when the canonical file does not exist. Returns `undefined`
- * when neither file is present or the chosen one is unreadable.
+ * `~/.dsh`, matching the store). Returns `undefined` when the file is absent
+ * or unreadable.
  */
 export function readSettingsDocSync(): any {
   const home = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh')
   const canonical = path.join(home, 'dsh-maestro-config', 'settings.json')
-  const legacy = path.join(home, 'maestro', 'settings.json')
-  const chosen = fs.existsSync(canonical) ? canonical : fs.existsSync(legacy) ? legacy : undefined
-  if (!chosen) return undefined
   try {
-    return JSON.parse(fs.readFileSync(chosen, 'utf-8'))
+    return JSON.parse(fs.readFileSync(canonical, 'utf-8'))
   } catch {
     return undefined
   }

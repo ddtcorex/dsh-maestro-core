@@ -487,16 +487,11 @@ export function MaestroSettingsTab({ configRpcCall, supervisorRpcCall }: { confi
   }
   // Reset everything the tab owns to the built-in behaviour. Deep-merge cannot
   // delete keys, so rule overrides are nulled (the runtime drops non-string
-  // tiers at merge) and legacy booleans are neutralised to their inert values
-  // (only `false` ever migrated).
+  // tiers at merge).
   const resetGuardDefaults = async () => {
     const rules: Record<string, GuardTier | null> = {}
     for (const meta of RULE_META) rules[meta.id] = null
     await saveGuard({
-      gitProtection: { enabled: true, branches: ['master', 'main'] },
-      publishBlocked: true,
-      cwdContainment: true,
-      credentialPaths: [],
       rules,
       protectedBranches: ['master', 'main'],
       protectedPaths: [],
@@ -570,8 +565,8 @@ export function MaestroSettingsTab({ configRpcCall, supervisorRpcCall }: { confi
     { id: 'supervisor', label: 'Supervisor', icon: 'cpu' },
   ]
 
-  // Effective guard state: the stored document may still carry legacy v1 keys,
-  // so the tab renders through the same precedence the runtime enforces.
+  // Effective guard state: the tab renders through the same precedence the
+  // runtime enforces.
   const guardView = effectiveGuardView(guard)
   const guardCustomCount = guardView.rules.filter((r) => r.source !== 'default').length
 
@@ -605,7 +600,7 @@ export function MaestroSettingsTab({ configRpcCall, supervisorRpcCall }: { confi
             ...RULE_META.filter((meta) => meta.group === group).map((meta) => {
               const current = guardView.rules.find((r) => r.id === meta.id) ?? { ...meta, tier: meta.defaultTier, source: 'default' as const }
               const stateNote =
-                current.source === 'stored' ? ' Currently customized.' : current.source === 'legacy' ? ' Currently from an older setting.' : ` Default: ${meta.defaultTier}.`
+                current.source === 'stored' ? ' Currently customized.' : ` Default: ${meta.defaultTier}.`
               return h(SettingRow as any, {
                 title: meta.label,
                 description: `${meta.hint}${stateNote}${meta.locked ? ' Locked: the guard never allows lowering this one.' : ''}`,

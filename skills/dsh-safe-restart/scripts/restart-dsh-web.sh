@@ -6,9 +6,10 @@ repo="${DSH_REPO:-}"
 log="${DSH_RESTART_LOG:-/tmp/dsh-web-restart.log}"
 # Coordination with dsh-web-supervisor (see
 # <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md): the supervisor treats a
-# down poll as a crash unless this marker is fresh, so it never races this
+# down poll as a crash unless this marker is fresh (JSON {ts, ttl}, the format
+# restart-guards.ts parses), so it never races this
 # script's own kill -> dry-boot -> relaunch sequence with its own rollback.
-marker="${DSH_SUPERVISOR_MARKER:-$HOME/.dsh/.supervisor/planned-restart}"
+marker="${DSH_SUPERVISOR_MARKER:-$HOME/.dsh/.supervisor/planned-restart.json}"
 # Session-log pre-flight env (see lib/session-health.ts): SESSIONS_ROOT is the
 # operator DSH store's sessions dir (default <dsh home>/sessions) and may be
 # overridden per invocation. PLUGIN_DIR is this package's root, derived from
@@ -372,7 +373,7 @@ printf '[restart] stopping process tree: %s\n' "$(tr '\n' ' ' <<<"$tree_pids")" 
 mkdir -p "$(dirname "$log")"
 boot_guard_acquire
 mkdir -p "$(dirname "$marker")"
-date -Iseconds > "$marker"
+printf '{"ts":%s,"ttl":180000}\n' "$(date +%s%3N)" > "$marker"
 trap 'boot_guard_release; rm -f "$marker"' EXIT
 
 # Reload a stale supervisor daemon BEFORE the swap: it is the process that

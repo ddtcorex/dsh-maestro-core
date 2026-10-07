@@ -58,8 +58,6 @@ export async function serializedSystemdRestart(deps: SerializedRestartDeps = {})
   exec('systemctl --user start dsh-web.service')
 }
 
-export const DSH_WEB_UNIT_NAME = 'dsh-web.service'
-
 export function dshWebUnitPath(): string {
   return process.env.DSH_WEB_UNIT_PATH ?? path.join(os.homedir(), '.config/systemd/user/dsh-web.service')
 }
