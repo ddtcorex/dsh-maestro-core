@@ -116,35 +116,6 @@ export function collectSnapshots(root: string, fs: any): FileSnapshot[] {
 }
 
 /**
- * Snapshot a specific list of validated eligible paths under root.
- * Useful for hashing staged remote files where we already know the manifest.
- */
-export function snapshotPaths(root: string, paths: string[], fs: any): FileSnapshot[] {
-  const fsMod = fs ?? {};
-  const out: FileSnapshot[] = [];
-  for (const p of paths) {
-    let normalized: string;
-    try {
-      normalized = normalizeEligiblePath(p);
-    } catch {
-      continue;
-    }
-    const full = path.join(root, normalized);
-    try {
-      if (fsMod.existsSync && !fsMod.existsSync(full)) continue;
-      if (typeof fsMod.readFileSync !== 'function') continue;
-      const data = fsMod.readFileSync(full);
-      const buf = Buffer.isBuffer(data) ? data : Buffer.from(String(data), 'utf-8');
-      out.push(snapshotFile(normalized, buf));
-    } catch {
-      continue;
-    }
-  }
-  out.sort((a, b) => a.path.localeCompare(b.path));
-  return out;
-}
-
-/**
  * Snapshot from an in-memory map of path -> Buffer (useful for testing staged remote).
  */
 export function snapshotFromMap(contents: Map<string, Buffer>): FileSnapshot[] {

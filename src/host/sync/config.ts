@@ -1,7 +1,7 @@
 import { load } from '../store/index.js';
 import { validateRemoteTarget } from './validation.js';
 import { readPeerHost } from './peer-host.js';
-import type { RemoteTarget, SyncDirection, SyncRequest } from './sync-types.js';
+import type { SyncDirection, SyncRequest } from './sync-types.js';
 
 export interface SyncConfig {
   remoteHost: string;
@@ -68,14 +68,6 @@ export async function loadSyncConfig(opts: { dshHome?: string } = {}): Promise<S
 }
 
 /**
- * Validate and convert a SyncConfig's remote fields into a RemoteTarget.
- * Throws if host or dshRoot is not validated absolute.
- */
-export function configToRemoteTarget(config: SyncConfig): RemoteTarget {
-  return validateRemoteTarget({ host: config.remoteHost, dshRoot: config.remoteDshPath });
-}
-
-/**
  * Build a validated SyncRequest. Remote is validated via validateRemoteTarget;
  * localRoot is expected to be an absolute local path (lightly validated as absolute).
  * Throws on invalid host/path.
@@ -101,19 +93,4 @@ export function buildSyncRequest(params: {
     localRoot: params.localRoot,
     remote,
   };
-}
-
-/**
- * Helper: resolve effective remote target from config + env + cli overrides,
- * but do NOT auto-expand '~'. Caller must handle unresolved '~/.dsh' via
- * transport preflight (remoteHome) before building SyncRequest.
- */
-export function resolveRemoteTargetFromConfig(
-  config: SyncConfig,
-  overrides?: { remoteHost?: string; remoteDshPath?: string },
-): { host: string; dshRoot: string; needsPreflight: boolean } {
-  const host = overrides?.remoteHost ?? config.remoteHost;
-  const dshRoot = overrides?.remoteDshPath ?? config.remoteDshPath;
-  const needsPreflight = dshRoot === '~/.dsh' || dshRoot.startsWith('~/');
-  return { host, dshRoot, needsPreflight };
 }

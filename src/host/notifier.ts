@@ -1,19 +1,5 @@
-import { checkPlannedRestart } from './restart-guards.js'
-
 export interface NotifierOpts {
   send?: (msg: string) => Promise<void>
-}
-
-export async function notifyAutoRestart(
-  reason: string,
-  opts: NotifierOpts & { httpCode?: string | number; lkgId?: string; reportPath?: string } = {},
-): Promise<void> {
-  if (checkPlannedRestart()) return
-  const httpCode = (opts as any).httpCode ?? 'n/a'
-  const lkgId = (opts as any).lkgId ?? (opts as any).lkg ?? 'n/a'
-  const reportPath = (opts as any).reportPath ?? (opts as any).report ?? 'n/a'
-  const msg = `🔄 dsh web auto-restart — ${reason} — ${new Date().toISOString()} — up:${httpCode} — LKG:${lkgId} — report:${reportPath}`
-  await notify(msg, opts)
 }
 
 export async function notify(msg: string, opts: NotifierOpts = {}): Promise<void> {
@@ -56,16 +42,4 @@ async function defaultSend(msg: string): Promise<void> {
   }
   // 3) Fallback — log only, never throw
   console.log(`[supervisor notify] ${msg}`)
-}
-
-export async function notifyCrash(reportPath: string, error: string, opts: NotifierOpts = {}): Promise<void> {
-  await notify(`CRASH detected → rollback (report: ${reportPath}, error: ${error})`, opts)
-}
-
-export async function notifyDegraded(id: string, error: string, opts: NotifierOpts = {}): Promise<void> {
-  await notify(`DEGRADED: ${id} failed — ${error}`, opts)
-}
-
-export async function notifyFixed(branch: string, sessions: string[], opts: NotifierOpts = {}): Promise<void> {
-  await notify(`FIXED: ${branch}, sessions resumed: [${sessions.join(', ')}]`, opts)
 }

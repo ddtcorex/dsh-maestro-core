@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest
 import * as os from 'node:os'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { notify, notifyAutoRestart } from '../src/host/notifier.js'
-import { writePlannedRestart, clearPlannedRestart } from '../src/host/restart-guards.js'
+import { notify } from '../src/host/notifier.js'
+import { clearPlannedRestart } from '../src/host/restart-guards.js'
 
 // Isolate marker file to a temp HOME so parallel vitest workers (threads)
 // sharing the same real ~/.dsh/.supervisor/ do not race. Each fork has the
@@ -40,20 +40,5 @@ describe('notifier', () => {
     const mock = vi.fn(async () => {})
     await notify('hello', { send: mock })
     expect(mock).toHaveBeenCalledWith('hello')
-  })
-
-  it('auto notify with reason EADDRINUSE should contain 🔄', async () => {
-    clearPlannedRestart()
-    const sent: string[] = []
-    await notifyAutoRestart('health: EADDRINUSE :3080', { send: async (m) => { sent.push(m) } })
-    expect(sent.length).toBe(1)
-    expect(sent[0]).toMatch(/🔄 dsh web auto-restart — health: EADDRINUSE/)
-  })
-
-  it('no notify when planned restart active', async () => {
-    writePlannedRestart(30000)
-    const sent: string[] = []
-    await notifyAutoRestart('health: EADDRINUSE :3080', { send: async (m) => { sent.push(m) } })
-    expect(sent.length).toBe(0)
   })
 })

@@ -18,8 +18,6 @@
 
 export type GuardTier = 'allow' | 'journal' | 'ask' | 'deny'
 
-export const GUARD_TIERS: readonly GuardTier[] = ['allow', 'journal', 'ask', 'deny']
-
 export function isGuardTier(v: unknown): v is GuardTier {
   return v === 'allow' || v === 'journal' || v === 'ask' || v === 'deny'
 }

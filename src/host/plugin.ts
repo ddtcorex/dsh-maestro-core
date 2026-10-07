@@ -263,10 +263,6 @@ export function isAutoResumePinned(config?: SupervisorPluginConfig): boolean {
   return typeof config?.autoResumeEnabled === 'boolean'
 }
 
-export function getAutoResumeEnabledExported(config?: SupervisorPluginConfig): boolean {
-  return getAutoResumeEnabled(config)
-}
-
 /**
  * Wall-clock ms at which THIS process started, or `undefined` when it cannot
  * be established.

@@ -17,9 +17,6 @@ export function stripId(entry: string): string {
   return String(entry ?? '').replace(ENTRY_ID_RE, '');
 }
 
-/** Alias for compatibility. */
-export const stripEntryId = stripId;
-
 /**
  * Extract leading HTML comment header `<!--...-->` if present at start of text.
  * Returns header (trimmed) and remaining body.

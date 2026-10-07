@@ -248,14 +248,6 @@ export function formatLastSync(v: string | null): string {
   }
 }
 
-export function fileIcon(path: string): IconName {
-  if (path.startsWith('dsh-maestro-memory/daily/')) return 'calendar'
-  if (path.startsWith('dsh-maestro-memory/projects/')) return 'folder'
-  if (path === 'dsh-maestro-memory/MEMORY.md') return 'star'
-  if (path.startsWith('sessions/')) return 'message'
-  return 'file'
-}
-
 export function formatFile(path: string): { icon: IconName; title: string; path: string; meta: string } {
   if (path.startsWith('dsh-maestro-memory/daily/')) {
     const date = path.replace('dsh-maestro-memory/daily/', '').replace('.md', '')
