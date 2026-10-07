@@ -67,30 +67,22 @@ describe('effectiveGuardView', () => {
     expect(hasCustomTiers(view)).toBe(false)
   })
 
-  it('legacy booleans surface as legacy-sourced journal tiers', () => {
+  it('ignores the retired v1 keys', () => {
     const view = effectiveGuardView({
       gitProtection: { enabled: false, branches: ['main', 'release'] },
       publishBlocked: false,
       cwdContainment: false,
       credentialPaths: ['~/.config/extra.yaml'],
     })
-    const tierOf = (id: string) => view.rules.find((r) => r.id === id)
-    expect(tierOf('git.push.protected')).toMatchObject({ tier: 'journal', source: 'legacy' })
-    expect(tierOf('git.tag.release')).toMatchObject({ tier: 'journal', source: 'legacy' })
-    expect(tierOf('git.push.force')).toMatchObject({ tier: 'journal', source: 'legacy' })
-    // A git rule the legacy key never owned stays default.
-    expect(tierOf('git.merge.protected')).toMatchObject({ tier: 'journal', source: 'default' })
-    expect(tierOf('pkg.publish')).toMatchObject({ tier: 'journal', source: 'legacy' })
-    expect(tierOf('fs.write.outside')).toMatchObject({ tier: 'journal', source: 'legacy' })
-    expect(view.protectedBranches).toEqual(['main', 'release'])
-    expect(view.branchesSource).toBe('legacy')
-    expect(view.protectedPaths).toEqual(['~/.config/extra.yaml'])
-    expect(hasCustomTiers(view)).toBe(true)
+    expect(view.rules.every((r) => r.source === 'default' && r.tier === r.defaultTier)).toBe(true)
+    expect(view.protectedBranches).toEqual(['master', 'main'])
+    expect(view.branchesSource).toBe('default')
+    expect(view.protectedPaths).toEqual([])
+    expect(hasCustomTiers(view)).toBe(false)
   })
 
-  it('an explicit v2 entry beats the legacy boolean', () => {
+  it('an explicit v2 entry renders as stored', () => {
     const view = effectiveGuardView({
-      publishBlocked: false,
       rules: { 'pkg.publish': 'deny' },
       protectedBranches: ['main'],
     })

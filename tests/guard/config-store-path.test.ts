@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadGuardConfigWithMigration } from '../../src/host/guard/config.js'
+import { loadGuardConfig } from '../../src/host/guard/config.js'
 
 /**
  * Store-LOCATION pin (2026-09-14).
@@ -41,22 +41,19 @@ async function home(seed: { shared?: unknown; legacy?: unknown }): Promise<strin
 describe('guard config store location', () => {
   it('reads domains.guard from the shared store, never the retired maestro path', async () => {
     const dir = await home({
-      shared: { cwdContainment: false },
-      // A different legacy document: if it were read, migratedKeys would name
-      // publishBlocked and pkg.publish would be demoted instead.
-      legacy: { publishBlocked: false },
+      shared: { rules: { 'fs.write.outside': 'journal' } },
+      // A different document: if it were read, pkg.publish would be demoted.
+      legacy: { rules: { 'pkg.publish': 'journal' } },
     })
-    const { config, migratedKeys } = await loadGuardConfigWithMigration(dir)
-    expect(migratedKeys).toEqual(['cwdContainment'])
+    const config = await loadGuardConfig(dir)
     expect(config.rules['fs.write.outside']).toBe('journal')
     expect(config.rules['pkg.publish']).toBe('ask')
   })
 
-  it('sees a shared-store guard document that carries only v2 keys', async () => {
-    const dir = await home({ shared: { protectedBranches: ['trunk'], workingDirContainment: { enabled: false, spillReads: true } }, legacy: { gitProtection: { enabled: false } } })
-    const { config, migratedKeys } = await loadGuardConfigWithMigration(dir)
+  it('sees a shared-store guard document that carries v2 keys', async () => {
+    const dir = await home({ shared: { protectedBranches: ['trunk'], workingDirContainment: { enabled: false, spillReads: true } }, legacy: { protectedBranches: ['other'] } })
+    const config = await loadGuardConfig(dir)
     expect(config.protectedBranches).toEqual(['trunk'])
     expect(config.workingDirContainment).toEqual({ enabled: false, spillReads: true })
-    expect(migratedKeys).toEqual([])
   })
 })

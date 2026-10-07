@@ -2,15 +2,13 @@
  * Guard settings view-model (schema v2).
  *
  * The guard runtime (`dsh-maestro-guard/src/host/`) owns the authoritative
- * schema (`GuardConfigV2`) and its legacy migration (`mapLegacyConfig`). This
- * module mirrors both for DISPLAY ONLY so the Settings tab can render the
- * effective state of a stored `domains.guard` document that may still carry
- * the v1 keys (`gitProtection` / `publishBlocked` / `cwdContainment` /
- * `credentialPaths`).
+ * schema (`GuardConfigV2`). This module mirrors it for DISPLAY ONLY so the
+ * Settings tab can render the effective state of a stored `domains.guard`
+ * document.
  *
  * Sync contract: `RULE_META` (ids, groups, default tiers) must match
  * `RULE_IDS` + `DEFAULT_TIERS` in `dsh-maestro-guard/src/host/rules.ts`, and
- * `effectiveGuardView` must match `mapLegacyConfig` + `DEFAULT_CONFIG` in
+ * `effectiveGuardView` must match `mergeGuardConfig` + `DEFAULT_CONFIG` in
  * `dsh-maestro-guard/src/host/config.ts`. `tests/guard-view.spec.ts` pins the
  * parity against the sibling source; a guard-side rename breaks that test
  * instead of silently desyncing this tab.
@@ -54,10 +52,7 @@ export const RULE_META: readonly GuardRuleMeta[] = [
   { id: 'guard.tamper', group: 'Self-protection', label: 'Edit guard config or journal', hint: 'Any write to the guard settings or its audit trail.', defaultTier: 'deny', locked: true },
 ]
 
-/** The three git rules the legacy `gitProtection.enabled: false` used to gate. */
-const LEGACY_GIT_RULES: readonly string[] = ['git.push.protected', 'git.tag.release', 'git.push.force']
-
-export type TierSource = 'default' | 'stored' | 'legacy'
+export type TierSource = 'default' | 'stored'
 
 export interface GuardRuleView extends GuardRuleMeta {
   tier: GuardTier
@@ -96,8 +91,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 /**
  * Compute what the tab shows for a stored `domains.guard` document. Precedence
- * mirrors the runtime: an explicit v2 entry wins, a legacy boolean fills the
- * gap it used to own, otherwise the built-in default renders.
+ * mirrors the runtime: an explicit entry wins, otherwise the built-in default
+ * renders.
  */
 export function effectiveGuardView(raw: unknown): GuardView {
   const doc = isRecord(raw) ? raw : {}
@@ -106,23 +101,15 @@ export function effectiveGuardView(raw: unknown): GuardView {
   const rules: GuardRuleView[] = RULE_META.map((meta) => {
     const stored = storedRules[meta.id]
     if (isGuardTier(stored)) return { ...meta, tier: stored, source: 'stored' }
-    const legacyTier = legacyTierFor(meta.id, doc)
-    if (legacyTier !== undefined) return { ...meta, tier: legacyTier, source: 'legacy' }
     return { ...meta, tier: meta.defaultTier, source: 'default' }
   })
 
   const v2Branches = stringArray(doc.protectedBranches)
-  const legacyBranches = isRecord(doc.gitProtection) ? stringArray(doc.gitProtection.branches) : undefined
-  const protectedBranches = v2Branches ?? legacyBranches ?? [...DEFAULT_BRANCHES]
+  const protectedBranches = v2Branches ?? [...DEFAULT_BRANCHES]
 
-  const v2Paths = stringArray(doc.protectedPaths) ?? []
-  const legacyPaths = stringArray(doc.credentialPaths) ?? []
-  const protectedPaths = [...new Set([...v2Paths, ...legacyPaths])]
+  const protectedPaths = [...new Set(stringArray(doc.protectedPaths) ?? [])]
 
   const containmentRaw = isRecord(doc.workingDirContainment) ? doc.workingDirContainment : {}
-  // Legacy `cwdContainment: false` meant "fs.write.outside journals instead of
-  // asking"; it never disabled containment, so `enabled` stays true and only
-  // the rule tier above reflects it.
   const containment = {
     enabled: booleanOr(containmentRaw.enabled, true),
     spillReads: booleanOr(containmentRaw.spillReads, true),
@@ -139,23 +126,11 @@ export function effectiveGuardView(raw: unknown): GuardView {
   return {
     rules,
     protectedBranches,
-    branchesSource: v2Branches !== undefined ? 'stored' : legacyBranches !== undefined ? 'legacy' : 'default',
+    branchesSource: v2Branches !== undefined ? 'stored' : 'default',
     protectedPaths,
     containment,
     journal,
   }
-}
-
-/** The tier a legacy v1 document implies for one rule, if any. */
-function legacyTierFor(ruleId: string, doc: Record<string, unknown>): GuardTier | undefined {
-  if (LEGACY_GIT_RULES.includes(ruleId)) {
-    const gp = doc.gitProtection
-    if (isRecord(gp) && Object.keys(gp).length > 0 && gp.enabled === false) return 'journal'
-    return undefined
-  }
-  if (ruleId === 'pkg.publish' && doc.publishBlocked === false) return 'journal'
-  if (ruleId === 'fs.write.outside' && doc.cwdContainment === false) return 'journal'
-  return undefined
 }
 
 /**
