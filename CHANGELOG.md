@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Removed
+
+- **BREAKING: schema v1 guard config is no longer translated.** `mapLegacyConfig`, `loadGuardConfigWithMigration`, `journalConfigMigration` and the `config-legacy` journal note are gone. A persisted `domains.guard` that still carries `gitProtection`, `publishBlocked`, `cwdContainment` or `credentialPaths` now has those keys ignored, so protection falls back to the built-in defaults until the schema v2 keys (`rules`, `protectedBranches`, `protectedPaths`) are set. The Settings tab no longer renders a "legacy" tier source.
+- **BREAKING: the retired ticket store is no longer moved aside.** `retireLegacyStore` and `guard/migrate.ts` are removed; `pending.json` is left where it is. The guard still treats `legacy-pending.json` as a protected path.
+- **BREAKING: `<dsh home>/maestro/settings.json` is no longer read.** The supervisor consults only `<dsh home>/dsh-maestro-config/settings.json`.
+- **BREAKING: the mtime-only `~/.dsh/.supervisor/planned-restart` file is no longer honoured.** Only the JSON `planned-restart.json` marker counts. `restart-dsh-web.sh` now writes that JSON marker (default path `planned-restart.json`, 180s ttl); a custom `DSH_SUPERVISOR_MARKER` must point at a JSON marker too.
+- **BREAKING: `SyncService.pull()` and `SyncService.push()` and the `PullResult` and `PushResult` types.** Use `preview({ direction })` then `apply({ previewId, direction, confirm: true })`.
+- The duplicate `MaestroMark` in the sync UI kit; the sync surface imports the one in `config/components/BrandMark.tsx`.
+
 ## [0.11.2] - 2026-10-07
 
 ### Fixed
