@@ -40,7 +40,6 @@ export function collectSnapshots(root: string, fs: any): FileSnapshot[] {
   }
 
   const walk = (dir: string, base: string) => {
-    let entries: any[] = [];
     try {
       if (typeof fsMod.readdirSync !== 'function') return;
       const raw = fsMod.readdirSync(dir, { withFileTypes: true } as any);

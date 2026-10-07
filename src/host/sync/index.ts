@@ -1,7 +1,6 @@
 // dsh-maestro-sync — Host index: preview/apply tools + loopback RPC (Task 6).
 // Mutation exists only through preview-bound apply(confirm:true); the legacy
 // pull/push endpoints and tools are preview-only compatibility aliases.
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';

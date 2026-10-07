@@ -20,13 +20,13 @@ import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mergeDelimited } from './merge.js';
 import { mergeSessionBuffers } from './session-plan.js';
-import { snapshotFile, kindForPath } from './snapshot.js';
+import { kindForPath } from './snapshot.js';
 import { hashFiles } from './hashing.js';
 import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint } from './fingerprint.js';
 import type { RemoteManifestEntry } from './remote-manifest.js';
 import { buildPlan, buildPreview, getPreview, getPreviewDirection, deletePreview, storePreview } from './sync-plan.js';
 import { normalizeEligiblePath, validateRemoteTarget, validateHost } from './validation.js';
-import type { RemoteTarget, SyncDirection, SyncPreview, SyncSummary, SyncFailure, SyncPlan, FileSnapshot, PlannedAction, SyncProgress, SyncScope } from './sync-types.js';
+import type { RemoteTarget, SyncDirection, SyncPreview, SyncSummary, SyncFailure, FileSnapshot, PlannedAction, SyncProgress, SyncScope } from './sync-types.js';
 import { createProcessRunner, type ProcessRunner } from './process-runner.js';
 import { createTransport, type SyncTransport } from './transport.js';
 
@@ -195,7 +195,6 @@ export class SyncService {
     const result: string[] = [];
     const fsMod = this.fs;
     const walk = (dir: string, base: string) => {
-      let entries: any[] = [];
       try {
         if (typeof fsMod.readdirSync !== 'function') return;
         const raw = fsMod.readdirSync(dir, { withFileTypes: true } as any);

@@ -31,7 +31,6 @@ export * from './resume-tools.js'
 import {
   probeToolView,
   defaultResolveToolScope,
-  type ToolViewProbe,
   type ToolViewProbeFn,
   type ToolScopeResolver,
 } from './tool-view.js'

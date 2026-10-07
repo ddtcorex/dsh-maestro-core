@@ -2,12 +2,12 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RemoteTarget, SyncFailure, SyncPhase } from './sync-types.js';
-import type { ProcessRunner, ProcessResult } from './process-runner.js';
+import type { ProcessRunner } from './process-runner.js';
 import { validateRemoteTarget } from './validation.js';
 import { REMOTE_AGENT_REL, remoteAgentSource, verifyRemoteAgentSource } from './remote-agent.js';
 import { buildRemoteManifestScript, parseRemoteManifest, type RemoteManifestEntry } from './remote-manifest.js';
 import { buildWarmCacheScript } from './remote-cache.js';
-import { openSshMux, type SshMux } from './ssh-mux.js';
+import type { SshMux } from './ssh-mux.js';
 
 export interface SyncTransport {
   /** Resolve the remote user's $HOME as raw bytes (preflight, never shell ~ expansion). */
@@ -44,11 +44,6 @@ export interface SyncTransport {
 
 function failure(phase: SyncPhase, code: string, detail: string, path?: string): SyncFailure {
   return { phase, code, detail, path };
-}
-
-function toFailure(phase: SyncPhase, result: ProcessResult, file: string): SyncFailure {
-  const detail = result.stderr.toString('utf-8') || `exit ${result.exitCode}`;
-  return failure(phase, 'TRANSPORT_ERROR', `${file} failed: ${detail}`);
 }
 
 export class SshRsyncTransport implements SyncTransport {
