@@ -88,6 +88,8 @@ One package, four host rows and one client bundle. The four absorbed repositorie
 | `dsh-maestro-guard` | `src/host/guard/` | `/dsh-maestro-guard` | Channel declared by the row only; guard answers through the harness approval prompt, it registers no `rpc.handle` |
 | `maestro-config` | `src/host/config/` | `/dsh-maestro-config` | `inject: ['connection','webServer']`, `config: {}` |
 
+**`webServer` lives on the `connection` entry.** On DSH 0.2.x `rpc.handle` resolves `webServer` on the `connection` row's own fiber, so the row-level `inject: [..., 'webServer']` below is not sufficient on its own: `cordis.patch.yml` also carries a top-level `- id: connection` entry with `inject: [webRuntime, webServer]` (`inject` replaces the base list, so `webRuntime` is repeated). Pinned by `tests/connection-inject.spec.ts`.
+
 **Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. A row `name` that names a package which no longer exists fails as `entry … not found` and is skipped at load time, so a rename has to rewrite all three subpath names in the same commit.
 
 ### Module: store (`src/host/store/`)
