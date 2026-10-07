@@ -1142,11 +1142,40 @@ export function apply(ctx: any, config: SupervisorPluginConfig = {}): void {
       }
     })
 
-    try {
-      ctx.effect(() => registerSessionHealthService(ctx, config), 'supervisor:session-health')
-    } catch (e: any) {
-      try { ctx.logger?.warn?.(`[supervisor] session-health effect failed: ${e?.message ?? String(e)}`) } catch {}
-    }
+    // RPC registration must wait for the `connection` fiber (DSH 0.2.x resolves
+    // `owner.webServer` on that fiber): registering inline at apply() time
+    // silently skips when `connection` is not active yet and the route stays
+    // unregistered (HTTP 405). The child fiber keeps the top-level `inject`
+    // empty so the boot resume scan is not held up.
+    whenServicesActive(ctx, ['connection'], (scoped) => {
+      try {
+        scoped.effect(() => registerSessionHealthService(scoped, config), 'supervisor:session-health')
+      } catch (e: any) {
+        try { scoped.logger?.warn?.(`[supervisor] session-health effect failed: ${e?.message ?? String(e)}`) } catch {}
+      }
+    })
+
+    whenServicesActive(ctx, ['connection'], (scoped) => {
+      scoped.effect(() => {
+        let disposeRpc: (() => void) | undefined
+        try {
+          const conn = scoped.connection ?? scoped.get?.('connection')
+          if (conn?.rpc?.handle) {
+            disposeRpc = conn.rpc.handle(
+              '/dsh-maestro-supervisor-resume',
+              createResumeRpcHandler(ctx, { config }),
+            )
+          }
+        } catch (e: any) {
+          try {
+            scoped.logger?.warn?.(`[supervisor] auto-resume RPC registration failed: ${e?.message ?? String(e)}`)
+          } catch {}
+        }
+        return () => {
+          try { disposeRpc?.() } catch {}
+        }
+      }, 'supervisor:resume-rpc')
+    })
 
     ctx.effect(() => {
       let disposed = false
@@ -1159,27 +1188,9 @@ export function apply(ctx: any, config: SupervisorPluginConfig = {}): void {
         })
       }, 8000)
 
-      let disposeRpc: (() => void) | undefined
-      try {
-        const conn = ctx.connection ?? ctx.get?.('connection')
-        if (conn?.rpc?.handle) {
-          disposeRpc = conn.rpc.handle(
-            '/dsh-maestro-supervisor-resume',
-            createResumeRpcHandler(ctx, { config }),
-          )
-        }
-      } catch (e: any) {
-        try {
-          ctx.logger?.warn?.(`[supervisor] auto-resume RPC registration failed: ${e?.message ?? String(e)}`)
-        } catch {}
-      }
-
       return () => {
         disposed = true
         if (timer) clearTimeout(timer)
-        if (disposeRpc) {
-          try { disposeRpc() } catch {}
-        }
       }
     }, 'supervisor:auto-resume')
 
