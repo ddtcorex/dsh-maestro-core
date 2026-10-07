@@ -41,6 +41,11 @@ Host tools registered with `ctx.tools.register`:
 | `maestro_sync_status`, `maestro_sync_check_machines`, `maestro_sync_preview`, `maestro_sync_apply`, `maestro_sync_pull`, `maestro_sync_push`, `maestro_sync_bidirectional_preview`, `maestro_sync_bidirectional_apply`, `maestro_sync_tunnel_restore` | sync | Two-machine sync, preview first |
 | `maestro_backup_preview`, `maestro_backup_apply`, `maestro_backup_gc_preview`, `maestro_backup_gc_apply`, `maestro_restore_preview`, `maestro_restore_apply` | sync | Backup, retention GC and restore, preview first |
 
+## Requirements
+
+- Node.js `^22.19.0 || >=24.0.0` and pnpm 11+. A shell that defaults to Node 20 fails with `No such built-in module: node:sqlite`; put a Node 22 `bin` first on `PATH` before running `dsh` or `pnpm`.
+- DSH 0.1.x or 0.2.x (peer range `<0.3.0-0`).
+
 ## Install
 
 One package, one command:
@@ -48,6 +53,18 @@ One package, one command:
 ```bash
 dsh plugin --profile web add @ddtcorex/dsh-maestro-core
 ```
+
+The package ships its own `cordis.patch.yml`, applied automatically. It includes a
+`connection` entry that declares `webServer`, which DSH 0.2.x needs before
+`rpc.handle` can register a channel. Do not copy it into the profile patch, and do not
+add the rows by hand (duplicate ids crash the loader). Restart `dsh web` after install.
+
+To get an exact release instead of whatever the package manager resolves, pin it:
+`dsh plugin --profile web add @ddtcorex/dsh-maestro-core@<version>`.
+
+Installed with `link:` from a checkout? After every `git pull`, run `pnpm install && pnpm build`
+(`lib/` is gitignored) and restart `dsh web`.
+
 
 In a workspace checkout, build and link instead:
 
