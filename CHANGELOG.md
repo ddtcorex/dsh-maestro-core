@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.12.0] - 2026-10-10
 
 ### Removed
 
@@ -11,6 +11,11 @@
 - **BREAKING: `SyncService.pull()` and `SyncService.push()` and the `PullResult` and `PushResult` types.** Use `preview({ direction })` then `apply({ previewId, direction, confirm: true })`.
 - **BREAKING: the `maestro_sync_pull` and `maestro_sync_push` tools and the `pull` and `push` sync RPC methods.** They were preview-only aliases that never wrote. Agents call `maestro_sync_preview` then `maestro_sync_apply`; the Sync tab already uses `previewStart` and `apply`.
 - The duplicate `MaestroMark` in the sync UI kit; the sync surface imports the one in `config/components/BrandMark.tsx`.
+
+### Fixed
+
+- **Connection row injects webStartup.** DSH 0.2.1-alpha.x removed the webRuntime service; a connection entry still injecting it waits for a service that never mounts and dsh web never boots.
+- **Journal stays silent on the rotation chmod race.** Boot-time rotation can rename the live file away between appendFile and the hardening chmod; the entry is already preserved, so only ENOENT is tolerated and any other chmod failure still reports.
 
 ## [0.11.2] - 2026-10-07
 
