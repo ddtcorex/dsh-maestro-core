@@ -164,7 +164,15 @@ export class Journal {
       const p = journalPath(this.dshHome)
       await mkdir(dirname(p), { recursive: true, mode: 0o700 })
       await appendFile(p, line + '\n', { encoding: 'utf8', mode: 0o600 })
-      await chmod(p, 0o600)
+      try {
+        await chmod(p, 0o600)
+      } catch (e) {
+        // Boot-time rotation may rename the live file away after the append
+        // above (the entry is already preserved); a file that vanished is the
+        // rotation winning the race, not a failure. Anything else rethrows to
+        // the failure handler below.
+        if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e
+      }
     } catch (e) {
       // A journal failure must never change a decision.
       console.error('[dsh-maestro-guard] journal write failed:', (e as Error)?.message)

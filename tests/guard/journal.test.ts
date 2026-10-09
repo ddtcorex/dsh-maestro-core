@@ -4,6 +4,30 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Journal, journalPath } from '../../src/host/guard/journal.js'
 
+/**
+ * Fault switch for the hardening chmod at the end of `append`: null drives
+ * the real filesystem, any error object is thrown instead. The rest of
+ * `node:fs/promises` stays live, so the suite keeps testing real I/O.
+ */
+const chmodFault = vi.hoisted(() => ({ error: null as (NodeJS.ErrnoException | null) }))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    chmod: async (p: any, mode: any) => {
+      if (chmodFault.error) throw chmodFault.error
+      return actual.chmod(p, mode)
+    },
+  }
+})
+
+function enoent(): NodeJS.ErrnoException {
+  const e = new Error(`ENOENT: no such file or directory, chmod 'x'`) as NodeJS.ErrnoException
+  e.code = 'ENOENT'
+  return e
+}
+
 describe('journal', () => {
   it('appends one JSON line per decision, mode 0600, redacted marker set', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'j-'))
@@ -70,6 +94,43 @@ describe('journal', () => {
       expect(spy).toHaveBeenCalledTimes(1)
     } finally {
       spy.mockRestore()
+    }
+  })
+
+  /**
+   * Boot-time rotation can rename the live file away between the appendFile
+   * above and the hardening chmod below (seen in the wild as `ENOENT ...,
+   * chmod '...journal.jsonl'` on boot). The entry is already preserved, so a
+   * vanished file is the rotation winning the race — silent, never a logged
+   * failure. Any other chmod failure still reports.
+   */
+  it('stays silent when rotation removes the live file before the chmod', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'j-'))
+    chmodFault.error = enoent()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const j = new Journal(dir, () => 1_700_000_000_000)
+      await expect(j.append({ tool: 'bash', rule: 'r', tier: 'deny', target: 'x' })).resolves.toBeUndefined()
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+      chmodFault.error = null
+    }
+  })
+
+  it('still reports a chmod failure that is not a rotation race', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'j-'))
+    const denied = new Error('chmod denied') as NodeJS.ErrnoException
+    denied.code = 'EACCES'
+    chmodFault.error = denied
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const j = new Journal(dir, () => 1_700_000_000_000)
+      await expect(j.append({ tool: 'bash', rule: 'r', tier: 'deny', target: 'x' })).resolves.toBeUndefined()
+      expect(spy).toHaveBeenCalledTimes(1)
+    } finally {
+      spy.mockRestore()
+      chmodFault.error = null
     }
   })
 })
