@@ -63,7 +63,7 @@ Usage: restart-dsh-web.sh --repo <deepseek-harness> [--log <path>] [--confirm|--
        restart-dsh-web.sh --check-supervisor
        restart-dsh-web.sh --reload-supervisor
 
-Safely hand over the DSH Web process that owns ports 3000 and 3080.
+Safely hand over the DSH Web process that owns ports 3000, 3080, 3081 and 3082.
 
 Options:
   --repo <path>        DeepSeek Harness checkout (or set DSH_REPO).
@@ -267,7 +267,7 @@ for command in ss ps grep sort; do
 done
 
 listener_pids="$({ ss -tlnp 2>/dev/null || true; } | grep -E ':(3000|3080|3081|3082)([[:space:]]|$)' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)"
-[[ -n "$listener_pids" ]] || fail 'no listeners found on ports 3000/3080 (proxy) or 3081/3082 (local-pin-gate topology)'
+[[ -n "$listener_pids" ]] || fail 'no listeners found on ports 3000 (unbound) / 3080 (PIN proxy) / 3081 (public proxy) / 3082 (raw webserver)'
 
 resolve_tree() {
   local current="$1"
