@@ -164,7 +164,7 @@ turn instead of five.
   and the listener tree instead; a rollback loop shows up in the daemon's
   outcome and the pid, not in an arbitrary wait.
 - **One restart per batch.** Stage every settings/lib change, then restart once.
-  Config-lib memoizes per process, so N edits need N restarts unless they are
+  The settings store memoizes per process, so N edits need N restarts unless they are
   staged together.
 
 ## Post-swap checks

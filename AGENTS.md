@@ -88,7 +88,7 @@ One package, four host rows and one client bundle. The four absorbed repositorie
 | `dsh-maestro-guard` | `src/host/guard/` | `/dsh-maestro-guard` | Channel declared by the row only; guard answers through the harness approval prompt, it registers no `rpc.handle` |
 | `maestro-config` | `src/host/config/` | `/dsh-maestro-config` | `inject: ['connection','webServer']`, `config: {}` |
 
-**`webServer` lives on the `connection` entry.** On DSH 0.2.x `rpc.handle` resolves `webServer` on the `connection` row's own fiber, so the row-level `inject: [..., 'webServer']` below is not sufficient on its own: `cordis.patch.yml` also carries a top-level `- id: connection` entry with `inject: [webRuntime, webServer]` (`inject` replaces the base list, so `webRuntime` is repeated). Pinned by `tests/connection-inject.spec.ts`.
+**`webServer` lives on the `connection` entry.** On DSH 0.2.x `rpc.handle` resolves `webServer` on the `connection` row's own fiber, so the row-level `inject: [..., 'webServer']` below is not sufficient on its own: `cordis.patch.yml` also carries a top-level `- id: connection` entry with `inject: [webStartup, webServer]` (`inject` replaces the base list, so `webStartup` is repeated). Pinned by `tests/connection-inject.spec.ts`.
 
 **Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. A row `name` that names a package which no longer exists fails as `entry … not found` and is skipped at load time, so a rename has to rewrite all three subpath names in the same commit.
 
@@ -186,7 +186,7 @@ cat ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core/package.json | g
 curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | head -n 5  # window.__ModuleLoader__.load
 ```
 
-**Critical pre-flight (AGENTS.md Conventions §2):** before adding to a live profile's `bundles`, `pnpm build` must succeed **and** a dry-boot on an ephemeral port with isolated `DSH_HOME` must pass:
+**Critical pre-flight (AGENTS.md Conventions):** before adding to a live profile's `bundles`, `pnpm build` must succeed **and** a dry-boot on an ephemeral port with isolated `DSH_HOME` must pass:
 
 ```sh
 DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &  # or --port <ephemeral>
@@ -297,7 +297,7 @@ DSH_INTEGRATION=1 pnpm test -- tests/integration.test.ts  # needs real DSH web
 
 Never `A inject: ['B']` and `B inject: ['A']` — Cordis will deadlock. Pick one:
 
-1. **Extract shared lib C** (like this package's own store): `C` provides `serviceC`, both `A` and `B` do `inject: ['serviceC']`, `C` injects nobody. When `C` is a package, put it in `pnpm-workspace.yaml` `packages: ["../dsh-maestro-C"]` for both. When `A` and `B` ship in one package, `C` is just a module they both import — which is what the store now does, and it costs no dependency at all. This is the cleanest for true mutual data (e.g., `guard` ↔ `observe` sharing health).
+1. **Extract shared lib C** (like this package's own store): `C` provides `serviceC`, both `A` and `B` do `inject: ['serviceC']`, `C` injects nobody. When `C` is a package, put it in `pnpm-workspace.yaml` `packages: ["../dsh-maestro-C"]` for both. When `A` and `B` ship in one package, `C` is just a module they both import — which is what the store now does, and it costs no dependency at all. This is the cleanest for true mutual data (e.g., `guard` ↔ `sync` sharing health).
 2. **One-way + events:** `A` provides `serviceA`, `B` does `inject: ['serviceA']` and `ctx.emit('b:done', payload)`; `A` listens with `ctx.on('b:done', ...)`. No reverse inject, so no cycle.
 3. **Isolate + RPC:** If they must stay separate, use `isolate` realms and a `/dsh-maestro-A` RPC channel instead of direct `inject`.
 
