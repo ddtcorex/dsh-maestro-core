@@ -27,7 +27,7 @@ describe('settings section registration contract', () => {
     expect(entry).toContain("'/dsh-maestro-config'")
     expect(entry).toContain("'/dsh-maestro-supervisor-resume'")
     expect(entry).toMatch(/inject:\s*\(\)\s*=>\s*\(\{\s*configRpcCall,\s*supervisorRpcCall\s*\}\)/)
-    expect(entry).not.toContain('dsh-maestro-review')
+    expect(entry).not.toContain('maestro-reviewer')
     expect(entry).not.toContain('MAESTRO_RPC_CHANNEL')
     expect(existsSync(resolve(clientDir, 'api.ts'))).toBe(false)
   })
