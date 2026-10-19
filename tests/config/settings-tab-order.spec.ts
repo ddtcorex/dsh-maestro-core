@@ -41,11 +41,13 @@ const CORE: Array<{ id: string; file: string }> = [
   { id: 'maestro-sync', file: resolve(repoRoot, 'src/client/sync/index.tsx') },
 ]
 
-const SIBLINGS: Array<{ pkg: string; ids: string[] }> = [
+// `dir` overrides the checkout location relative to the siblings dir, for
+// packages checked out at the meta root instead of under packages/.
+const SIBLINGS: Array<{ pkg: string; ids: string[]; dir?: string }> = [
   { pkg: 'dsh-maestro-jobs', ids: ['maestro-jobs'] },
   { pkg: 'dsh-maestro-gateway', ids: ['maestro-gateway'] },
   { pkg: 'dsh-maestro-remote', ids: ['maestro-remote'] },
-  { pkg: 'maestro-reviewer', ids: ['maestro-review'] },
+  { pkg: 'maestro-reviewer', ids: ['maestro-review'], dir: '../maestro-reviewer' },
   { pkg: 'dsh-maestro-notifier', ids: ['maestro-notifier'] },
 ]
 const SUTUNAM_PKG = 'dsh-sutunam-kit'
@@ -60,7 +62,7 @@ const EXPECTED: Record<string, number> = {
   'maestro-notifier': 33,
 }
 
-const siblingEntry = (pkg: string) => resolve(siblingsDir, pkg, 'src/client/index.tsx')
+const siblingEntry = (pkg: string, dir?: string) => resolve(siblingsDir, dir ?? pkg, 'src/client/index.tsx')
 
 // Lazy loader: nothing is read at describe-body time.
 const load = (): { maestro: Found[]; sutunamOrder: number | undefined } => {
@@ -70,8 +72,8 @@ const load = (): { maestro: Found[]; sutunamOrder: number | undefined } => {
     expect(order, `core section "${id}" must be declared in ${file}`).toBeDefined()
     maestro.push({ id, order: order! })
   }
-  for (const { pkg, ids } of SIBLINGS) {
-    const file = siblingEntry(pkg)
+  for (const { pkg, ids, dir } of SIBLINGS) {
+    const file = siblingEntry(pkg, dir)
     if (!existsSync(file)) {
       console.info(`[settings-tab-order] skipped sibling ${pkg}: ${file} not found (MAESTRO_SIBLINGS_DIR=${siblingsDir})`)
       continue
