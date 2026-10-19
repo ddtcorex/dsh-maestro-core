@@ -102,7 +102,7 @@ describe('notifier domain schema (validator registered by the test, as its owner
  * Regression pin for the two-hop legacy flat-key alias
  * `telegramReviewNotifications` ↔ `notifier.policy.reviewNotifications`.
  * This alias bridges `dsh-maestro-config-lib`'s DOMAIN_KEY_MAP and
- * `dsh-maestro-review`'s flat config read/write; nothing type-checks the
+ * `maestro-reviewer`'s flat config read/write; nothing type-checks the
  * connection across packages, so a rename on either side must break a test
  * instead of breaking silently.
  */

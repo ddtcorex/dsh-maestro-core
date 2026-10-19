@@ -45,7 +45,7 @@ const SIBLINGS: Array<{ pkg: string; ids: string[] }> = [
   { pkg: 'dsh-maestro-jobs', ids: ['maestro-jobs'] },
   { pkg: 'dsh-maestro-gateway', ids: ['maestro-gateway'] },
   { pkg: 'dsh-maestro-remote', ids: ['maestro-remote'] },
-  { pkg: 'dsh-maestro-review', ids: ['maestro-review'] },
+  { pkg: 'maestro-reviewer', ids: ['maestro-review'] },
   { pkg: 'dsh-maestro-notifier', ids: ['maestro-notifier'] },
 ]
 const SUTUNAM_PKG = 'dsh-sutunam-kit'
