@@ -246,13 +246,19 @@ describe('classify — fs.write.outside (whole write family, temp dir exempt)', 
     const v = classify({ tool: 'write', args: { file_path: '/repo/docs/notes.md', content: 'x' }, cwd: '/repo', settings })
     expect(v.tier).toBe('allow')
   })
-  it('asks when the legacy write tool targets a path outside cwd and outside tmpdir', () => {
-    const v = classify({ tool: 'maestro_write_file', args: { ...outside }, cwd: '/repo', settings })
+  it('asks when a generic write_file tool targets a path outside cwd and outside tmpdir', () => {
+    const v = classify({ tool: 'write_file', args: { ...outside }, cwd: '/repo', settings })
     expect(v).toMatchObject({ ruleId: 'fs.write.outside', tier: 'ask' })
+  })
+  it('no longer treats the retired maestro_read_file / maestro_write_file names as file tools', () => {
+    for (const tool of ['maestro_read_file', 'maestro_write_file']) {
+      const v = classify({ tool, args: { ...outside }, cwd: '/repo', settings })
+      expect(v.ruleId, tool).not.toBe('fs.write.outside')
+    }
   })
   it('exempts the OS temp dir for the whole write family', () => {
     const tempPath = join(tmpdir(), 'scratch-notes.md')
-    for (const tool of ['write', 'edit', 'maestro_write_file']) {
+    for (const tool of ['write', 'edit', 'write_file']) {
       const v = classify({ tool, args: { file_path: tempPath, content: 'x' }, cwd: '/repo', settings })
       expect(v.tier, `${tool} -> ${tempPath}`).toBe('allow')
     }
@@ -330,7 +336,7 @@ describe('classify — guard.tamper is scoped to EDITS of the guard config', () 
   })
 
   it('denies a write-family tool whose path field is the guard config path', () => {
-    for (const tool of ['write', 'edit', 'maestro_write_file', 'fs_write', 'write_file']) {
+    for (const tool of ['write', 'edit', 'fs_write', 'write_file']) {
       const v = classify({ tool, args: { file_path: guardPath, content: 'x' }, cwd: '/repo', settings })
       expect(v, `${tool} -> guard config`).toMatchObject({ ruleId: 'guard.tamper', tier: 'deny' })
       expect(v.detail?.reason, tool).toBe('guard configuration write')
@@ -341,7 +347,7 @@ describe('classify — guard.tamper is scoped to EDITS of the guard config', () 
     // Negative control: the raw scan must not creep into content scanning —
     // guard.tamper reads the targeted path, never a non-shell tool's content.
     const prose = 'policy notes about ' + guardPath + ' and who may rewrite it'
-    for (const tool of ['write', 'edit', 'maestro_write_file']) {
+    for (const tool of ['write', 'edit', 'write_file']) {
       const v = classify({ tool, args: { file_path: join(tmpdir(), 'notes.md'), content: prose }, cwd: '/repo', settings })
       expect(v.tier, `${tool} -> content mention`).toBe('allow')
     }
@@ -411,7 +417,7 @@ describe('classify — the runtime-spill exemption shares the session-cwd base',
     const cwd = join(tmpdir(), 'maestro-mr-1137-3760-9b22ea39')
     const spill = join(tmpdir(), 'dsh-spill-MbE4xz', 'session-45ea5295386a', 'de5c367ef79c-read.txt')
     expect(classify({ tool: 'read', args: { file_path: spill }, cwd, settings }).tier).toBe('allow')
-    expect(classify({ tool: 'maestro_read_file', args: { path: spill }, cwd, settings }).tier).toBe('allow')
+    expect(classify({ tool: 'read_file', args: { path: spill }, cwd, settings }).tier).toBe('allow')
   })
 })
 
