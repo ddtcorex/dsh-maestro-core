@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Removed
+
+- The guard no longer lists `maestro_read_file` and `maestro_write_file` as file tools. No plugin has registered them since the monolith was retired; the generic `read_file`, `write_file`, `fs_read` and `fs_write` names stay covered.
+
 ## [0.12.0] - 2026-10-10
 
 ### Removed

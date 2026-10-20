@@ -97,14 +97,12 @@ const FILE_TOOLS = new Set([
   'read',
   'write',
   'edit',
-  'maestro_read_file',
-  'maestro_write_file',
   'fs_read',
   'fs_write',
   'read_file',
   'write_file',
 ])
-const WRITE_FILE_TOOLS = new Set(['write', 'edit', 'maestro_write_file', 'fs_write', 'write_file'])
+const WRITE_FILE_TOOLS = new Set(['write', 'edit', 'fs_write', 'write_file'])
 /** Verbs that actually touch file contents — a protected path next to one is an access. */
 const ACCESS_VERBS = /\b(cat|bat|head|tail|less|more|cp|scp|rsync|curl|wget|source|tee|dd|install|xxd|base64|openssl|gpg|tar|zip)\b/
 
