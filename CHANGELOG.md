@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.0] - 2026-10-21
+
+### Removed
+
+- Last-known-good snapshots and crash rollback are gone. The supervisor daemon no longer writes `~/.dsh/.supervisor/lkg/` snapshots and no longer restores files on crash — a broken boot surfaces through the crash report (`reports/report-<ts>.md`) instead of an automatic restore. Health polling, restart on crash, Telegram notify, session auto-resume and the debug-agent still run as before. The `dsh_web_restart` gate now always dry-boots since there is no snapshot baseline to compare against.
+
 ## [0.12.1] - 2026-10-20
 
 ### Removed
