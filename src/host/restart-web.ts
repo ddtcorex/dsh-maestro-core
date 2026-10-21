@@ -27,7 +27,7 @@ export interface RestartWebResult {
 /**
  * The single implementation of a supervised dsh web restart. Single-flight:
  * boot.lock is held from before the marker is written until the port answers,
- * so a racing tick or a second rollback skips instead of producing the second
+ * so a racing tick or a second restart skips instead of producing the second
  * systemd start that turned the incident's log tail toxic (2026-09-13).
  */
 export async function performSingleBootRestart(deps: RestartWebDeps = {}): Promise<RestartWebResult> {

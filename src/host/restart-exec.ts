@@ -71,7 +71,7 @@ export function systemdUnitExists(unitPath: string = dshWebUnitPath()): boolean 
  * The direct-node `nohup` fallback exists for portable hosts that have no
  * systemd unit. When the unit exists, systemd owns the boot: spawning node
  * behind its back is how a second instance appears — the two starts / one
- * rollback report of 2026-09-13. Gate on "the unit does not exist", never on
+ * crash report of 2026-09-13. Gate on "the unit does not exist", never on
  * "this particular start failed".
  */
 export function shouldUseNohupFallback(unitExists: boolean): boolean {

@@ -11,19 +11,17 @@ describe('integration — supervisor with ephemeral DSH_HOME', () => {
     const dshHome = path.join(tmp, 'fake-home')
     fs.mkdirSync(path.join(dshHome, 'maestro'), { recursive: true })
     fs.writeFileSync(path.join(dshHome, 'maestro/settings.json'), '{ corrupted')
-    // Simulate supervisor detecting failure — just verify writeLKG + report path
-    const { writeLKG } = await import('../src/host/snapshot.js')
+    // Simulate supervisor detecting failure — just verify the report path
     const { writeReport } = await import('../src/host/report.js')
-    const lkgRoot = path.join(tmp, 'lkg')
     const reportsRoot = path.join(tmp, 'reports')
-    const { ts } = await writeLKG(dshHome, path.join(tmp, 'failed'))
+    const ts = new Date().toISOString().replace(/[:.]/g, '-')
     const reportPath = await writeReport({
       reportsRoot,
       ts,
       health: { up: false, error: 'JSON parse failed' },
       gitDiff: '',
       logTail: 'SyntaxError: Unexpected token',
-      action: 'rollback',
+      action: 'restart',
     })
     expect(fs.existsSync(reportPath)).toBe(true)
   })

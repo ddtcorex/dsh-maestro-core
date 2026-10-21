@@ -7,7 +7,6 @@ import {
   buildKillStalePortsCommand,
   clearPlannedRestart,
   checkPlannedRestart,
-  isSelfCopyError,
   isPlannedRestartFresh,
   readRestartRequest,
   writePlannedRestart,
@@ -69,23 +68,6 @@ describe('buildKillStalePortsCommand', () => {
     const cmd = buildKillStalePortsCommand()
     expect(cmd).toContain(':3080')
     expect(cmd).not.toContain(':3000')
-  })
-})
-
-describe('isSelfCopyError', () => {
-  it('recognizes the literal error message this bug produced in production', () => {
-    expect(isSelfCopyError(
-      'Cannot copy /home/example/.npm/_npx/1e7f6d9597241db0/node_modules/unist-util-position ' +
-      'to a subdirectory of self /home/example/.npm/_npx/1e7f6d9597241db0/node_modules/unist-util-position',
-    )).toBe(true)
-  })
-
-  it('still recognizes the older "cannot be the same" phrasing', () => {
-    expect(isSelfCopyError('src and dest cannot be the same')).toBe(true)
-  })
-
-  it('does not swallow unrelated errors', () => {
-    expect(isSelfCopyError('ENOENT: no such file or directory')).toBe(false)
   })
 })
 

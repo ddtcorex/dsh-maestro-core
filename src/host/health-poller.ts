@@ -49,7 +49,7 @@ export interface PollHealthOpts {
 // Specific parse/boot-failure markers only. Bare 'JSON'/'YAML' were removed
 // (2026-08-31): they matched any line whose payload merely *contained* those
 // substrings — e.g. maestro-sync's status JSON listing session.jsonl.zstd /
-// settings.json paths — turning a healthy 401 into a rollback + restart.
+// settings.json paths — turning a healthy 401 into a restart.
 const ERROR_PATTERNS = [
   'ERR_MODULE_NOT_FOUND',
   'ERR_PNPM',
@@ -247,7 +247,7 @@ export async function pollHealth(opts: PollHealthOpts = {}): Promise<HealthState
   // post-start crash. With no marker and no scope proving these lines are this
   // boot's, the scan is inconclusive (D3) instead of inheriting the previous
   // boot's crash text — that inheritance is what produced the 2026-09-13
-  // rollback report ("rollback — degraded: This operation was aborted") from a
+  // crash report ("restart — degraded: This operation was aborted") from a
   // healthy, still-booting instance reading the previous boot's EADDRINUSE.
   const successIdx = lastSuccessMarkerIndex(bootLower)
   let scanLines: string[]
@@ -318,7 +318,7 @@ export async function pollHealth(opts: PollHealthOpts = {}): Promise<HealthState
     // the same way a genuinely dead one does — but a real crash always frees
     // the port, while `ss` does not depend on the contended event loop to
     // answer. Downgrade to DEGRADED (still visible, still escalates after
-    // repeated ticks) instead of forcing an immediate rollback + restartWeb
+    // repeated ticks) instead of forcing an immediate restartWeb
     // that would kill an in-flight review for nothing.
     let portAlive = false
     try { portAlive = await psAliveFn() } catch { portAlive = false }

@@ -44,23 +44,12 @@ export function markBootBoundary(logPath?: string): void {
   } catch {}
 }
 
-// LKG rollback copies each entry with fs.cpSync — an entry that resolves back
-// into itself (e.g. a symlink cycle reachable from ~/.dsh, observed in
-// production pointing into ~/.npm/_npx/.../node_modules/unist-util-position)
-// always throws here. Node's wording for this varies by version ("cannot be
-// the same", "subdirectory of itself"/"of self") — match all known phrasings
-// so the entry is skipped instead of aborting the whole rollback.
-export function isSelfCopyError(message: string): boolean {
-  const lower = message.toLowerCase()
-  return lower.includes('cannot be the same') || lower.includes('subdirectory of')
-}
-
 // Coordination contract with dsh-safe-web-update's restart-dsh-web.sh (see
 // <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md):
 // that script writes this marker right before it intentionally takes dsh-web
 // down, so the supervisor's own health poll does not mistake a deliberate
 // restart (kill -> dry-boot -> relaunch, up to ~130s) for a crash and race it
-// with its own rollback + restartWeb(). The marker is the JSON {ts, ttl}
+// with its own restartWeb(). The marker is the JSON {ts, ttl}
 // document at planned-restart.json; a plain mtime-only file is no longer read.
 export const PLANNED_RESTART_TTL_MS = 180_000
 

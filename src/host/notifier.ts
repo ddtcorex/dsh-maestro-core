@@ -7,7 +7,7 @@ export async function notify(msg: string, opts: NotifierOpts = {}): Promise<void
   try {
     await send(msg)
   } catch {
-    // never block caller — rollback/report must not fail due to notifier
+    // never block caller — restart/report must not fail due to notifier
   }
 }
 

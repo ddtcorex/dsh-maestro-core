@@ -8,7 +8,7 @@ This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus 
 
 Supervisor for DSH Web resilience — three cooperating layers:
 
-1. **Standalone daemon** (`dsh-web-supervisor` binary, systemd `dsh-web-supervisor.service`): runs **outside** the `pnpm → sh → node` tree so it survives tree crashes. Polls `:3080` every 3s, maintains last-known-good (LKG) snapshots, auto-rollbacks on crash, writes `report-<ts>.md`, and optionally notifies via Telegram.
+1. **Standalone daemon** (`dsh-web-supervisor` binary, systemd `dsh-web-supervisor.service`): runs **outside** the `pnpm → sh → node` tree so it survives tree crashes. Polls `:3080` every 3s, restarts on crash, writes `report-<ts>.md`, and optionally notifies via Telegram.
 2. **In-tree host plugin** (`src/host/plugin.ts`, `src/host/resume.ts`, `src/host/supervisor.ts`): runs **inside** `dsh web` (needs `sessions`/`agents`/`connection` context the daemon cannot reach). Auto-resumes sessions interrupted within the configured window (default 5 minutes) by re-attaching the agent and sending `continue`.
 3. **In-tree client plugin** (`src/client/auto-reload.ts`): runs **in the browser**. Hybrid auto-reload — polls `HEAD /` when the server is down (offline/WebSocket close) and reloads as soon as `200`, plus host push via `runAutoResume` health recovery. Survives `dsh web` restarts without manual `F5`.
 
@@ -26,8 +26,8 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 ┌─ Host (Node, isolate) ──────────────────┐     ┌─ Client (Browser) ──────────────┐
 │  daemon (systemd, outside tree)          │     │  auto-reload.ts (poll + WS)    │
 │   pollHealth() ──► supervisor.tick()     │     │   offline/online/WS close →    │
-│   writeLKG/verify/rotate(3)              │     │   setInterval HEAD / 1s →      │
-│   rollback + restartWeb --auto           │     │   200 → location.reload()      │
+│   restart on crash                       │     │   setInterval HEAD / 1s →      │
+│   report + notify + auto-resume          │     │   200 → location.reload()      │
 │  ─────────────────────────────────────   │     │                                 │
 │  plugin.ts (inside tree, 8s timer)       │◄───►│  dsh.client inject runtime      │
 │   runAutoResume()                        │     │   window.__ModuleLoader__.load  │
@@ -49,14 +49,13 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 - `src/host/index.ts` — CLI entry (`daemon|status|resume|boot-guard`, plus `--help`)
 - `src/host/cli.ts` — argument parsing and command dispatch
 - `src/host/bin.ts` — daemon binary entry (`dsh-web-supervisor`), wires `Supervisor` and starts poll loop
-- `src/host/paths.ts` — shared `~/.dsh/.supervisor/**` path helpers (LKG, failed, reports, lock, config) + `resolveSupervisorPackageDir()` (walks up from this file to the package root, so `src/host/` and the built `lib/` both resolve it)
+- `src/host/paths.ts` — shared `~/.dsh/.supervisor/**` path helpers (reports, lock, config, intents) + `resolveSupervisorPackageDir()` (walks up from this file to the package root, so `src/host/` and the built `lib/` both resolve it)
 - `src/host/daemon-freshness.ts` — in-tree supervisor-daemon freshness behind injectable probes (`mainPid`/`cmdline`/`startMs`/`newestLibMs`) → `fresh|stale|absent|unknown`, plus `describeDaemonState()`. The port of the bash helper's `supervisor_daemon_state`: `dsh_web_restart` reports the verdict at schedule time because an in-session agent can neither run the helper (self-kill guard) nor be trusted to remember the check. Read-only — it never signals the daemon.
 - `src/host/supervisor.ts` — `Supervisor` class: poll loop (3s), debounce (60s), rolling guard, `resumeViaRpc()` (loopback POST), `attemptAutoResume()` with `RESUME FAILED/SKIPPED` vs `RESUME: continue triggered` notifies
-- `src/host/snapshot.ts` — LKG store: `writeLKG`, `verifyLKG` (sha256), `rotateLKG(3)`, `writeFailed`; `df` >500MB guard and `manifest.json`
 - `src/host/health-poller.ts` — `pollHealth()` with injectable `fetch/psAlive/logTail`; detects `ERR_MODULE_NOT_FOUND` / `assertChannel` / `unhandledRejection` / `EADDRINUSE`
 - `src/host/report.ts` — `writeReport()` → `~/.dsh/.supervisor/reports/report-<ts>.md` (health + git diff + log tail 200)
-- `src/host/notifier.ts` — Telegram bridge via `dsh-maestro-notifier` (swallow errors, never block rollback)
-- `src/host/debug-agent.ts` — deterministic rule-based auto-fix + dry-boot transient detection (Phase 3; **NO LLM** — never calls a model), spawned on-demand only after LKG rollback (max 3 attempts, cooldown)
+- `src/host/notifier.ts` — Telegram bridge via `dsh-maestro-notifier` (swallow errors, never block restart)
+- `src/host/debug-agent.ts` — deterministic rule-based auto-fix + dry-boot transient detection (Phase 3; **NO LLM** — never calls a model), spawned on-demand on a crash report (max 3 attempts, cooldown)
 - `src/host/session-health.ts` — session-log health scan: re-encodes single-whole-file-frame logs to canonical multi-frame (data preserved), quarantines corrupt first frames; run as the `dsh-safe-restart` pre-flight + loopback RPC `/dsh-maestro-supervisor-session-health` (fzstd + `node:zlib.zstdCompressSync`, Node ≥22.15)
 - `src/host/tool-view.ts` — tool-view observability: `probeToolView()` reports the missing critical tools, the visible count and `registry: reachable|unreachable` (an unreadable registry is NEVER evidence of health), `defaultResolveToolScope()` (the live agent, else the session id) and `summarizeToolView()`
 - `src/host/preset.ts` — agent-preset composition: `resolveSessionPresetId()` (attached projection → persisted header → raw-log header), `makePresetSetup()` (the `setup` handed to `agents.resume`), `composedPresetId()` (the roster's authoritative `agentPresets.composedPreset` answer) and `repairAgentPreset()` (`agentPresets.recompose` for an agent that joined no preset)
@@ -139,7 +138,7 @@ All times are **minutes** when given as `number` (e.g. `5` → 5 minutes). Strin
 | `autoResumeWithin` | `number` (minutes) or `string` (`5m`) | `5` | `DSH_SUPERVISOR_RESUME_WITHIN` | `config.json: autoResumeWithin`, `settings.json: domains.supervisor.autoResumeWithin` | Window for `findInterrupted`/`findDangling` mtime + event `time` filter. Bare `5` in env → 5m. |
 | `resumeCoreToolPolicy` | `warn` \| `park` | `warn` | `DSH_SUPERVISOR_RESUME_CORE_TOOL_POLICY` | `config.json: resumeCoreToolPolicy`, `settings.json: domains.supervisor.resumeCoreToolPolicy` | `park` records the session as needing a manual reopen when a core tool is missing. |
 | `resumeAutoRepair` | `boolean` | `true` | `DSH_SUPERVISOR_RESUME_AUTO_REPAIR` | `config.json: resumeAutoRepair`, `settings.json: domains.supervisor.resumeAutoRepair` | Before delivering the recovery prompt, re-link an agent that joined no preset (`agentPresets.recompose`). Repair mutates a live agent's tool surface and emits `tools/change`; with it off the loss is still notified and parked. |
-| `notifier` | `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` | — | env | systemd `Environment=` | Loose import, never blocks rollback. |
+| `notifier` | `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` | — | env | systemd `Environment=` | Loose import, never blocks restart. |
 
 Example `~/.dsh/.supervisor/config.json`:
 
@@ -272,15 +271,14 @@ DSH_INTEGRATION=1 pnpm test -- tests/integration.test.ts  # needs real DSH web
 
 ## Conventions
 
-- **Deterministic, no LLM** — supervisor never calls a model; decisions are rule-based (`http !=200` → down, log pattern → error). Debug auto-fix (Phase 3) is rule-based (`autoFixKnownPatterns` + dry-boot transient check) and is spawned on-demand only after LKG rollback (max 3 attempts).
-- **Daemon stays outside the tree** — the daemon (`bin.ts`/`supervisor.ts`/`snapshot.ts`/`health-poller.ts`, run via systemd) never adds a Cordis row or `cordis.patch.yml`; it must survive tree crashes. PID/port resolution via `ss -tlnp` + `resolve_tree()` like `dsh-safe-restart`.
+- **Deterministic, no LLM** — supervisor never calls a model; decisions are rule-based (`http !=200` → down, log pattern → error). Debug auto-fix (Phase 3) is rule-based (`autoFixKnownPatterns` + dry-boot transient check) and is spawned on-demand on a crash report (max 3 attempts).
+- **Daemon stays outside the tree** — the daemon (`bin.ts`/`supervisor.ts`/`health-poller.ts`/`restart-web.ts`, run via systemd) never adds a Cordis row or `cordis.patch.yml`; it must survive tree crashes. PID/port resolution via `ss -tlnp` + `resolve_tree()` like `dsh-safe-restart`.
 - **The auto-resume plugin (`plugin.ts`/`index.ts` + `client/auto-reload.ts`) is the one deliberate exception** — it runs in-tree because it needs `sessions`/`connection`/`agents` (host) and `window`/`fetch`/`WebSocket` (client) context the daemon cannot reach. This is permitted only under two non-negotiable conditions:
   1. **`apply()` must never throw synchronously or let a rejected promise escape.** Every failure — expected or not — degrades to "auto-resume disabled for this boot," logged, never a crash. See `tests/plugin.test.ts` for the required coverage (a throwing `findInterrupted`, a throwing `resumeInterrupted`, a throwing RPC registration must all leave `apply()` non-throwing).
   2. **Before this package is ever added to a live profile's `bundles`** (e.g. `~/.dsh/profiles/web/package.json`), `pnpm build` must succeed AND a dry-boot on an ephemeral port with an isolated `DSH_HOME` must pass, per the `dsh-safe-restart` skill. This is not optional guidance — it is the only defense against a *load-time* failure (a missing `lib/index.js`, a stale build), which no amount of in-code `try`/`catch` can catch. This exact failure class caused repeated `dsh web` outages on 2026-08-27 (see the workspace's `<workspace-root>/docs/reports/2026-08-27-dsh-web-outage-postmortem.md`).
-- **Injectable deps for testability** — `pollHealth`, `writeLKG`, `rollback`, `notify`, `findInterrupted`, `resumeSessions` are constructor-injected; tests mock them, real daemon wires to `health-poller`/`snapshot`/`restart-dsh-web.sh --auto` and `resumeViaRpc` (loopback fetch).
-- **Snapshot rotation** — keep 3 LKG, verify sha256 before promote, `df` >500MB guard.
-- **Debounce + rolling guard** — at most 1 rollback per 60s, single `rollingBack` flag, `flock` on `~/.dsh/.supervisor/lock` for cross-process safety.
-- **Never block on notifier** — Telegram failures are swallowed and retried. Daemon never blocks rollback on `notify`.
+- **Injectable deps for testability** — `pollHealth`, `writeReport`, `restartWeb`, `notify`, `findInterrupted`, `resumeSessions` are constructor-injected; tests mock them, real daemon wires to `health-poller`/`report`/`restart-web` and `resumeViaRpc` (loopback fetch).
+- **Debounce + restarting guard** — at most 1 restart per 60s, single `restarting` flag, `flock` on `~/.dsh/.supervisor/lock` for cross-process safety.
+- **Never block on notifier** — Telegram failures are swallowed and retried. Daemon never blocks restart on `notify`.
 - **Client auto-reload is hybrid:** client polling (`HEAD /` 1s on `offline`/`WebSocket close`) is primary (works when host is down); host `pollHealth` + `notify` after `restartWeb` is secondary. Together they cover manual, supervisor, and systemd restarts without `F5`.
 - **Resume recovers route (fallback path only):** `sessionController.resolveAgent` resolves provider/model itself while composing the preset, so the supervisor tries it first. Only when it yields no agent does `resumeInterrupted` read `request/context` through the persistence handle seam to recover `provider`/`model` and pass `agentOptions` to `agents.resume()`, so a resumed agent does not fall back to a wrong model. A session with no recoverable route is skipped with a journal entry instead of being continued into a persona failure.
 - **Resume keeps the agent preset:** activation AND verification both belong to the preset roster: `makePresetSetup()` mounts it through `ResumeAgentOptions.setup`, and `verifyResumedComposition()` asks `composedPreset(agent.ctx)` whether the binding exists, repairing with `recompose` when it does not. Never decide composition from a tool count (see `## Known Issues`).
@@ -290,7 +288,7 @@ DSH_INTEGRATION=1 pnpm test -- tests/integration.test.ts  # needs real DSH web
 
 ### Supervisor → Notifier (1-way, loose by default, hard optional)
 
-- **Loose (recommended):** No `package.json` dependency. `notifier.ts` tries `import('@ddtcorex/dsh-maestro-notifier')` dynamically, then `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` env, then falls back to `console.log`. `systemd` template leaves `Environment=TELEGRAM_*` commented — uncomment if you want Telegram, otherwise daemon logs only and never blocks rollback. This keeps supervisor runnable when notifier is not installed.
+- **Loose (recommended):** No `package.json` dependency. `notifier.ts` tries `import('@ddtcorex/dsh-maestro-notifier')` dynamically, then `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` env, then falls back to `console.log`. `systemd` template leaves `Environment=TELEGRAM_*` commented — uncomment if you want Telegram, otherwise daemon logs only and never blocks restart. This keeps supervisor runnable when notifier is not installed.
 - **Hard (workspace):** Add to `package.json` `"dependencies": {"@ddtcorex/dsh-maestro-notifier": "workspace:^0.1.0"}` and to `pnpm-workspace.yaml` `packages: [".", "../dsh-maestro-notifier"]` + `allowBuilds.esbuild: true`. Then `pnpm install` resolves the link and `defaultSend` hits the hard import on every call. Use only if you want a guaranteed Telegram path and accept the coupled publish order (notifier must be published before supervisor).
 
 ### Two Cordis plugins that need each other (A ↔ B)
@@ -308,7 +306,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 ## Validation
 
 - `pnpm verify` + `pnpm test` green before any success claim (a suite needing `DSH_INTEGRATION=1` stays skipped by default). `test -f lib/index.js && test -f lib/client.js` after build.
-- For daemon changes, manual ephemeral check: `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` + corrupt `settings.json` → assert report + rollback within 10s.
+- For daemon changes, manual ephemeral check: `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` + corrupt `settings.json` → assert report + restart within 10s.
 - For plugin changes, live check: `curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST ...` → `scanned`/`interrupted`, and `findDanglingOpenTurns` full scan finds subagent `b6487e33` within 5m. For client, `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"` → 2, and after `kill` + restart, `fetch HEAD /` polling reloads the page without `F5`.
 - `pnpm --dir deepseek-harness dsh web --port 0` dry-boot must pass before adding to a live profile (see Conventions).
 
@@ -326,7 +324,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 | `RESUME SKIPPED: no interrupted sessions could be re-attached` | No session within `autoResumeWithin` window or all filtered by `sinceMs` | Increase `autoResumeWithin` (e.g. `10` or `"10m"`), check `~/.dsh/.supervisor/config.json` and `DSH_SUPERVISOR_RESUME_WITHIN` env, verify `findDangling` with `withinMs: 60*60*1000` finds it. |
 | Page does not reload after `dsh web` restart | Client `lib/client.js` not served (missing `exports` or not built) or browser cache | `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js \| grep -c "window.location.reload"` → 2, hard refresh `Ctrl+Shift+R`, check `window.__ModuleLoader__` in devtools console. Client polls `HEAD /` 1s on `offline`/`WebSocket close` — it needs `dsh.client` to be loaded. |
 | `dangling` found but `agents.get` says already live (skip) | Session is still live in current process (not a crash) | `findDangling` is only safe right after fresh boot when `dsh web` is sole owner. `resumeInterrupted` additionally checks `agents.get(sessionId)` and skips if live — this is correct, not a bug. Wait for next boot. |
-| Daemon `reports` not written or `lkg` not rotated | `df` guard (<500MB) or `flock` on `~/.dsh/.supervisor/lock` failed | Check `df -h ~/.dsh`, `ls -l ~/.dsh/.supervisor/lkg/`, `cat ~/.dsh/.supervisor/supervisor.log`, `ls -l ~/.dsh/.supervisor/lock`. Daemon never blocks on notifier, but `writeLKG` is throttled to 1 per 5m. |
+| Daemon `reports` not written | `flock` on `~/.dsh/.supervisor/lock` failed | Check `cat ~/.dsh/.supervisor/supervisor.log`, `ls -l ~/.dsh/.supervisor/lock`. Daemon never blocks on notifier. |
 | Tests fail with `zstd: command not found` | `zstd` not installed | `sudo apt install zstd` (or `brew install zstd`). Tests skip zstd suites if unavailable, but live `findDangling` needs it. |
 
 ## Known Issues

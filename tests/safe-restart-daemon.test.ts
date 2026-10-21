@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url'
 /**
  * The supervisor daemon is the SECOND long-lived process in the system: it
  * caches `lib/*.js` in RAM at start, exactly like `dsh web`. A rebuild without
- * a daemon reload therefore leaves the OLD rollback logic running — the
- * 2026-09-13 restart storm (the daemon judged a slow boot as down and rolled
- * `dsh web` back in a loop) happened with a daemon started before the fix.
+ * a daemon reload therefore leaves the OLD restart logic running — the
+ * 2026-09-13 restart storm (the daemon judged a slow boot as down and restarted
+ * `dsh web` in a loop) happened with a daemon started before the fix.
  *
  * These tests EXECUTE the helper against a stubbed `systemctl --user` plus a
  * real throwaway daemon process, because a source-inspection test cannot tell

@@ -3,10 +3,10 @@
  *
  * `dsh web` is not the only process that caches this package's `lib/*.js` in
  * RAM: the standalone `dsh-web-supervisor` daemon does too, and it is the
- * process that decides whether a fresh boot is healthy or must be rolled back.
- * A daemon started BEFORE the newest build keeps applying the OLD rollback
- * rules — on 2026-09-13 exactly that judged a slow boot as down and rolled
- * `dsh web` back in a loop while the port answered in 1.4ms.
+ * process that decides whether a fresh boot is healthy or must be restarted.
+ * A daemon started BEFORE the newest build keeps applying the OLD restart
+ * rules — on 2026-09-13 exactly that judged a slow boot as down and restarted
+ * `dsh web` in a loop while the port answered in 1.4ms.
  *
  * The bash helper (`skills/dsh-safe-restart/scripts/restart-dsh-web.sh`,
  * `supervisor_daemon_state`) owns the same judgement for out-of-session

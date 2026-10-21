@@ -26,10 +26,7 @@ describe('supervisor', () => {
     const notify = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, httpCode: 200 }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => {}),
       notify,
       resumeSessions: async () => { throw new Error('loopback unavailable') },
     })
@@ -43,10 +40,7 @@ describe('supervisor', () => {
     const writeOutcome = vi.fn()
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, httpCode: 200 }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => {}),
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       writeOutcome,
@@ -61,122 +55,73 @@ describe('supervisor', () => {
     })
   })
 
-  it('writes LKG when healthy', async () => {
-    const writeLKG = vi.fn(async () => ({ ts: '2026-08-27T00-00-00-000Z', manifest: { ts: '', files: [] } as any }))
+  it('does not snapshot or report when healthy', async () => {
+    const writeReport = vi.fn(async () => '/tmp/report.md')
+    const notify = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, httpCode: 200 }),
-      writeLKG,
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => {}),
-      notify: vi.fn(async () => {}),
+      writeReport,
+      notify,
       intervalMs: 10,
     })
     await s.tick()
-    expect(writeLKG).toHaveBeenCalled()
+    expect(writeReport).not.toHaveBeenCalled()
+    expect(notify).not.toHaveBeenCalled()
   })
 
-  it('rollbacks once when down (debounced)', async () => {
-    const rollback = vi.fn(async () => {})
+  it('restarts once when down (debounced)', async () => {
+    const restartWeb = vi.fn(async () => {})
     const writeReport = vi.fn(async () => '/tmp/report.md')
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'ERR_MODULE_NOT_FOUND' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: 'failed-ts', manifest: { ts: '', files: [] } as any })),
       writeReport,
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       debounceMs: 60000,
       downThreshold: 1, // this test is about debounce, not the consecutive-failure threshold
     })
     await s.tick()
-    await s.tick() // second tick within debounce should not rollback again
-    expect(rollback).toHaveBeenCalledTimes(1)
+    await s.tick() // second tick within debounce should not restart again
+    expect(restartWeb).toHaveBeenCalledTimes(1)
     expect(writeReport).toHaveBeenCalled()
   })
 
-  it('does not rollback on a single transient down poll', async () => {
+  it('does not restart on a single transient down poll', async () => {
     // Regression: a lone fetch timeout / AbortError during a slow boot was
     // being treated as a confirmed crash on the very first bad poll, which
     // then re-triggered restartWeb() and its own transient errors — a
     // self-sustaining restart loop. Require consecutive confirmations.
-    const rollback = vi.fn(async () => {})
+    const restartWeb = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'This operation was aborted' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 3,
     })
     await s.tick()
     await s.tick()
-    expect(rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
   })
 
-  it('rollbacks once downThreshold consecutive down polls are seen', async () => {
-    const rollback = vi.fn(async () => {})
+  it('restarts once downThreshold consecutive down polls are seen', async () => {
+    const restartWeb = vi.fn(async () => {})
     const notify = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'This operation was aborted' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback,
+      restartWeb,
       notify,
       intervalMs: 10,
       downThreshold: 3,
     })
     await s.tick()
     await s.tick()
-    expect(rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
     await s.tick()
-    expect(rollback).toHaveBeenCalledTimes(1)
-  })
-
-  // D4 — the rollback summary is not decoration: a restore that could not put
-  // every entry back must reach the operator loudly, not look like a clean
-  // recovery in the log.
-  it('surfaces a partial rollback loudly, with the skipped entries', async () => {
-    const notify = vi.fn(async () => {})
-    const s = new Supervisor({
-      pollHealth: async () => ({ up: false, error: 'ERR_MODULE_NOT_FOUND' }),
-      writeLKG: vi.fn(async () => ({ ts: '' })),
-      writeFailed: vi.fn(async () => ({ ts: 'failed-ts' })),
-      writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => ({
-        target: '2026-08-31T00-00-00-000Z',
-        restored: 42,
-        skipped: [{ path: 'attachments', reason: 'runtime data excluded from the LKG scope' }],
-      })),
-      notify,
-      intervalMs: 10,
-      debounceMs: 0,
-      downThreshold: 1,
-    })
-    await s.tick()
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining('ROLLBACK PARTIAL'))
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining('attachments'))
-  })
-
-  it('does not announce a partial rollback when every entry was restored', async () => {
-    const notify = vi.fn(async () => {})
-    const s = new Supervisor({
-      pollHealth: async () => ({ up: false, error: 'ERR_MODULE_NOT_FOUND' }),
-      writeLKG: vi.fn(async () => ({ ts: '' })),
-      writeFailed: vi.fn(async () => ({ ts: 'failed-ts' })),
-      writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => ({ target: '2026-08-31T00-00-00-000Z', restored: 42, skipped: [] })),
-      notify,
-      intervalMs: 10,
-      debounceMs: 0,
-      downThreshold: 1,
-    })
-    await s.tick()
-    expect(notify).not.toHaveBeenCalledWith(expect.stringContaining('ROLLBACK PARTIAL'))
+    expect(restartWeb).toHaveBeenCalledTimes(1)
   })
 
   it('resets the consecutive-down count when health recovers between down polls', async () => {
@@ -187,19 +132,17 @@ describe('supervisor', () => {
       { up: false, error: 'aborted' },
       { up: false, error: 'aborted' },
     ]
-    const rollback = vi.fn(async () => {})
+    const restartWeb = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => states.shift() as any,
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 3,
     })
     for (let i = 0; i < states.length; i++) await s.tick()
-    expect(rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
   })
 
   it('does not treat down as a crash while a planned restart is active', async () => {
@@ -207,14 +150,11 @@ describe('supervisor', () => {
     // intentional restart can hold the port down far longer than any
     // consecutive-down threshold tuned for a real crash. See
     // <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md.
-    const rollback = vi.fn(async () => {})
     const restartWeb = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'aborted' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback,
+      restartWeb,
       restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
@@ -224,40 +164,36 @@ describe('supervisor', () => {
     await s.tick()
     await s.tick()
     await s.tick()
-    expect(rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
     expect(restartWeb).not.toHaveBeenCalled()
   })
 
   it('resumes normal crash handling once the planned-restart marker is gone', async () => {
     let planned = true
-    const rollback = vi.fn(async () => {})
+    const restartWeb = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'aborted' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 1,
       isPlannedRestartActive: async () => planned,
     })
     await s.tick()
-    expect(rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
     planned = false
     await s.tick()
-    expect(rollback).toHaveBeenCalledTimes(1)
+    expect(restartWeb).toHaveBeenCalledTimes(1)
   })
 
-  it('does not rollback when already rolling back', async () => {
+  it('does not restart when already restarting', async () => {
     let resolvers: (() => void)[] = []
-    const rollback = vi.fn(async () => new Promise<void>(r => resolvers.push(r)))
+    const restartWeb = vi.fn(async () => new Promise<void>(r => resolvers.push(r)))
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'crash' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 1,
@@ -265,7 +201,7 @@ describe('supervisor', () => {
     const p1 = s.tick()
     const p2 = s.tick()
     await new Promise(r => setTimeout(r, 20))
-    expect(rollback).toHaveBeenCalledTimes(1)
+    expect(restartWeb).toHaveBeenCalledTimes(1)
     resolvers.forEach(r => r())
     await p1; await p2
   })
@@ -274,10 +210,7 @@ describe('supervisor', () => {
     const writes: string[] = []
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, httpCode: 200 }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => {}),
       restartWeb: async () => { writes.push('restart') },
       notify: vi.fn(async () => {}),
       bootGraceMs: 180_000,
@@ -293,10 +226,7 @@ describe('supervisor', () => {
     const cleared = vi.fn()
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, httpCode: 200 }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => {}),
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       checkPlannedRestart: () => true,
@@ -306,16 +236,13 @@ describe('supervisor', () => {
     expect(cleared).toHaveBeenCalledTimes(1)
   })
 
-  it('marker: tick suppressed when planned restart active (no writeFailed/writeReport/rollback)', async () => {
-    const writeFailed = vi.fn(async () => ({ ts: 'failed', manifest: { ts: '', files: [] } as any }))
+  it('marker: tick suppressed when planned restart active (no writeReport/restartWeb)', async () => {
     const writeReport = vi.fn(async () => '/tmp/report.md')
-    const rollback = vi.fn(async () => {})
+    const restartWeb = vi.fn(async () => {})
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'crash' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed,
       writeReport,
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 1,
@@ -324,22 +251,18 @@ describe('supervisor', () => {
     await s.tick()
     await s.tick()
     await s.tick()
-    expect(writeFailed).not.toHaveBeenCalled()
     expect(writeReport).not.toHaveBeenCalled()
-    expect(rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
   })
 
   it('marker: tick doubles downThreshold when suppressed', async () => {
-    const rollback = vi.fn(async () => {})
-    const writeFailed = vi.fn(async () => ({ ts: 'failed', manifest: { ts: '', files: [] } as any }))
+    const restartWeb = vi.fn(async () => {})
     const writeReport = vi.fn(async () => '/tmp/report.md')
-    // Phase 1: suppressed — downThreshold 3 doubled to 6, so 3 ticks should NOT trigger rollback
+    // Phase 1: suppressed — downThreshold 3 doubled to 6, so 3 ticks should NOT trigger restart
     const sSuppressed = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'crash' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed,
       writeReport,
-      rollback,
+      restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 3,
@@ -348,21 +271,18 @@ describe('supervisor', () => {
     await sSuppressed.tick()
     await sSuppressed.tick()
     await sSuppressed.tick()
-    expect(rollback).not.toHaveBeenCalled()
-    expect(writeFailed).not.toHaveBeenCalled()
-    // 6th tick still suppressed (marker active) — should never rollback while suppressed
+    expect(restartWeb).not.toHaveBeenCalled()
+    // 6th tick still suppressed (marker active) — should never restart while suppressed
     await sSuppressed.tick()
     await sSuppressed.tick()
     await sSuppressed.tick()
-    expect(rollback).not.toHaveBeenCalled()
-    // Phase 2: not suppressed — same 3 threshold should rollback after 3 downs
-    const rollback2 = vi.fn(async () => {})
+    expect(restartWeb).not.toHaveBeenCalled()
+    // Phase 2: not suppressed — same 3 threshold should restart after 3 downs
+    const restartWeb2 = vi.fn(async () => {})
     const sNormal = new Supervisor({
       pollHealth: async () => ({ up: false, error: 'crash' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: 'failed', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: rollback2,
+      restartWeb: restartWeb2,
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       downThreshold: 3,
@@ -370,9 +290,9 @@ describe('supervisor', () => {
     } as any)
     await sNormal.tick()
     await sNormal.tick()
-    expect(rollback2).not.toHaveBeenCalled()
+    expect(restartWeb2).not.toHaveBeenCalled()
     await sNormal.tick()
-    expect(rollback2).toHaveBeenCalledTimes(1)
+    expect(restartWeb2).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -384,10 +304,7 @@ describe('caller restart-request handling', () => {
     const req = { ts: Date.now(), ttl: 180_000, callerSessionId: 'proj/s-1', reason: 'plugin v2' }
     const supervisor = new Supervisor({
       pollHealth: async () => ({ up: false }),
-      writeLKG: async () => ({ ts: '', manifest: { files: [] } } as any),
-      writeFailed: async () => ({ ts: '' } as any),
       writeReport: async (o: any) => o.ts,
-      rollback: async () => {},
       restartWeb,
       notify,
       getTime: () => Date.now(),
@@ -411,10 +328,7 @@ describe('caller restart-request handling', () => {
     const restartWeb = vi.fn(async () => {})
     const supervisor = new Supervisor({
       pollHealth: async () => ({ up: false }),
-      writeLKG: async () => ({ ts: '' } as any),
-      writeFailed: async () => ({ ts: '' } as any),
       writeReport: async (o: any) => o.ts,
-      rollback: async () => {},
       restartWeb,
       notify: async () => {},
       getTime: () => Date.now(),
@@ -437,10 +351,7 @@ describe('caller restart-request handling', () => {
     let marker: any = { ts: Date.now(), ttl: 180_000, callerSessionId: 'proj/s-1', reason: 'plugin v2' }
     const supervisor = new Supervisor({
       pollHealth: async () => ({ up }),
-      writeLKG: async () => ({ ts: '' } as any),
-      writeFailed: async () => ({ ts: '' } as any),
       writeReport: async (o: any) => o.ts,
-      rollback: async () => {},
       restartWeb,
       notify: async () => {},
       getTime: () => Date.now(),
@@ -477,10 +388,7 @@ describe('caller restart-request handling', () => {
     let up = false
     const supervisor = new Supervisor({
       pollHealth: async () => ({ up }),
-      writeLKG: async () => ({ ts: '' } as any),
-      writeFailed: async () => ({ ts: '' } as any),
       writeReport: async (o: any) => o.ts,
-      rollback: async () => {},
       restartWeb,
       notify: async () => {},
       getTime: () => Date.now(),
@@ -504,34 +412,28 @@ describe('caller restart-request handling', () => {
     vi.useRealTimers()
   })
 
-  it('does not rollback or re-fire restartWeb on a down tick within the restart debounce', async () => {
+  it('does not re-fire restartWeb on a down tick within the restart debounce', async () => {
     vi.useFakeTimers()
     const restartWeb = vi.fn(async () => {})
-    const rollback = vi.fn(async () => {})
     let up = false
     const supervisor = new Supervisor({
       pollHealth: async () => ({ up }),
-      writeLKG: async () => ({ ts: '' } as any),
-      writeFailed: async () => ({ ts: '' } as any),
       writeReport: async (o: any) => o.ts,
-      rollback,
       restartWeb,
       notify: async () => {},
       getTime: () => Date.now(),
       writePlannedRestart: () => {},
       bootGraceMs: 180_000,
       readRestartRequest: () => ({ ts: Date.now(), ttl: 180_000, callerSessionId: 'proj/s-1' }),
-      downThreshold: 1, // normally a single down tick would rollback + restart
+      downThreshold: 1, // normally a single down tick would restart
     } as any)
     await supervisor.tick()
     await vi.advanceTimersByTimeAsync(6000)
     expect(restartWeb).toHaveBeenCalledTimes(1)
-    expect(rollback).not.toHaveBeenCalled()
     // Still booting (down). The debounce set when the grace branch issued the
-    // restart must hold: no rollback and no racing second restart.
+    // restart must hold: no racing second restart.
     await supervisor.tick()
     await vi.advanceTimersByTimeAsync(6000)
-    expect(rollback).not.toHaveBeenCalled()
     expect(restartWeb).toHaveBeenCalledTimes(1)
     supervisor.stop()
     vi.useRealTimers()
@@ -541,10 +443,7 @@ describe('caller restart-request handling', () => {
 describe('boot-settled counter gate', () => {
   function makeSupervisor(over: Record<string, unknown>) {
     return new Supervisor({
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: 'failed-ts', manifest: { ts: '', files: [] } as any })),
       writeReport: vi.fn(async () => '/tmp/report.md'),
-      rollback: vi.fn(async () => {}),
       notify: vi.fn(async () => {}),
       intervalMs: 10,
       // Hermetic: never read the operator's real planned-restart marker.
@@ -554,24 +453,28 @@ describe('boot-settled counter gate', () => {
   }
 
   it('never advances the degraded counter while the boot is unproven', async () => {
+    const restartWeb = vi.fn(async () => {})
     const s = makeSupervisor({
       pollHealth: async () => ({ up: true, httpCode: 200, error: 'This operation was aborted', degraded: true, bootPhase: 'booting' }),
+      restartWeb,
     })
     for (let i = 0; i < 8; i++) await s.tick()
     expect((s as any).consecutiveDegraded).toBe(0)
     expect((s as any).deps.writeReport).not.toHaveBeenCalled()
-    expect((s as any).deps.rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
   })
 
   it('never advances the down counter on a weak failure while the boot is unproven', async () => {
+    const restartWeb = vi.fn(async () => {})
     const s = makeSupervisor({
       pollHealth: async () => ({ up: false, error: 'This operation was aborted', bootPhase: 'booting' }),
       downThreshold: 1,
+      restartWeb,
     })
     await s.tick()
     await s.tick()
     expect((s as any).consecutiveDown).toBe(0)
-    expect((s as any).deps.rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
   })
 
   it('advances the down counter for a refused connection even while the boot is unproven', async () => {
@@ -584,16 +487,18 @@ describe('boot-settled counter gate', () => {
     expect((s as any).consecutiveDown).toBe(2)
   })
 
-  it('rolls back once the boot has settled and the threshold is reached', async () => {
+  it('restarts once the boot has settled and the threshold is reached', async () => {
+    const restartWeb = vi.fn(async () => {})
     const s = makeSupervisor({
       pollHealth: async () => ({ up: false, error: 'This operation was aborted', bootPhase: 'settled' }),
       downThreshold: 3,
+      restartWeb,
     })
     await s.tick()
     await s.tick()
-    expect((s as any).deps.rollback).not.toHaveBeenCalled()
+    expect(restartWeb).not.toHaveBeenCalled()
     await s.tick()
-    expect((s as any).deps.rollback).toHaveBeenCalledTimes(1)
+    expect(restartWeb).toHaveBeenCalledTimes(1)
   })
 
   it('takes the boot grace from deps when injected', async () => {

@@ -1,6 +1,6 @@
 # Contributing to dsh-maestro-core
 
-Thank you for contributing to **dsh-maestro-core** (`@ddtcorex/dsh-maestro-core`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, LKG snapshots, auto-rollback, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
+Thank you for contributing to **dsh-maestro-core** (`@ddtcorex/dsh-maestro-core`) — Supervisor for DSH Web resilience: standalone daemon (polls `:3080` every 3s, restart on crash, reports) plus in-tree host plugin (auto-resume interrupted sessions) and client plugin (hybrid auto-reload), packaged as a Cordis plugin + `dsh-web-supervisor` binary.
 
 ## Getting Started
 

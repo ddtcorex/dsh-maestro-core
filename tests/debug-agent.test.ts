@@ -109,7 +109,7 @@ describe('debug-agent — deterministic transient', () => {
     fs.rmSync(path.dirname(report), { recursive: true, force: true })
   })
 
-  it('never calls a model or fetch on the rollback path', async () => {
+  it('never calls a model or fetch on the crash path', async () => {
     vi.stubEnv('DEEPSEEK_API_KEY', 'test-key')
     vi.stubEnv('DEEPSEEK_API_URL', 'http://127.0.0.1:1/v1')
     const span = vi.spyOn(globalThis, 'fetch')
