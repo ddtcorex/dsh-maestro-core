@@ -12,27 +12,17 @@ import { writeRestartOutcome as defaultWriteOutcome, type RestartOutcome } from 
 import { execFileSync } from 'node:child_process'
 import { mintDshSessionCookie, type MintCookieOpts } from './dsh-session.js'
 
-/** Partial-restore report a rollback may hand back (cli.ts wires RestoreResult). */
-export interface RollbackSummary {
-  target?: string
-  restored?: number
-  skipped?: Array<{ path: string; reason: string }>
-}
-
 export interface SupervisorDeps {
-  pollHealth: () => Promise<HealthState>
-  writeLKG: () => Promise<{ ts: string; manifest?: any }>
-  writeFailed: () => Promise<{ ts: string; manifest?: any }>
-  writeReport: (opts: { ts: string; health: HealthState; action: string; logTail?: string; gitDiff?: string }) => Promise<string>
-  rollback: (ts?: string) => Promise<RollbackSummary | void>
-  restartWeb?: () => Promise<void>
+  pollHealth: () => Promise<HealthState>;
+  writeReport: (opts: { ts: string; health: HealthState; action: string; logTail?: string; gitDiff?: string }) => Promise<string>;
+  restartWeb?: () => Promise<void>;
   notify: (msg: string) => Promise<void>
   intervalMs?: number
   debounceMs?: number
   // Number of consecutive "down" polls required before a crash is confirmed
-  // and rollback/restart fires. A single transient poll failure (e.g. a
+  // and restart fires. A single transient poll failure (e.g. a
   // fetch timeout while the plugin tree is still booting) must not trigger
-  // a full rollback — that restart itself produces transient errors on the
+  // a restart — that restart itself produces transient errors on the
   // next poll, which would otherwise re-trigger endlessly. Default 3 (at the
   // daemon's 3s interval, ~9s of continuous down before acting).
   downThreshold?: number
@@ -44,7 +34,7 @@ export interface SupervisorDeps {
   // Checks the dsh-safe-web-update marker (see
   // <workspace-root>/docs/specs/2026-09-13-supervisor-restart-resilience-design.md): a down poll
   // while this resolves true is an intentional restart in progress, not a
-  // crash — skip rollback/restartWeb entirely rather than racing it.
+  // crash — skip restartWeb entirely rather than racing it.
   isPlannedRestartActive?: () => boolean | Promise<boolean>
   // 30s planned-restart marker (restart-guards.ts): single owner for restart
   // decisions. Injected for tests so tick/restartWeb can be verified without
@@ -125,9 +115,8 @@ export async function resumeViaRpcWithSession(
 
 export class Supervisor {
   private deps: SupervisorDeps
-  private lastRollback = 0
-  private rollingBack = false
-  private lastLKGWrite = 0
+  private lastRestart = 0
+  private restarting = false
   private lastDegradedNotify = 0
   private consecutiveDown = 0
   private consecutiveDegraded = 0
@@ -157,7 +146,7 @@ export class Supervisor {
     const grace = await this.getEffectiveBootGraceMs()
     // Marker first, and its TTL is the boot budget — not 30 s. The observed
     // boot took 1m52s: after +30 s every poll was judged as a crash, which is
-    // exactly how the 2026-09-13 rollback report was produced (D5).
+    // exactly how the 2026-09-13 crash report was produced (D5).
     this.getWritePlannedRestart()(grace)
     if (this.deps.restartWeb) {
       // Injected implementation (cli.ts daemon wiring, tests): it owns the
@@ -359,19 +348,6 @@ export class Supervisor {
     }
   }
 
-  /**
-   * D4: a restore that could not put every entry back must be surfaced loudly.
-   * Without this, a half-restored tree reads exactly like a clean recovery in
-   * the log and in the operator's Telegram feed.
-   */
-  private async reportRollbackResult(summary: RollbackSummary | void, reportPath: string): Promise<void> {
-    if (!summary || !summary.skipped?.length) return
-    const first = summary.skipped.slice(0, 3).map(s => `${s.path} (${s.reason})`).join('; ')
-    await this.deps.notify(
-      `ROLLBACK PARTIAL: ${summary.restored ?? 0} restored, ${summary.skipped.length} skipped — ${first} (report: ${reportPath})`,
-    ).catch(() => {})
-  }
-
   private handleDebugResult(reportPath: string, res: { fixed: boolean; reason: string }): void {
     if (res.fixed) {
       void this.deps.notify(`FIXED: debug-agent fixed ${reportPath} — ${res.reason}`).catch(() => {})
@@ -397,7 +373,7 @@ export class Supervisor {
     // grace timer → restartWeb once → notify. The suppression marker and the
     // single-flight latch are held until a post-restart health.up tick clears
     // them, so the in-flight down of our own restart can never be mistaken for
-    // a crash and raced with a rollback + second restart by the crash path.
+    // a crash and raced with a second restart by the crash path.
     const restartReq = this.deps.readRestartRequest ? this.deps.readRestartRequest() : undefined
     if (restartReq?.callerSessionId && !this.restartRequestHandled) {
       this.restartRequestHandled = true
@@ -405,10 +381,10 @@ export class Supervisor {
         void (async () => {
           try {
             // Debounce crash handling from the moment the restart is issued —
-            // the crash path sets lastRollback the same way. A slow boot must
+            // the crash path sets lastRestart the same way. A slow boot must
             // not be classified as a crash even after the suppression marker's
             // own 30s TTL runs out.
-            this.lastRollback = this.deps.getTime ? this.deps.getTime() : Date.now()
+            this.lastRestart = this.deps.getTime ? this.deps.getTime() : Date.now()
             await this.restartWeb()
             // restartWeb() already wrote the marker with the boot budget as its
             // TTL; the marker is cleared on the first healthy poll instead.
@@ -438,12 +414,12 @@ export class Supervisor {
       return
     }
 
-    // DEGRADED: http 200 but log has plugin error → report + notify, rollback after consecutive threshold
+    // DEGRADED: http 200 but log has plugin error → report + notify, restart after consecutive threshold
     if (health.degraded) {
       this.consecutiveDown = 0
       // D1: a degraded verdict while the current boot is unproven is a boot
       // transient, not a plugin error — the incident's report line
-      // "rollback — degraded: This operation was aborted" was produced exactly
+      // "restart — degraded: This operation was aborted" was produced exactly
       // here, five polls after a slow boot.
       if (health.bootPhase === 'booting') {
         this.consecutiveDegraded = 0
@@ -494,32 +470,27 @@ export class Supervisor {
         } catch {}
         return
       }
-      // consecutive degraded threshold reached → treat as down: rollback + restart
+      // consecutive degraded threshold reached → treat as down: report + restart
       this.consecutiveDegraded = 0
       const degradedError = health.error ?? 'degraded plugin error'
-      if (this.rollingBack) return
+      if (this.restarting) return
       const now2 = this.deps.getTime ? this.deps.getTime() : Date.now()
       const debounceMs2 = this.deps.debounceMs ?? 60000
-      if (now2 - this.lastRollback < debounceMs2) return
-      this.rollingBack = true
-      this.lastRollback = now2
+      if (now2 - this.lastRestart < debounceMs2) return
+      this.restarting = true
+      this.lastRestart = now2
       try {
-        const failed = await this.deps.writeFailed().catch(() => ({ ts: new Date().toISOString().replace(/[:.]/g, '-'), manifest: null }))
-        const ts2 = (failed as any)?.ts ?? new Date().toISOString().replace(/[:.]/g, '-')
+        const ts2 = new Date().toISOString().replace(/[:.]/g, '-')
         const logTail2 = (health as any).logTail ?? ''
         const gitDiff2 = await this.collectGitDiff().catch(() => '')
         const degradedHealth: HealthState = { up: false, httpCode: health.httpCode, error: `degraded → down: ${degradedError}`, logTail: logTail2, degraded: false }
-        const reportPath2 = await this.deps.writeReport({ ts: ts2, health: degradedHealth, action: `rollback — degraded: ${degradedError}`, logTail: logTail2, gitDiff: gitDiff2 }).catch(() => '')
-        try {
-          const summary = await this.deps.rollback()
-          await this.reportRollbackResult(summary, reportPath2)
-        } catch (e: any) { await this.deps.notify(`rollback failed: ${e?.message ?? String(e)} (report: ${reportPath2})`).catch(() => {}) }
+        const reportPath2 = await this.deps.writeReport({ ts: ts2, health: degradedHealth, action: `restart — degraded: ${degradedError}`, logTail: logTail2, gitDiff: gitDiff2 }).catch(() => '')
         if (this.deps.restartWeb) {
-          try { await this.deps.restartWeb(); await this.deps.notify(`restarted dsh-web after rollback (report: ${reportPath2})`).catch(() => {}) } catch (e: any) { await this.deps.notify(`restart dsh-web failed: ${e?.message ?? String(e)} (report: ${reportPath2})`).catch(() => {}) }
+          try { await this.deps.restartWeb(); await this.deps.notify(`restarted dsh-web (report: ${reportPath2})`).catch(() => {}) } catch (e: any) { await this.deps.notify(`restart dsh-web failed: ${e?.message ?? String(e)} (report: ${reportPath2})`).catch(() => {}) }
         }
-        await this.deps.notify(`DEGRADED → rollback (report: ${reportPath2}, error: ${degradedError})`).catch(() => {})
+        await this.deps.notify(`DEGRADED → restart (report: ${reportPath2}, error: ${degradedError})`).catch(() => {})
         try { await this.deps.notify(`🔄 dsh web auto-restart — degraded: ${degradedError} — ${new Date().toISOString()}`).catch(() => {}) } catch {}
-      } finally { this.rollingBack = false }
+      } finally { this.restarting = false }
       return
     }
 
@@ -565,21 +536,11 @@ export class Supervisor {
           }
         }
       }
-      // Throttle LKG writes to at most once per 5 minutes
-      const now = this.deps.getTime ? this.deps.getTime() : Date.now()
-      if (now - this.lastLKGWrite > 5 * 60 * 1000) {
-        try {
-          await this.deps.writeLKG()
-          this.lastLKGWrite = now
-        } catch {
-          // ignore snapshot errors
-        }
-      }
       return
     }
 
     // Single-owner 30s marker: planned restart in progress — suppress crash
-    // handling entirely for 30s (no writeFailed/writeReport/rollback).
+    // handling entirely for 30s (no writeReport/restart).
     // Check both the new JSON marker (writePlannedRestart) and the legacy
     // isPlannedRestartActive (dsh-safe-web-update plain file) for compat.
     let suppressedByMarker = false
@@ -591,7 +552,7 @@ export class Supervisor {
 
     // Down while an intentional restart (e.g. dsh-safe-web-update) is in
     // flight is expected, not a crash — never race it with our own
-    // rollback/restartWeb.
+    // restartWeb.
     if (this.deps.isPlannedRestartActive) {
       let planned = false
       try { planned = await Promise.resolve(this.deps.isPlannedRestartActive()) } catch { planned = false }
@@ -603,7 +564,7 @@ export class Supervisor {
 
     // Down — require consecutive confirmations before treating as a crash.
     // A lone timed-out poll (e.g. a slow plugin-tree boot) must not trigger
-    // rollback/restart: that restart produces its own transient errors on
+    // restart: that restart produces its own transient errors on
     // the next poll, which would otherwise re-trigger this same path forever.
     // D1/D2: while the boot is unproven only a refused connection may advance
     // the down counter — nothing is listening, so the process is gone. A
@@ -626,38 +587,31 @@ export class Supervisor {
     } catch {}
     if (this.consecutiveDown < downThreshold) return
 
-    // Down — check debounce and rolling state
-    if (this.rollingBack) return
+    // Down — check debounce and restarting state
+    if (this.restarting) return
     const now = this.deps.getTime ? this.deps.getTime() : Date.now()
     const debounceMs = this.deps.debounceMs ?? 60000
-    if (now - this.lastRollback < debounceMs) return
+    if (now - this.lastRestart < debounceMs) return
 
-    this.rollingBack = true
+    this.restarting = true
     this.consecutiveDown = 0
-    this.lastRollback = now
+    this.lastRestart = now
 
     try {
-      const failed = await this.deps.writeFailed().catch(() => ({ ts: new Date().toISOString().replace(/[:.]/g, '-'), manifest: null }))
-      const ts = (failed as any)?.ts ?? new Date().toISOString().replace(/[:.]/g, '-')
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
       const logTail = (health as any).logTail ?? ''
       const gitDiff = await this.collectGitDiff().catch(() => '')
-      const reportPath = await this.deps.writeReport({ ts, health, action: `rollback — ${health.error ?? 'down'}`, logTail, gitDiff }).catch(() => '')
-      try {
-        const summary = await this.deps.rollback()
-        await this.reportRollbackResult(summary, reportPath)
-      } catch (e: any) {
-        await this.deps.notify(`rollback failed: ${e?.message ?? String(e)} (report: ${reportPath})`).catch(() => {})
-      }
-      // Always attempt to (re)start dsh web — survives reboot even when rollback is a no-op
+      const reportPath = await this.deps.writeReport({ ts, health, action: `restart — ${health.error ?? 'down'}`, logTail, gitDiff }).catch(() => '')
+      // Always attempt to (re)start dsh web — survives reboot even when the previous boot left nothing behind
       if (this.deps.restartWeb) {
         try {
           await this.deps.restartWeb()
-          await this.deps.notify(`restarted dsh-web after rollback (report: ${reportPath})`).catch(() => {})
+          await this.deps.notify(`restarted dsh-web (report: ${reportPath})`).catch(() => {})
         } catch (e: any) {
           await this.deps.notify(`restart dsh-web failed: ${e?.message ?? String(e)} (report: ${reportPath})`).catch(() => {})
         }
       }
-      await this.deps.notify(`CRASH detected → rollback (report: ${reportPath}, error: ${health.error ?? 'down'})`).catch(() => {})
+      await this.deps.notify(`CRASH detected → restart (report: ${reportPath}, error: ${health.error ?? 'down'})`).catch(() => {})
       const runner = this.getRunDebugAgent()
       const isInjected = !!this.deps.runDebugAgent
       if (isInjected) {
@@ -676,7 +630,7 @@ export class Supervisor {
         }, 0)
       }
     } finally {
-      this.rollingBack = false
+      this.restarting = false
     }
   }
 

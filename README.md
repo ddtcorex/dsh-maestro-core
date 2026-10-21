@@ -4,7 +4,7 @@ Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Re
 
 Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tree crashes, plus **inside** `dsh web` as a host+client Cordis plugin to auto-resume interrupted sessions and auto-reload the browser after restart.
 
-- **Daemon:** Polls `:3080` every 3s, keeps last-known-good (LKG) snapshots (`~/.dsh/.supervisor/lkg/`, `rotate 3`, `sha256` verify, `df` >500MB guard), auto-rollbacks on crash (`debounce 60s`, `flock` lock), writes `report-<ts>.md` (health + `git diff` + log tail), and notifies via Telegram (loose, never blocks).
+- **Daemon:** Polls `:3080` every 3s, restarts on crash (`debounce 60s`, `flock` lock), writes `report-<ts>.md` (health + `git diff` + log tail), and notifies via Telegram (loose, never blocks).
 - **Host plugin:** `runAutoResume()` 8s after boot — `findInterrupted` (tail 100) + `findDanglingOpenTurns` (full scan for recent sessions) within `autoResumeWithin` (default 5m) → `agents.resume({resumeSessionId, agentOptions: {provider,model}})` recovered from `request/context` → `followup('continue')`. Loopback RPC `POST /dsh-maestro-supervisor-resume/{scan,resume}` (reachable from loopback; `connection.isLoopback` reports it) for the daemon (`resumeViaRpc`).
 - **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as `window.__ModuleLoader__.load` bundle at `/plugins/@ddtcorex/dsh-maestro-core/client.js` via `dsh.client`.
 
@@ -14,7 +14,7 @@ One package, four host rows and one client bundle.
 
 | Module | Source | Row id | Channel | What it does |
 |---|---|---|---|---|
-| Supervisor | `src/host/*.ts` | `maestro-supervisor` | `/dsh-maestro-supervisor-resume` (loopback-reachable) | Crash polling, LKG snapshots, auto-resume, auto-reload |
+| Supervisor | `src/host/*.ts` | `maestro-supervisor` | `/dsh-maestro-supervisor-resume` (loopback-reachable) | Crash polling, restart on crash, auto-resume, auto-reload |
 | Store | `src/host/store/` | — | — | The namespaced `settings.json` every other module reads and writes |
 | Config | `src/host/config/` | `maestro-config` | `/dsh-maestro-config` | `maestroConfig` service over the store, backing the Maestro settings card |
 | Guard | `src/host/guard/` | `dsh-maestro-guard` | `/dsh-maestro-guard` | Rule classification, the approval gate and its journal |

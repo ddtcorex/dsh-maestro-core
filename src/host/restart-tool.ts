@@ -3,9 +3,8 @@
  * dsh web. Scheduling a restart through this tool instead of a raw kill keeps
  * the restart inside the supervisor's ownership loop:
  *
- *   1. dry-boot gate — if the plugin tree changed since the latest LKG, boot a
- *      copy of the live profile on an ephemeral DSH_HOME first and only
- *      schedule when that boot serves HTTP.
+ *   1. dry-boot gate — boot a copy of the live profile on an ephemeral
+ *      DSH_HOME first and only schedule when that boot serves HTTP.
  *   2. intent sidecar — record the caller session + reason under
  *      ~/.dsh/.supervisor/intents/ for attribution.
  *   3. hand-off — write the restart-request marker (planned-restart.json with
@@ -14,7 +13,7 @@
  */
 
 import { join, dirname, resolve } from 'node:path'
-import { mkdtempSync, rmSync, cpSync, existsSync, readFileSync, readdirSync, statSync, lstatSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
+import { mkdtempSync, rmSync, cpSync, existsSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { spawn, execFileSync } from 'node:child_process'
 import { createRequire } from 'node:module'
@@ -197,79 +196,18 @@ export function dryBootFailureDetail(tail: string, exitCode: number): string {
 export interface FileStat { mtimeMs: number }
 
 /**
- * Whether the live plugin tree differs from the latest LKG snapshot. Three
- * signals are combined:
- *
- *   1. manifest drift — the live profile's web `package.json` text vs baseline;
- *   2. cordis patch drift — the live profile's web `cordis.patch.yml` text vs
- *      baseline (a patch-only config edit changes the boot-time row wiring
- *      without touching the manifest — the manifest check alone misses it);
- *   3. plugin-lib drift — any `@ddtcorex` plugin `lib/` file newer than the
- *      snapshot moment. Link-installed plugins resolve to the same workspace
- *      files in both live and LKG, so the stored copies cannot be compared
- *      byte-wise; the snapshot itself is the meaningful baseline and a rebuilt
- *      `lib/` bumps a file past it even when the manifest text is unchanged.
- *      writeLKG writes `manifest.json` LAST, so its FILE mtime is the
- *      authoritative snapshot moment; the snapshot dir mtime is only a
- *      fallback for legacy snapshots without a manifest.
- *
- * `statFile` (default `statSync`) reads the metadata so tests can inject a
- * controlled reader instead of relying on filesystem utimes (which CI runners
- * do not reliably reflect). No LKG baseline, a missing file on either side, or
- * any stat/read error means "changed" — the caller falls back to the dry-boot
- * gate.
+ * Whether the live plugin tree differs from the last boot. There is no
+ * snapshot baseline anymore, so this always reports "changed" and the caller
+ * always runs the dry-boot gate. `pluginChanged: false` still skips the gate
+ * explicitly; anything else boots the candidate first.
  */
 export function isPluginTreeChanged(
   harnessRoot: string,
-  lkgDir = join(homedir(), '.dsh/.supervisor/lkg'),
-  opts: { statFile?: (p: string) => FileStat } = {},
+  _baselineDir?: string,
+  _opts: { statFile?: (p: string) => FileStat } = {},
 ): boolean {
   void harnessRoot
-  const statFile = opts.statFile ?? ((p: string) => statSync(p))
-  try {
-    const entries = existsSync(lkgDir) ? readdirSync(lkgDir).sort() : []
-    const latest = entries[entries.length - 1]
-    if (!latest) return true // no baseline → assume changed
-    const lkgHome = join(lkgDir, latest, 'profiles', 'web')
-    const live = join(homedir(), '.dsh', 'profiles', 'web')
-    const lkgManifest = join(lkgHome, 'package.json')
-    const liveManifest = join(live, 'package.json')
-    if (!existsSync(lkgManifest) || !existsSync(liveManifest)) return true
-    if (readFileSync(liveManifest, 'utf8') !== readFileSync(lkgManifest, 'utf8')) return true
-    // cordis.patch.yml — compare only when at least one side has it (profiles
-    // without a patch are the baseline; a patch appearing on either side alone
-    // is drift). The text compare keeps the check cheap and hermetic.
-    const lkgPatch = join(lkgHome, 'cordis.patch.yml')
-    const livePatch = join(live, 'cordis.patch.yml')
-    if (existsSync(lkgPatch) || existsSync(livePatch)) {
-      if (!existsSync(lkgPatch) || !existsSync(livePatch)) return true
-      if (readFileSync(livePatch, 'utf8') !== readFileSync(lkgPatch, 'utf8')) return true
-    }
-    const snapshotManifest = join(lkgDir, latest, 'manifest.json')
-    const baseline = existsSync(snapshotManifest)
-      ? statFile(snapshotManifest).mtimeMs
-      : statFile(join(lkgDir, latest)).mtimeMs
-    const livePlugins = join(live, 'node_modules', '@ddtcorex')
-    if (existsSync(livePlugins)) {
-      for (const name of readdirSync(livePlugins)) {
-        const libDir = join(livePlugins, name, 'lib')
-        if (!existsSync(libDir)) continue
-        if (newestFileMtime(libDir, statFile) > baseline) return true
-      }
-    }
-    return false
-  } catch { return true }
-}
-
-/** Newest mtime under a directory; recursion threads the injected stat reader. */
-function newestFileMtime(dir: string, statFile: (p: string) => FileStat): number {
-  let newest = 0
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name)
-    if (entry.isDirectory()) newest = Math.max(newest, newestFileMtime(p, statFile))
-    else newest = Math.max(newest, statFile(p).mtimeMs)
-  }
-  return newest
+  return true
 }
 
 function currentSessionId(exec: any, fallback?: (exec: any) => string | undefined): string | undefined {
@@ -315,7 +253,7 @@ export function registerRestartTool(ctx: any, deps: {
     if (typeof tools?.register !== 'function') throw new Error('tools service unavailable')
     dispose = tools.register({
       name: 'dsh_web_restart',
-      description: 'Schedule a safe restart of the dsh web host: dry-boots the plugin tree when it changed, records an intent for the calling session, and hands the swap to the supervisor daemon (out-of-band — it never restarts in-tree). Returns immediately; the swap lands ~1-5 min later and kills the calling turn, so call this as the LAST action of the turn and verify with dsh_web_restart_status in the NEXT one (never sleep here). Do not call dsh_web_dryboot first — this tool already dry-boots. The result carries the supervisor daemon verdict: a "stale" line means run its `kill -TERM <pid>` before the swap lands.',
+      description: 'Schedule a safe restart of the dsh web host: dry-boots the plugin tree, records an intent for the calling session, and hands the swap to the supervisor daemon (out-of-band — it never restarts in-tree). Returns immediately; the swap lands ~1-5 min later and kills the calling turn, so call this as the LAST action of the turn and verify with dsh_web_restart_status in the NEXT one (never sleep here). Do not call dsh_web_dryboot first — this tool already dry-boots. The result carries the supervisor daemon verdict: a "stale" line means run its `kill -TERM <pid>` before the swap lands.',
       parameters: {
         type: 'object',
         properties: {
@@ -346,8 +284,7 @@ export function registerRestartTool(ctx: any, deps: {
           return { ok: false, detail: `restart already in progress (requested by ${by}${why}) — check dsh_web_restart_status instead of scheduling another` }
         }
         const harnessRoot = deps.harnessRoot ?? (await import('./paths.js')).resolveDeepseekHarnessDir()
-        const lkgDir = join(homedir(), '.dsh/.supervisor/lkg')
-        const changed = args.pluginChanged === true || (args.pluginChanged !== false && isPluginTreeChanged(harnessRoot, lkgDir))
+        const changed = args.pluginChanged === true || (args.pluginChanged !== false && isPluginTreeChanged(harnessRoot))
         if (changed) {
           const gate = await doDryBoot(harnessRoot)
           if (!gate.ok) return { ok: false, detail: `dry-boot failed — restart refused. ${gate.detail}` }

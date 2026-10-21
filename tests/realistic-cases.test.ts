@@ -4,12 +4,11 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { pollHealth } from '../src/host/health-poller.js'
 import { Supervisor } from '../src/host/supervisor.js'
-import { writeLKG, verifyLKG } from '../src/host/snapshot.js'
 import { writeReport } from '../src/host/report.js'
 
 // All realistic fault cases from DSH local experience (spec §7 + local incidents)
-// fetch 200 + log error → DEGRADED (up:true, degraded:true, no rollback)
-// fetch 500 → FULL (up:false, rollback)
+// fetch 200 + log error → DEGRADED (up:true, degraded:true, report + notify, restart only after repeats)
+// fetch 500 → FULL (up:false, report + restart + notify)
 const cases = [
   {
     id: 'A1-settings-corrupted-json',
@@ -94,22 +93,13 @@ describe('realistic cases — health poller', () => {
   }
 })
 
-describe('realistic cases — supervisor rollback + report + snapshot', () => {
+describe('realistic cases — supervisor restart + report', () => {
   for (const c of cases) {
     it(`${c.id} — supervisor handles ${c.expectDegraded ? 'degraded' : 'full'}`, async () => {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `case-${c.id}-`))
-      const dshHome = path.join(tmp, 'fake-home')
-      const lkgRoot = path.join(tmp, 'lkg')
-      const failedRoot = path.join(tmp, 'failed')
       const reportsRoot = path.join(tmp, 'reports')
-      fs.mkdirSync(path.join(dshHome, 'maestro'), { recursive: true })
-      fs.writeFileSync(path.join(dshHome, 'maestro/settings.json'), JSON.stringify({ ok: true }))
-      const { ts: lkgTs } = await writeLKG(dshHome, lkgRoot)
-      expect(await verifyLKG(path.join(lkgRoot, lkgTs))).toBe(true)
 
-      fs.writeFileSync(path.join(dshHome, 'maestro/settings.json'), '{ corrupted')
-
-      let rollbackCalled = false
+      let restarted = false
       let reportPath = ''
       let notifyMsg = ''
       const healthMock = c.expectDegraded
@@ -117,11 +107,6 @@ describe('realistic cases — supervisor rollback + report + snapshot', () => {
         : { up: false, degraded: false, httpCode: c.fetchStatus, error: c.log.slice(0, 100) }
       const s = new Supervisor({
         pollHealth: async () => healthMock as any,
-        writeLKG: async () => ({ ts: lkgTs, manifest: {} as any }),
-        writeFailed: async () => {
-          const r = await writeLKG(dshHome, failedRoot)
-          return r
-        },
         writeReport: async (opts) => {
           reportPath = await writeReport({
             reportsRoot,
@@ -129,32 +114,27 @@ describe('realistic cases — supervisor rollback + report + snapshot', () => {
             health: opts.health,
             gitDiff: `fault: ${c.id}`,
             logTail: c.log,
-            action: `${c.expectDegraded ? 'degraded' : 'rollback'} — ${c.id}`,
+            action: `${c.expectDegraded ? 'degraded' : 'restart'} — ${c.id}`,
           })
           return reportPath
         },
-        rollback: async () => {
-          rollbackCalled = true
-          fs.cpSync(path.join(lkgRoot, lkgTs), dshHome, { recursive: true, force: true })
-        },
+        restartWeb: async () => { restarted = true },
         notify: async (msg) => { notifyMsg = msg },
         debounceMs: 0,
         downThreshold: 1,
       })
       await s.tick()
       if (c.expectDegraded) {
-        expect(rollbackCalled).toBe(false)
+        // Single degraded poll reports + notifies; restart needs repeats.
+        expect(restarted).toBe(false)
         expect(notifyMsg).toContain('DEGRADED')
       } else {
-        expect(rollbackCalled).toBe(true)
+        expect(restarted).toBe(true)
         expect(notifyMsg).toContain('CRASH')
       }
       expect(fs.existsSync(reportPath)).toBe(true)
       const content = fs.readFileSync(reportPath, 'utf-8')
       expect(content).toContain(c.id)
-      if (!c.expectDegraded) {
-        expect(fs.readFileSync(path.join(dshHome, 'maestro/settings.json'), 'utf-8')).toContain('ok')
-      }
       fs.rmSync(tmp, { recursive: true, force: true })
     })
   }

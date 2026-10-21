@@ -17,12 +17,12 @@ describe('report', () => {
       health: { up: false, error: 'ERR_MODULE_NOT_FOUND' },
       gitDiff: 'diff --git a/src/host/index.ts b/src/host/index.ts',
       logTail: 'ERR_MODULE_NOT_FOUND: lib/index.js',
-      action: 'rollback to 2026-08-26T14-20-00Z',
+      action: 'restart after 2026-08-26T14-20-00Z crash',
     })
     expect(fs.existsSync(p)).toBe(true)
     const content = fs.readFileSync(p, 'utf-8')
     expect(content).toContain('ERR_MODULE_NOT_FOUND')
-    expect(content).toContain('rollback')
+    expect(content).toContain('restart')
     expect(content.toLowerCase()).toContain('git diff')
   })
 

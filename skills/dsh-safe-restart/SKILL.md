@@ -53,8 +53,8 @@ validate first and get explicit user consent before a real swap.
    Keep the live process and its sessions/settings untouched. If the review
    webhook conflicts on a bound port, exclude that provider for the candidate
    or run a no-server composition check instead.
-4. Verify HTTP 200 and the new marker on the candidate. Retain last-known-good
-   assets until the real swap has passed post-swap checks.
+4. Verify HTTP 200 and the new marker on the candidate. Keep the previous working tree available
+   until the real swap has passed post-swap checks.
 5. Check the **second** long-lived process, not only `dsh web`: the standalone
    `dsh-web-supervisor` daemon also caches this package's `lib/*.js` in RAM at
    start, and it is the process that judges the new boot. A daemon older than
@@ -178,8 +178,8 @@ Do not read the top of an old append-only log as liveness evidence. Instead:
 3. Check served bytes contain the **new**, unique marker; or make a fresh
    browser/Playwright probe for the changed UI. Shared third-party markers are
    not sufficient proof.
-4. If a marker or live behaviour is wrong, restore the retained last-known-good
-   assets and relaunch with the same guarded process.
+4. If a marker or live behaviour is wrong, restore the previous working tree
+   and relaunch with the same guarded process.
 
 ## Never do these
 

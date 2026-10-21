@@ -19,7 +19,7 @@ import { BOOT_BOUNDARY_MARKER } from '../src/host/restart-guards.js'
 
 // Timeline of the incident (2026-09-13): the single dsh_web_restart at
 // 09:04:29 started a boot that was still running at 09:05:47 (the report) and
-// only exited at 09:06:21 — 1m52s. The rollback report was written 78s in.
+// only exited at 09:06:21 — 1m52s. The crash report was written 78s in.
 const ACTIVE_ENTER_AT = Date.now() - 78_000
 const BOUNDARY_AT = ACTIVE_ENTER_AT - 5_000
 
@@ -63,16 +63,12 @@ describe('slow-boot double-restart incident (2026-09-13)', () => {
     expect(r.error).toBeUndefined()
   })
 
-  it('the full supervisor loop produces zero rollbacks and zero extra restarts', async () => {
-    const rollback = vi.fn(async () => {})
+  it('the full supervisor loop produces zero restarts during an unproven boot', async () => {
     const restartWeb = vi.fn(async () => {})
     const writeReport = vi.fn(async () => '/tmp/report.md')
     const s = new Supervisor({
       pollHealth: () => incidentPollHealth(180_000),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: { ts: '', files: [] } as any })),
       writeReport,
-      rollback,
       restartWeb,
       notify: vi.fn(async () => {}),
       intervalMs: 3_000,
@@ -85,7 +81,6 @@ describe('slow-boot double-restart incident (2026-09-13)', () => {
     } as any)
     // 2 minutes at the daemon's 3s interval → 40 polls, all inside the boot grace.
     for (let i = 0; i < 40; i++) await s.tick()
-    expect(rollback).not.toHaveBeenCalled()
     expect(restartWeb).not.toHaveBeenCalled()
     expect(writeReport).not.toHaveBeenCalled()
   })

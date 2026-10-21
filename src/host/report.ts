@@ -41,8 +41,6 @@ ${opts.logTail.slice(-5000) || '(empty)'}
 
 ## Next Steps
 
-- Check \`~/.dsh/.supervisor/lkg/\` for last-known-good
-- Review \`failed/${opts.ts}/\` snapshot
 - If degraded, fix the listed plugin row and run \`pnpm verify\` + dry-boot
 
 ---

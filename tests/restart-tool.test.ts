@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { registerRestartTool, isPluginTreeChanged, dryBootVerify, copyProfileForDryBoot } from '../src/host/restart-tool.js'
 
 // Point os.homedir() at a per-file temp home: tool registration, dry-boot
-// gating (isPluginTreeChanged's default LKG dir) and the intent sidecar never
-// touch the real ~/.dsh — a live supervisor daemon there would act on a real
-// restart-request marker and restart the running dsh web.
+// gating and the intent sidecar never touch the real ~/.dsh — a live
+// supervisor daemon there would act on a real restart-request marker and
+// restart the running dsh web.
 let fakeHome = ''
 beforeEach(() => {
   fakeHome = mkdtempSync(join(tmpdir(), 'dsh-tool-home-'))
@@ -485,106 +485,13 @@ describe('copyProfileForDryBoot', () => {
 })
 
 describe('isPluginTreeChanged', () => {
-  it('assumes changed when no LKG baseline exists', () => {
-    expect(isPluginTreeChanged(fakeHome, join(fakeHome, 'lkg-missing'))).toBe(true)
-  })
-
-  it('detects a live profile package.json different from the latest LKG', () => {
-    const lkgWeb = join(fakeHome, '.dsh/.supervisor/lkg/2026-01-01T00-00-00-000Z/profiles/web')
-    mkdirSync(lkgWeb, { recursive: true })
-    writeFileSync(join(lkgWeb, 'package.json'), JSON.stringify({ version: '1' }))
-    const liveWeb = join(fakeHome, '.dsh/profiles/web')
-    mkdirSync(liveWeb, { recursive: true })
-    writeFileSync(join(liveWeb, 'package.json'), JSON.stringify({ version: '2' }))
-    expect(isPluginTreeChanged(fakeHome)).toBe(true)
-    writeFileSync(join(liveWeb, 'package.json'), JSON.stringify({ version: '1' }))
-    expect(isPluginTreeChanged(fakeHome)).toBe(false)
-  })
-
-  it('detects a rebuilt plugin lib file newer than the LKG snapshot baseline (injected stat reader)', () => {
-    const lkgSnap = join(fakeHome, '.dsh/.supervisor/lkg/2026-01-01T00-00-00-000Z')
-    const lkgWeb = join(lkgSnap, 'profiles/web')
-    mkdirSync(lkgWeb, { recursive: true })
-    writeFileSync(join(lkgWeb, 'package.json'), JSON.stringify({ version: '1' }))
-    // writeLKG writes manifest.json last — its mtime is the snapshot moment.
-    writeFileSync(join(lkgSnap, 'manifest.json'), JSON.stringify({ files: [] }))
-    const liveWeb = join(fakeHome, '.dsh/profiles/web')
-    mkdirSync(liveWeb, { recursive: true })
-    writeFileSync(join(liveWeb, 'package.json'), JSON.stringify({ version: '1' }))
-    const libFile = join(liveWeb, 'node_modules/@ddtcorex/example-plugin/lib/plugin.js')
-    mkdirSync(dirname(libFile), { recursive: true })
-    writeFileSync(libFile, 'export const x = 1')
-
-    // Fully deterministic: the file-metadata reader is injected and backed by a
-    // controlled map — no utimesSync (CI runners do not reliably reflect
-    // utimes deltas in statSync mtimes for filesystem-backed paths).
-    const stats = new Map<string, { mtimeMs: number }>([
-      [join(lkgSnap, 'manifest.json'), { mtimeMs: 1000 }], // snapshot moment
-      [libFile, { mtimeMs: 500 }], // lib built BEFORE the snapshot → unchanged
-    ])
-    const statFile = (p: string): { mtimeMs: number } => {
-      const s = stats.get(p)
-      if (!s) throw new Error(`no fixture stat for ${p}`)
-      return s
-    }
-    expect(isPluginTreeChanged(fakeHome, undefined, { statFile })).toBe(false)
-    // lib rebuilt AFTER the snapshot (2000 > manifest 1000) → changed
-    stats.set(libFile, { mtimeMs: 2000 })
-    expect(isPluginTreeChanged(fakeHome, undefined, { statFile })).toBe(true)
-  })
-
-  it('detects a live cordis.patch.yml different from the LKG snapshot even when the manifest is identical', () => {
-    const lkgSnap = join(fakeHome, '.dsh/.supervisor/lkg/2026-01-01T00-00-00-000Z')
-    const lkgWeb = join(lkgSnap, 'profiles/web')
-    mkdirSync(lkgWeb, { recursive: true })
-    const manifest = JSON.stringify({ version: '0.7.0' })
-    writeFileSync(join(lkgWeb, 'package.json'), manifest)
-    writeFileSync(join(lkgWeb, 'cordis.patch.yml'), 'maestro-supervisor:\n  config:\n    autoResumeWithin: 5\n')
-    writeFileSync(join(lkgSnap, 'manifest.json'), JSON.stringify({ files: [] }))
-    const liveWeb = join(fakeHome, '.dsh/profiles/web')
-    mkdirSync(liveWeb, { recursive: true })
-    writeFileSync(join(liveWeb, 'package.json'), manifest)
-    // same manifest + same patch → unchanged
-    writeFileSync(join(liveWeb, 'cordis.patch.yml'), 'maestro-supervisor:\n  config:\n    autoResumeWithin: 5\n')
-    expect(isPluginTreeChanged(fakeHome)).toBe(false)
-    // patch-only edit → changed (the manifest-driven check alone would miss it)
-    writeFileSync(join(liveWeb, 'cordis.patch.yml'), 'maestro-supervisor:\n  config:\n    autoResumeWithin: 10\n')
+  it('always reports changed — there is no snapshot baseline anymore', () => {
     expect(isPluginTreeChanged(fakeHome)).toBe(true)
   })
 
-  it('treats a patch file present on only one side as changed', () => {
-    const lkgSnap = join(fakeHome, '.dsh/.supervisor/lkg/2026-01-01T00-00-00-000Z')
-    const lkgWeb = join(lkgSnap, 'profiles/web')
-    mkdirSync(lkgWeb, { recursive: true })
-    const manifest = JSON.stringify({ version: '0.7.0' })
-    writeFileSync(join(lkgWeb, 'package.json'), manifest)
-    writeFileSync(join(lkgSnap, 'manifest.json'), JSON.stringify({ files: [] }))
-    const liveWeb = join(fakeHome, '.dsh/profiles/web')
-    mkdirSync(liveWeb, { recursive: true })
-    writeFileSync(join(liveWeb, 'package.json'), manifest)
-    // live gained a cordis.patch.yml the LKG snapshot predates
-    writeFileSync(join(liveWeb, 'cordis.patch.yml'), 'maestro-supervisor:\n  config:\n    autoResumeWithin: 5\n')
-    expect(isPluginTreeChanged(fakeHome)).toBe(true)
-  })
-
-  it('falls back to changed when the stat reader errors on the live tree (dry-boot gate)', () => {
-    const lkgSnap = join(fakeHome, '.dsh/.supervisor/lkg/2026-01-01T00-00-00-000Z')
-    const lkgWeb = join(lkgSnap, 'profiles/web')
-    mkdirSync(lkgWeb, { recursive: true })
-    writeFileSync(join(lkgWeb, 'package.json'), JSON.stringify({ version: '1' }))
-    writeFileSync(join(lkgSnap, 'manifest.json'), JSON.stringify({ files: [] }))
-    const liveWeb = join(fakeHome, '.dsh/profiles/web')
-    mkdirSync(liveWeb, { recursive: true })
-    writeFileSync(join(liveWeb, 'package.json'), JSON.stringify({ version: '1' }))
-    const libFile = join(liveWeb, 'node_modules/@ddtcorex/example-plugin/lib/plugin.js')
-    mkdirSync(dirname(libFile), { recursive: true })
-    writeFileSync(libFile, 'export const x = 1')
-    const statFile = (p: string): { mtimeMs: number } => {
-      if (p === libFile) throw new Error('EACCES: live plugin lib unreadable')
-      if (p === join(lkgSnap, 'manifest.json')) return { mtimeMs: 1000 }
-      throw new Error(`unexpected stat ${p}`)
-    }
-    expect(isPluginTreeChanged(fakeHome, undefined, { statFile })).toBe(true)
+  it('ignores the legacy baseline arguments', () => {
+    expect(isPluginTreeChanged(fakeHome, join(fakeHome, 'baseline-missing'))).toBe(true)
+    expect(isPluginTreeChanged(fakeHome, undefined, { statFile: () => ({ mtimeMs: 0 }) })).toBe(true)
   })
 })
 

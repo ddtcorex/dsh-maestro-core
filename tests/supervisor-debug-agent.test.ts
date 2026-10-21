@@ -7,10 +7,7 @@ describe('supervisor — debug-agent LLM integration', () => {
     const runDebugAgent = vi.fn(async () => ({ fixed: true, reason: 'auto-fix applied allowBuilds' }))
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, degraded: true, httpCode: 200, error: 'allowBuilds missing' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: {} as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: {} as any })),
       writeReport: vi.fn(async () => '/tmp/report-xyz.md'),
-      rollback: vi.fn(async () => {}),
       notify,
       runDebugAgent,
       findInterrupted: async () => ({ scanned: 5, interrupted: [] }),
@@ -28,10 +25,7 @@ describe('supervisor — debug-agent LLM integration', () => {
     const runDebugAgent = vi.fn(async () => ({ fixed: false, reason: 'max attempts' }))
     const s = new Supervisor({
       pollHealth: async () => ({ up: true, degraded: true, httpCode: 200, error: 'weird error' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: {} as any })),
-      writeFailed: vi.fn(async () => ({ ts: '', manifest: {} as any })),
       writeReport: vi.fn(async () => '/tmp/report-abc.md'),
-      rollback: vi.fn(async () => {}),
       notify,
       runDebugAgent,
       findInterrupted: async () => ({ scanned: 0, interrupted: [] }),
@@ -45,15 +39,12 @@ describe('supervisor — debug-agent LLM integration', () => {
     expect(calls.some(m => m.includes('FIX FAILED') || m.includes('max attempts'))).toBe(true)
   })
 
-  it('notifies FIXED when debug-agent fixes full crash after rollback', async () => {
+  it('notifies FIXED when debug-agent fixes full crash after restart', async () => {
     const notify = vi.fn(async () => {})
-    const runDebugAgent = vi.fn(async () => ({ fixed: true, reason: 'auto-fix applied after rollback' }))
+    const runDebugAgent = vi.fn(async () => ({ fixed: true, reason: 'auto-fix applied after restart' }))
     const s = new Supervisor({
       pollHealth: async () => ({ up: false, httpCode: 500, error: 'ERR_MODULE_NOT_FOUND lib' }),
-      writeLKG: vi.fn(async () => ({ ts: '', manifest: {} as any })),
-      writeFailed: vi.fn(async () => ({ ts: 'failed-ts', manifest: {} as any })),
       writeReport: vi.fn(async () => '/tmp/report-full.md'),
-      rollback: vi.fn(async () => {}),
       notify,
       runDebugAgent,
       findInterrupted: async () => ({ scanned: 3, interrupted: ['sess1'] }),

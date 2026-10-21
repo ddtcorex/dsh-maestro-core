@@ -6,7 +6,7 @@ import * as os from 'node:os'
  * One-boot-at-a-time guard (spec D4, incident 2026-09-13). Every path that
  * starts dsh web takes this lock from the moment the restart is issued until
  * the port answers, so a racing tick, the dsh_web_restart hand-off, or a
- * rollback that fires while the first boot is still coming up skips instead of
+ * restart that fires while the first boot is still coming up skips instead of
  * producing the second systemd start that made the incident's log tail toxic.
  *
  * The lock is an atomically created file (`O_EXCL`) carrying `{pid, ts}`. An
