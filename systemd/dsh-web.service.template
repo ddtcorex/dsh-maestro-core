@@ -9,11 +9,17 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
-WorkingDirectory=%MAESTRO_ROOT%/deepseek-harness
+# Runs the published @deepseek-ai/dsh package, installed as one npm prefix per
+# version under ~/.local/share/dsh/<version> with `current` linking the active
+# one. DSH_BIN also steers this package's restart gate and dry-boots.
+# The working directory is not neutral: dsh loads <cwd>/.env as the project env
+# layer, so it stays on the install root, which holds no .env.
+WorkingDirectory=%h/.local/share/dsh
+Environment=DSH_BIN=%h/.local/share/dsh/current/bin/dsh
 # Portable: sources nvm directly (bash -lc alone fails — ~/.bashrc exits early for
 # non-interactive shells via `case $- in *i*) ;; *) return;; esac`, so nvm never loads).
 # Falls back to system node for machines without nvm — no hardcoded /v24.19.0 version.
-ExecStart=/bin/bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; exec node --import tsx/esm apps/cli/src/bin.ts web --no-open'
+ExecStart=/bin/bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; exec node "$DSH_BIN" web --no-open'
 Restart=always
 RestartSec=5
 # Wait (up to 30 x 5s) for the previous instance to release the raw webserver
