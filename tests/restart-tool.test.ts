@@ -291,6 +291,23 @@ describe('dryBootVerify', () => {
     expect(failRes.detail).toMatch(/exit 7/)
     expect(childKillMock).toHaveBeenCalledWith('SIGKILL')
   })
+
+  it('boots the packaged bin named by DSH_BIN instead of the source checkout', async () => {
+    mkdirSync(join(fakeHome, '.dsh/profiles/web'), { recursive: true })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 200 }) as any))
+    vi.stubEnv('DSH_BIN', '/rt/current/bin/dsh')
+    try {
+      spawnMock.mockClear()
+      spawnMock.mockReturnValue(fakeChild(null))
+      await dryBootVerify('/work/deepseek-harness', { timeoutMs: 10_000 })
+      const [command, args, opts] = spawnMock.mock.calls[0]
+      expect(command).toBe(process.execPath)
+      expect(args.slice(0, 3)).toEqual(['/rt/current/bin/dsh', 'web', '--no-open'])
+      expect(opts.cwd).toBeUndefined()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 describe('dsh_web_dryboot', () => {
@@ -375,6 +392,23 @@ describe('dsh_web_gc', () => {
     const result = await t.execute({ confirm: true }, {})
     expect(result).toEqual({ killed: [], candidates: [] })
     expect(killPid).not.toHaveBeenCalled()
+  })
+  it('reaps a dry-boot orphan started from the packaged bin', async () => {
+    const registered: any[] = []
+    let alive = true
+    const killPid = vi.fn(() => { alive = false })
+    registerRestartTool(makeCtx(registered), {
+      gcReaders: {
+        readProc: () => (alive ? [{ pid: 104, cmd: 'node /rt/current/bin/dsh web --no-open --port 9419', env: 'DSH_HOME=/tmp/dsh-dryboot-z' }] : []),
+        ssPortsOf: () => (alive ? [9419] : []),
+        selfPid: 1,
+      },
+      killPid,
+    } as any)
+    const t = registered.find(x => x.name === 'dsh_web_gc')
+    const result = await t.execute({ confirm: true }, {})
+    expect(killPid).toHaveBeenCalledWith(104, 'SIGKILL')
+    expect(result).toEqual({ killed: [104], candidates: [] })
   })
 })
 

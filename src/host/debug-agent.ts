@@ -1,3 +1,5 @@
+import { resolveDshLaunch, type DshLaunchDeps } from './dsh-launch.js'
+
 export interface DebugAgentOpts {
   reportPath: string
   health: { error?: string; httpCode?: number }
@@ -109,20 +111,26 @@ function defaultWriteFile(p: string, c: string): void {
   writeFileSync(p, c, 'utf-8')
 }
 
+/**
+ * The bounded dry-boot probe: boot `dsh web` on `tmp` as DSH_HOME and an
+ * ephemeral port, poll for 200, print ok/fail. The boot follows
+ * `resolveDshLaunch`, so a packaged host verifies the runtime it runs.
+ */
+export function buildDryBootCommand(tmp: string, port: number, deps: DshLaunchDeps = {}): string {
+  const launch = resolveDshLaunch(['web', '--port', String(port), '--no-open'], deps)
+  const argv = [launch.command, ...launch.args].map(a => JSON.stringify(a)).join(' ')
+  const boot = `${launch.cwd ? `cd ${JSON.stringify(launch.cwd)} && ` : ''}DSH_HOME=${tmp} ${argv} >${tmp}/dsh.log 2>&1 &`
+  return `timeout 8 bash -c '${boot} pid=$!; for i in $(seq 1 5); do sleep 1; if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${port}/ 2>&1 | grep -q 200; then echo ok; exit 0; fi; done; echo fail; exit 1'`
+}
+
 async function defaultDryBoot(): Promise<boolean> {
   const { execSync } = await import('node:child_process')
-  const { resolveDeepseekHarnessDir } = await import('./paths.js')
   const { buildKillStalePortsCommand } = await import('./restart-guards.js')
   const port = Math.floor(19000 + Math.random() * 1000)
   let tmp = ''
   try {
-    const deepseekDir = resolveDeepseekHarnessDir()
     tmp = execSync('mktemp -d', { encoding: 'utf-8' }).trim()
-    // Use spawn-based dry-boot to avoid nested quoting hell (prev \\$! / \\$(seq) caused syntax error)
-    const out = execSync(
-      `timeout 8 bash -c 'DSH_HOME=${tmp} pnpm --dir ${deepseekDir} dsh web --port ${port} --no-open >${tmp}/dsh.log 2>&1 & pid=$!; for i in $(seq 1 5); do sleep 1; if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${port}/ 2>&1 | grep -q 200; then echo ok; exit 0; fi; done; echo fail; exit 1'`,
-      { encoding: 'utf-8', timeout: 12000 },
-    )
+    const out = execSync(buildDryBootCommand(tmp, port), { encoding: 'utf-8', timeout: 12000 })
     return out.includes('ok')
   } catch {
     return false

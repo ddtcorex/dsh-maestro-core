@@ -3,7 +3,7 @@ import * as path from 'node:path'
 import { buildKillStalePortsCommand, writePlannedRestart } from './restart-guards.js'
 import { serializedSystemdRestart, shouldUseNohupFallback, systemdUnitExists } from './restart-exec.js'
 import { withBootLock, type BootLockDeps } from './boot-lock.js'
-import { resolveDeepseekHarnessDir } from './paths.js'
+import { dshLaunchShell, type DshLaunchDeps } from './dsh-launch.js'
 
 /** Boot budget: how long a boot may take before its failures are judged. */
 export const DEFAULT_BOOT_GRACE_MS = 180_000
@@ -61,12 +61,14 @@ export async function performSingleBootRestart(deps: RestartWebDeps = {}): Promi
   return { restarted: true }
 }
 
+/** The detached last-resort start, appending to the web log. Exported for tests. */
+export function buildNohupCommand(logPath: string, deps: DshLaunchDeps = {}): string {
+  const launch = dshLaunchShell(['web', '--no-open'], deps)
+  return `setsid nohup bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; ${launch} >> ${JSON.stringify(logPath)} 2>&1' &`
+}
+
 async function defaultNohup(): Promise<void> {
   const { execSync } = await import('node:child_process')
-  const harnessRoot = resolveDeepseekHarnessDir()
   const logPath = path.join(os.homedir(), '.dsh/dsh-web.log')
-  execSync(
-    `setsid nohup bash -c 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; cd ${JSON.stringify(harnessRoot)} && exec node --import tsx/esm apps/cli/src/bin.ts web --no-open >> ${JSON.stringify(logPath)} 2>&1' &`,
-    { timeout: 5000 },
-  )
+  execSync(buildNohupCommand(logPath), { timeout: 5000 })
 }

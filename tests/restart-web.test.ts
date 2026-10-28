@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { performSingleBootRestart } from '../src/host/restart-web.js'
+import { performSingleBootRestart, buildNohupCommand } from '../src/host/restart-web.js'
 
 function harness(over: Record<string, unknown> = {}) {
   const calls: string[] = []
@@ -71,5 +71,18 @@ describe('performSingleBootRestart', () => {
     expect(res.restarted).toBe(false)
     expect(res.reason).toContain('boot.lock')
     expect(calls).toEqual([])
+  })
+})
+
+describe('buildNohupCommand', () => {
+  const deps = { execPath: '/opt/node/bin/node', sourceDir: '/work/deepseek-harness' }
+  it('starts the packaged bin when DSH_BIN is set', () => {
+    const cmd = buildNohupCommand('/home/u/.dsh/dsh-web.log', { ...deps, env: { DSH_BIN: '/rt/current/bin/dsh' } })
+    expect(cmd).toContain(`exec "/opt/node/bin/node" "/rt/current/bin/dsh" "web" "--no-open" >> "/home/u/.dsh/dsh-web.log" 2>&1`)
+    expect(cmd).not.toContain('tsx')
+  })
+  it('keeps the source launch when DSH_BIN is unset', () => {
+    const cmd = buildNohupCommand('/l.log', { ...deps, env: {} })
+    expect(cmd).toContain(`cd "/work/deepseek-harness" && exec "/opt/node/bin/node" "--import" "tsx/esm" "apps/cli/src/bin.ts" "web" "--no-open" >> "/l.log" 2>&1`)
   })
 })

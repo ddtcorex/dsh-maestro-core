@@ -31,3 +31,24 @@ describe('scaffold', () => {
     expect(service).not.toMatch(/StartLimit/)
   })
 })
+
+describe('systemd templates run the packaged dsh runtime', () => {
+  const web = fs.readFileSync(dshWebTemplate, 'utf8')
+  const supervisor = fs.readFileSync(resolve(__dirname, '../systemd/dsh-web-supervisor.service.template'), 'utf8')
+  const bin = 'Environment=DSH_BIN=%h/.local/share/dsh/current/bin/dsh'
+
+  it('starts dsh web from DSH_BIN, never from a harness checkout', () => {
+    const exec = web.match(/^ExecStart=.*$/m)?.[0] ?? ''
+    expect(web).toContain(bin)
+    expect(exec).toContain('exec node "$DSH_BIN" web --no-open')
+    expect(web).not.toMatch(/tsx|apps\/cli|deepseek-harness/)
+  })
+
+  it('runs from a neutral working directory without a project .env', () => {
+    expect(web).toMatch(/^WorkingDirectory=%h\/\.local\/share\/dsh$/m)
+  })
+
+  it('hands DSH_BIN to the supervisor daemon for its launch fallbacks', () => {
+    expect(supervisor).toContain(bin)
+  })
+})

@@ -20,6 +20,7 @@ import { createRequire } from 'node:module'
 import { writeRestartRequest, readRestartRequest } from './restart-guards.js'
 import { intentPath, readIntent, readRestartOutcome } from './intents.js'
 import { supervisorDaemonState, describeDaemonState, type DaemonState } from './daemon-freshness.js'
+import { resolveDshLaunch, isDshWebCommand } from './dsh-launch.js'
 
 /**
  * Copy a live profile tree for an isolated dry-boot. A naive recursive copy
@@ -109,7 +110,7 @@ export function listDryBootCandidates(readers: GcReaders = {}): DryBootCandidate
   const out: DryBootCandidate[] = []
   for (const p of readProc()) {
     if (p.pid === selfPid) continue
-    if (!/bin\.ts web/.test(p.cmd)) continue
+    if (!isDshWebCommand(p.cmd)) continue
     const home = /^DSH_HOME=([^\0]*)/m.exec(p.env)?.[1] ?? ''
     if (!home.startsWith(join(tmpdir(), 'dsh-dryboot-'))) continue
     const ports = ssPortsOf(p.pid)
@@ -125,7 +126,9 @@ export function listDryBootCandidates(readers: GcReaders = {}): DryBootCandidate
  * Boot a copy of the live web profile on an isolated DSH_HOME and verify the
  * plugin tree loads and serves. Returns ok + a one-line detail for the tool
  * message. The spawned tree is killed (best-effort) and the temp home removed.
- * Unit tests mock this (never spawn a real node boot in tests).
+ * Unit tests mock this (never spawn a real node boot in tests). The boot uses
+ * `resolveDshLaunch`, so `harnessRoot` (the source checkout) only matters
+ * when `DSH_BIN` is unset.
  *
  * NOTE (bin.ts finding): the `web` alias already implies `--profile web`, and
  * the web app's own commander program (no allowUnknownOption) rejects a stray
@@ -144,8 +147,9 @@ export async function dryBootVerify(harnessRoot: string, opts: { timeoutMs?: num
     copyProfileForDryBoot(liveProfile, join(tmpHome, 'profiles', 'web'))
     const port = String(9000 + Math.floor(Math.random() * 1000))
     const url = `http://127.0.0.1:${port}/`
-    child = spawn('node', ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', '--no-open', '--port', port], {
-      cwd: harnessRoot, env: { ...process.env, DSH_HOME: tmpHome }, stdio: ['ignore', 'pipe', 'pipe'],
+    const launch = resolveDshLaunch(['web', '--no-open', '--port', port], { sourceDir: harnessRoot })
+    child = spawn(launch.command, launch.args, {
+      cwd: launch.cwd, env: { ...process.env, DSH_HOME: tmpHome }, stdio: ['ignore', 'pipe', 'pipe'],
     })
     child.stdout?.on('data', (d: Buffer) => logs.push(d.toString()))
     child.stderr?.on('data', (d: Buffer) => logs.push(d.toString()))

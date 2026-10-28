@@ -185,10 +185,10 @@ cat ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core/package.json | g
 curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | head -n 5  # window.__ModuleLoader__.load
 ```
 
-**Critical pre-flight (AGENTS.md Conventions):** before adding to a live profile's `bundles`, `pnpm build` must succeed **and** a dry-boot on an ephemeral port with isolated `DSH_HOME` must pass:
+**Critical pre-flight (AGENTS.md Conventions):** before adding to a live profile's `bundles`, `pnpm build` must succeed **and** a dry-boot on an ephemeral port with isolated `DSH_HOME` must pass. `$DSH_BIN` is the installed `@deepseek-ai/dsh` bin (the systemd templates set `~/.local/share/dsh/current/bin/dsh`):
 
 ```sh
-DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &  # or --port <ephemeral>
+DSH_HOME=$(mktemp -d) "$DSH_BIN" web --port 0 &  # or --port <ephemeral>
 # wait for "dsh web: http://127.0.0.1:<port>" and curl 200, then kill
 # This catches load-time failures (missing lib/index.js, stale build, bad cordis.patch.yml) that no in-code try/catch can catch.
 # See dsh-safe-restart skill for the guarded helper: skills/dsh-safe-restart/scripts/restart-dsh-web.sh
@@ -233,7 +233,7 @@ curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'con
 node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh-maestro-core/lib/resume.js'; console.log(await findDanglingOpenTurns(undefined,{withinMs:5*60*1000}))"
 
 # 4. Trigger a real dangling (headless blocking sleep) and kill mid-turn, then check auto-resume:
-# pnpm --dir deepseek-harness dsh --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; sleep 10; node -e "import('./packages/dsh-maestro-core/lib/resume.js').then(m=>m.findDanglingOpenTurns(undefined,{withinMs:5*60*1000}).then(console.log))"
+# "$DSH_BIN" --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; sleep 10; node -e "import('./packages/dsh-maestro-core/lib/resume.js').then(m=>m.findDanglingOpenTurns(undefined,{withinMs:5*60*1000}).then(console.log))"
 # After restart, the session should have turn/end interrupted → continue → turn2
 ```
 
@@ -306,15 +306,15 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 ## Validation
 
 - `pnpm verify` + `pnpm test` green before any success claim (a suite needing `DSH_INTEGRATION=1` stays skipped by default). `test -f lib/index.js && test -f lib/client.js` after build.
-- For daemon changes, manual ephemeral check: `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` + corrupt `settings.json` → assert report + restart within 10s.
+- For daemon changes, manual ephemeral check: `DSH_HOME=$(mktemp -d) "$DSH_BIN" web --port 0` + corrupt `settings.json` → assert report + restart within 10s.
 - For plugin changes, live check: `curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST ...` → `scanned`/`interrupted`, and `findDanglingOpenTurns` full scan finds subagent `b6487e33` within 5m. For client, `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"` → 2, and after `kill` + restart, `fetch HEAD /` polling reloads the page without `F5`.
-- `pnpm --dir deepseek-harness dsh web --port 0` dry-boot must pass before adding to a live profile (see Conventions).
+- `"$DSH_BIN" web --port 0` dry-boot must pass before adding to a live profile (see Conventions).
 
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `dsh: plugin tree failed to load: Cannot find package '.../dsh-maestro-core/index.js'` | `pnpm build` not run or `lib/` stale, `link:` specifier left in lockfile | `pnpm --dir packages/dsh-maestro-core build && pnpm --dir ~/.dsh/profiles/web install` then `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` dry-boot |
+| `dsh: plugin tree failed to load: Cannot find package '.../dsh-maestro-core/index.js'` | `pnpm build` not run or `lib/` stale, `link:` specifier left in lockfile | `pnpm --dir packages/dsh-maestro-core build && pnpm --dir ~/.dsh/profiles/web install` then `DSH_HOME=$(mktemp -d) "$DSH_BIN" web --port 0` dry-boot |
 | `ERR_MODULE_NOT_FOUND` / `assertChannel` / `client-modules: ... declares dsh.client but exports no "./client" bundle` | Missing `lib/client.js` or `exports["./client"]` | `pnpm build` (host + client + `node scripts/build-client.mjs`), check `package.json` `exports` and `dsh.client`, `test -f lib/client.js` |
 | `EADDRINUSE` on a dry-boot ephemeral port | Another process holds the ephemeral port (or a stale dry-boot orphan) | Run `dsh_web_gc` (preview, then `confirm:true`) to reap verified dry-boot orphans; for a live-tree collision pick another port. Never hardcode a PID, and never `pkill -f "dsh web"` (matches the invoking shell itself). |
 | `session artifact ... uses .jsonl but backend is zstd` | Manually created `session.jsonl` while backend is `zstd` | Use `zstd -c plain.jsonl > session.jsonl.zstd` or use `JsonlSessionPersistence` API (`create`/`append`) which writes header + `compressZstdFrame`. Never hand-write `session.jsonl` when `compression: zstd`. |

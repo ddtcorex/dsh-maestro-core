@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { runDebugAgent, _resetDebugAgentForTest } from '../src/host/debug-agent.js'
+import { runDebugAgent, _resetDebugAgentForTest, buildDryBootCommand } from '../src/host/debug-agent.js'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -131,5 +131,18 @@ describe('debug-agent — deterministic transient', () => {
     vi.unstubAllEnvs()
     span.mockRestore()
     fs.rmSync(path.dirname(report), { recursive: true, force: true })
+  })
+})
+
+describe('debug-agent — dry-boot command', () => {
+  const deps = { execPath: '/opt/node/bin/node', sourceDir: '/work/deepseek-harness' }
+  it('boots the packaged bin on the temp home when DSH_BIN is set', () => {
+    const cmd = buildDryBootCommand('/tmp/x', 19001, { ...deps, env: { DSH_BIN: '/rt/current/bin/dsh' } })
+    expect(cmd).toContain(`DSH_HOME=/tmp/x "/opt/node/bin/node" "/rt/current/bin/dsh" "web" "--port" "19001" "--no-open" >/tmp/x/dsh.log 2>&1 &`)
+    expect(cmd).not.toContain('pnpm')
+  })
+  it('boots the source checkout when DSH_BIN is unset', () => {
+    const cmd = buildDryBootCommand('/tmp/x', 19001, { ...deps, env: {} })
+    expect(cmd).toContain(`cd "/work/deepseek-harness" && DSH_HOME=/tmp/x "/opt/node/bin/node" "--import" "tsx/esm" "apps/cli/src/bin.ts" "web" "--port" "19001" "--no-open"`)
   })
 })
