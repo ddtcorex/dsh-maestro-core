@@ -86,7 +86,7 @@ The package declares `dsh.client` (`platform: web`, `inject: ["@deepseek-ai/dsh-
 **Pre-flight (required):** before adding to a live profile's `bundles`, dry-boot must pass:
 
 ```bash
-DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0 &
+DSH_HOME=$(mktemp -d) "$DSH_BIN" web --port 0 &
 # wait for "dsh web: http://127.0.0.1:<port>" and curl 200, then kill
 # This catches load-time failures (missing lib/index.js, stale build, bad cordis.patch.yml)
 # that no in-code try/catch can catch. See dsh-safe-restart skill.
@@ -195,7 +195,7 @@ curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | gre
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3080/  # 200
 curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'content-type: application/json' -d '{"type":"client-request","rpcId":"t","method":"scan","payload":{"withinMs":300000}}' | head -c 200
 node --input-type=module -e "import {findDanglingOpenTurns} from './packages/dsh-maestro-core/lib/resume.js'; console.log(await findDanglingOpenTurns(undefined,{withinMs:5*60*1000}))"
-# Create a real dangling: pnpm --dir deepseek-harness dsh --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; node -e "...findDangling..."  # should be 1
+# Create a real dangling: "$DSH_BIN" --profile headless "Run bash synchronously sleep 60" & sleep 4; kill $!; node -e "...findDangling..."  # should be 1
 # After restart, it should have turn/end interrupted → continue → turn2
 ```
 
@@ -230,7 +230,7 @@ pnpm --dir packages/dsh-maestro-core test
 pnpm --dir packages/dsh-maestro-core build
 ```
 
-For daemon changes: `DSH_HOME=$(mktemp -d) pnpm --dir deepseek-harness dsh web --port 0` + corrupt `settings.json` → assert `report` + `rollback`.
+For daemon changes: `DSH_HOME=$(mktemp -d) "$DSH_BIN" web --port 0` + corrupt `settings.json` → assert `report` + `rollback`.
 
 ## Telegram
 

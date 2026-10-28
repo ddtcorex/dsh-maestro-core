@@ -77,15 +77,16 @@ path from documentation.
 
 ```bash
 # Safe inspection only: resolves the serving tree but changes nothing.
-bash <skill-resource-base>/scripts/restart-dsh-web.sh \
-  --repo /path/to/deepseek-harness --dry-run
+bash <skill-resource-base>/scripts/restart-dsh-web.sh --dry-run
 ```
 
 Run the `dsh_web_restart` tool instead of executing the helper — the helper is
 for external agents and humans. In-session agents must never run it from their
 own turn (see "Never do these" below).
 
-`--repo` may be replaced by `DSH_REPO`; `--log` or `DSH_RESTART_LOG` changes
+A systemd-managed `dsh-web.service` needs no checkout. Without systemd the
+helper launches `DSH_BIN` (the packaged `@deepseek-ai/dsh` bin) and only falls
+back to `--repo` / `DSH_REPO` for a source launch. `--log` or `DSH_RESTART_LOG` changes
 the append-only log destination. The helper refuses a real swap without
 `--confirm`, dynamically resolves listeners rather than trusting saved PIDs,
 and refuses to launch if ports are still occupied. `--dry-run` never runs
