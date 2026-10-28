@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.0] - 2026-10-28
+
+### Changed
+
+- **BREAKING: the systemd templates run the packaged dsh runtime.** `scripts/install-systemd.sh` now installs a `dsh-web.service` that runs `node "$DSH_BIN" web --no-open` with `DSH_BIN=~/.local/share/dsh/current/bin/dsh` and `WorkingDirectory=~/.local/share/dsh`, instead of booting a `deepseek-harness` checkout through tsx. Install `@deepseek-ai/dsh` under `~/.local/share/dsh/<version>` and link `current` before running the installer. The supervisor unit passes the same `DSH_BIN`. The working directory holds no `.env`, which dsh would otherwise load as a project env layer.
+- `restart-dsh-web.sh` no longer requires `--repo`: a systemd-managed unit needs no checkout, and without systemd the helper launches `DSH_BIN`. `--repo` / `DSH_REPO` remain as the source-launch fallback.
+
+### Fixed
+
+- Every path that boots `dsh web` follows `DSH_BIN` when it is set (`resolveDshLaunch`): the `dsh_web_restart` / `dsh_web_dryboot` gate, the `dsh_web_gc` orphan fingerprint, the daemon nohup fallback and the debug-agent dry-boot. They previously always booted the source checkout, so on a packaged host the gate verified code the host does not run. Without `DSH_BIN` the source launch is unchanged.
+
 ## [0.13.0] - 2026-10-21
 
 ### Removed
