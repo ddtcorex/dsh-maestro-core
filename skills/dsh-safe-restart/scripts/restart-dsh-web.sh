@@ -31,42 +31,18 @@ auto_mode=false
 check_supervisor=false
 reload_supervisor=false
 
-dry_boot_and_verify() {
-  local dsh_repo="$1"
-  local port="${2:-0}"
-  local marker="${3:-}"
-  local dsh_home
-  dsh_home="$(mktemp -d)"
-  local log_tmp
-  log_tmp="$(mktemp)"
-  # ephemeral boot with isolated DSH_HOME
-  DSH_HOME="$dsh_home" pnpm --dir "$dsh_repo" exec dsh web --port "$port" --no-open >"$log_tmp" 2>&1 &
-  local pid=$!
-  local ok=false
-  for _ in $(seq 1 15); do
-    if curl -s "http://127.0.0.1:$port/" 2>/dev/null | grep -q "${marker:-}"; then
-      ok=true
-      break
-    fi
-    if ! kill -0 "$pid" 2>/dev/null; then break; fi
-    sleep 1
-  done
-  kill -TERM "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-  rm -rf "$dsh_home" "$log_tmp"
-  [[ "$ok" == true ]]
-}
-
 usage() {
   cat <<'EOF'
-Usage: restart-dsh-web.sh --repo <deepseek-harness> [--log <path>] [--confirm|--auto] [--dry-run]
+Usage: restart-dsh-web.sh [--repo <deepseek-harness>] [--log <path>] [--confirm|--auto] [--dry-run]
        restart-dsh-web.sh --check-supervisor
        restart-dsh-web.sh --reload-supervisor
 
 Safely hand over the DSH Web process that owns ports 3000, 3080, 3081 and 3082.
 
 Options:
-  --repo <path>        DeepSeek Harness checkout (or set DSH_REPO).
+  --repo <path>        DeepSeek Harness checkout (or set DSH_REPO). Only needed for a
+                       source launch without systemd; DSH_BIN (the packaged
+                       runtime's bin) takes precedence.
   --log <path>         Append-only launch log (or set DSH_RESTART_LOG).
   --confirm            Permit a real process handover (human-gated). Required unless --dry-run.
   --auto               Permit auto handover (supervisor, no consent prompt). Alias for --confirm with auto log prefix.
@@ -256,8 +232,9 @@ if [[ "$reload_supervisor" == true ]]; then
   exit 0
 fi
 
-[[ -n "$repo" ]] || fail 'provide --repo or DSH_REPO' 64
-[[ -f "$repo/package.json" ]] || fail "repo has no package.json: $repo" 64
+if [[ -n "$repo" ]]; then
+  [[ -f "$repo/package.json" ]] || fail "repo has no package.json: $repo" 64
+fi
 if [[ "$dry_run" != true && "$confirmed" != true ]]; then
   fail 'refusing live restart without --confirm' 64
 fi
@@ -438,13 +415,20 @@ if [[ "$systemd_managed" == true ]]; then
   systemctl --user start dsh-web.service 2>>"$log" || fail 'systemctl --user start dsh-web.service failed'
 else
   command -v setsid >/dev/null 2>&1 || fail 'required command is unavailable: setsid'
-  command -v pnpm >/dev/null 2>&1 || fail 'required command is unavailable: pnpm'
 
-  printf '[restart] launching DSH Web from %s\n' "$repo" >> "$log"
-  (
-    cd "$repo"
-    setsid nohup "$(command -v pnpm)" dsh web --no-open </dev/null >> "$log" 2>&1 &
-  )
+  if [[ -n "${DSH_BIN:-}" ]]; then
+    [[ -f "$DSH_BIN" ]] || fail "DSH_BIN does not exist: $DSH_BIN" 64
+    printf '[restart] launching DSH Web from %s\n' "$DSH_BIN" >> "$log"
+    setsid nohup "$(command -v node)" "$DSH_BIN" web --no-open </dev/null >> "$log" 2>&1 &
+  else
+    [[ -n "$repo" ]] || fail 'no systemd unit: provide DSH_BIN, --repo or DSH_REPO' 64
+    command -v pnpm >/dev/null 2>&1 || fail 'required command is unavailable: pnpm'
+    printf '[restart] launching DSH Web from %s\n' "$repo" >> "$log"
+    (
+      cd "$repo"
+      setsid nohup "$(command -v pnpm)" dsh web --no-open </dev/null >> "$log" 2>&1 &
+    )
+  fi
 fi
 
 for _ in $(seq 1 90); do

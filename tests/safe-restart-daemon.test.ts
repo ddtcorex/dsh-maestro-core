@@ -228,3 +228,29 @@ describe('restart-dsh-web.sh supervisor step placement', () => {
     expect(script).toMatch(/systemctl --user show -p MainPID --value dsh-web-supervisor\.service/)
   })
 })
+
+describe('restart-dsh-web.sh packaged runtime', () => {
+  const script = fs.readFileSync(scriptPath, 'utf8')
+
+  it('does not demand a checkout when DSH_BIN names the packaged runtime', () => {
+    let stderr = ''
+    try {
+      execFileSync('bash', [scriptPath, '--dry-run'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, DSH_REPO: '', DSH_BIN: process.execPath, DSH_SUPERVISOR_PLUGIN_DIR: fixture.pluginDir },
+      })
+    } catch (e: any) {
+      stderr = String(e.stderr ?? '')
+    }
+    expect(stderr).not.toMatch(/--repo/)
+  })
+
+  it('launches the packaged bin on the non-systemd path when DSH_BIN is set', () => {
+    expect(script).toMatch(/setsid nohup "\$\(command -v node\)" "\$DSH_BIN" web --no-open/)
+  })
+
+  it('keeps no source-checkout dry-boot helper', () => {
+    expect(script).not.toContain('pnpm --dir "$dsh_repo" exec dsh')
+  })
+})
