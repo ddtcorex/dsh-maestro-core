@@ -27,6 +27,14 @@ import {
 } from '../src/host/plugin.js'
 import { probeToolView, summarizeToolView } from '../src/host/tool-view.js'
 
+// See tests/plugin.test.ts: without this, resumeInterrupted's default journal
+// target appends fixture ids (session-resumed-N) to the operator's live
+// ~/.dsh/.supervisor sidecar on every suite run.
+vi.mock('../src/host/resume-log.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/host/resume-log.js')>()),
+  appendResumeLog: vi.fn(),
+}))
+
 function makeCtx(overrides: Record<string, any> = {}) {
   const logs: string[] = []
   return {
