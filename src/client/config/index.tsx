@@ -13,37 +13,14 @@ export const MAESTRO_SETTINGS_ORDER = 26
 
 // DSH-native redesign — reuses DSH tokens & primitive geometry maximally (see MaestroSettings.tsx).
 import { MaestroSettingsTab } from './MaestroSettings.js'
-import { registerSettingsNavIcon, SETTINGS_NAV_MARKER } from './settings-nav-icon.js'
-import { maestroMarkMaskUri } from './components/BrandMark.js'
 
 /**
- * DSH 0.1.x gives external settings sections a generic gear and exposes no
- * icon field in the settings.section contract (mirrors dsh-better-sidebar):
- * the marker only claims this plugin's localized row and this CSS paints the
- * Maestro M-logo glyph as a currentColor mask so it follows native nav
- * hover/active colors at the shell's 16px icon rhythm. The glyph itself is
- * declared once in components/BrandMark.tsx — the workspace reference
- * implementation.
+ * The nav row keeps the shell's default gear. DSH 0.2.x paints a section row
+ * through the settings.section.icon slot: the glyph sits inside a wrapping
+ * span, so the 0.1.x marker + `::before` mask this plugin used to carry hid
+ * nothing and painted a second glyph beside the gear. A custom row icon is a
+ * slot registration, not a DOM rewrite, and no Maestro section asks for one.
  */
-const SETTINGS_NAV_CSS = `
-
-/* maestro: replace the settings-nav fallback gear with the Maestro M-logo glyph — same mark as components/BrandMark.tsx */
-[${SETTINGS_NAV_MARKER}] > svg:first-child,
-[${SETTINGS_NAV_MARKER}] > svg.zWKi1a_navIcon {
-  display: none !important;
-}
-
-[${SETTINGS_NAV_MARKER}]::before {
-  content: '';
-  flex: none;
-  width: 16px;
-  height: 16px;
-  display: inline-block;
-  background: currentColor;
-  -webkit-mask: url("${maestroMarkMaskUri()}") center / contain no-repeat;
-  mask: url("${maestroMarkMaskUri()}") center / contain no-repeat;
-}
-`
 
 type SlotsApi = {
   inject(name: string, factory: () => unknown): void
@@ -56,21 +33,9 @@ type RpcCall = (endpoint: string, payload?: unknown, signal?: AbortSignal) => Pr
 
 interface ClientCtx {
   get?(name: string): unknown
-  effect(fn: () => () => void, label?: string): unknown
 }
 
 export const inject = ['slots', 'connection'] as const
-
-function installNavIconStyle(): () => void {
-  const tag = document.createElement('style')
-  tag.dataset.plugin = '@ddtcorex/dsh-maestro-config'
-  tag.dataset.pluginCss = 'maestro/settings-nav.css'
-  tag.textContent = SETTINGS_NAV_CSS
-  document.head.appendChild(tag)
-  return () => {
-    document.querySelector('style[data-plugin-css="maestro/settings-nav.css"]')?.remove()
-  }
-}
 
 export function apply(ctx: ClientCtx): void {
   const slots = ctx.get?.('slots') as SlotsApi | undefined
@@ -95,10 +60,6 @@ export function apply(ctx: ClientCtx): void {
     if (!connection?.rpc?.call) return Promise.reject(new Error('RPC not available'))
     return connection.rpc.call('/dsh-maestro-supervisor-resume', endpoint, payload, signal)
   }
-
-  // Reversible effects: nav-row marker observer + owned style tag.
-  ctx.effect(() => registerSettingsNavIcon(() => 'Maestro'), 'maestro: settings nav icon')
-  ctx.effect(installNavIconStyle, 'maestro: settings nav css')
 
   slots.inject('settings.section', () =>
     slots.register(

@@ -41,23 +41,25 @@ describe('settings section registration contract', () => {
     for (const gone of ['tunnel', 'gitlab', 'review', 'notifier']) expect(live).not.toContain(`{ id: '${gone}'`)
   })
 
-  it('installs the settings-nav icon marker and disposes it', () => {
-    expect(entry).toContain('registerSettingsNavIcon')
-    expect(entry).toContain('SETTINGS_NAV_CSS')
-    expect(entry).toMatch(/ctx\.effect\([\s\S]*?registerSettingsNavIcon/)
+  it('leaves the settings-nav glyph to the shell', () => {
+    // DSH 0.2.x renders a section row as `button > span.navIcon > svg` through
+    // the settings.section.icon slot, with the gear as fallback. The 0.1.x
+    // marker + ::before mask hid nothing there (the svg stopped being a direct
+    // child and the hashed class changed), so the row painted the injected M
+    // beside the shell's gear. The default gear is the icon now.
+    expect(entry).not.toContain('registerSettingsNavIcon')
+    expect(entry).not.toContain('SETTINGS_NAV')
+    expect(entry).not.toContain('navIcon')
+    expect(existsSync(resolve(clientDir, 'settings-nav-icon.ts'))).toBe(false)
   })
 
   it('keeps the card visuals (alias tokens, masked secrets, sections)', () => {
     const card = read('MaestroSettings.tsx')
     expect(card).toContain('--dsw-alias-border-l2')
     expect(card).toContain('--dsw-alias-bg-layer-3')
-    // audio-lines glyph mask from the old bundle. The mask literal lives in
-    // maestro-mark.ts — the react-free half of the workspace reference
-    // implementation, re-exported by components/BrandMark.tsx; index.tsx builds
-    // its data-URI from maestroMarkMaskUri() at runtime, so the prefix is a
-    // literal only in that file.
-    expect(card + entry + read('maestro-mark.ts')).toContain('data:image/svg+xml')
-    expect(read('settings-nav-icon.ts')).toContain('data-maestro-settings-nav')
+    // The M glyph itself stays: BrandBadge draws it as an <svg>, so the mark
+    // constants remain the single declaration (see brand-mark.spec.ts).
+    expect(card).toContain('BrandBadge')
   })
 })
 
