@@ -597,7 +597,7 @@ export async function activateSessionAgent(
   ctx: any,
   sessionId: string,
   deps: { resolveSessionAgent?: (ctx: any, sessionId: string) => Promise<{ agent?: any; error?: any } | undefined> } = {},
-): Promise<{ agent?: any; via: 'controller' | 'resume' }> {
+): Promise<{ agent?: any; via: 'controller' | 'resume'; controller: 'resolved' | 'declined' | 'absent' | 'threw' }> {
   const resolveViaController = deps.resolveSessionAgent ?? (async (c: any, id: string) => {
     const controller = c?.get?.('sessionController') ?? c?.sessionController
     if (typeof controller?.resolveAgent !== 'function') return undefined
@@ -605,11 +605,13 @@ export async function activateSessionAgent(
   })
   try {
     const resolved = await resolveViaController(ctx, sessionId)
-    if (resolved?.agent !== undefined) return { agent: resolved.agent, via: 'controller' }
+    if (resolved?.agent !== undefined) return { agent: resolved.agent, via: 'controller', controller: 'resolved' }
+    const controller = (ctx?.get?.('sessionController') as any) ?? (ctx as any)?.sessionController
+    return { via: 'resume', controller: typeof controller?.resolveAgent === 'function' || deps.resolveSessionAgent !== undefined ? 'declined' : 'absent' }
   } catch {
     /* fall through: the resume path owns the ownership retry and prompt delivery */
   }
-  return { via: 'resume' }
+  return { via: 'resume', controller: 'threw' }
 }
 
 export async function resumeInterrupted(
@@ -738,14 +740,21 @@ export async function resumeInterrupted(
       const sessionId = id.split('/').pop()!
       const agents = (ctx.get?.('agents') as any) ?? (ctx as any).agents
       let agent = agents?.get?.(sessionId)
+      // Which branch last produced the agent candidate. The no-agent journal
+      // entry reports it, so a silent miss (absent service, empty handle)
+      // cannot masquerade as a resume that returned a bad agent.
+      let source: 'live' | 'controller' | 'manual' | 'none' = agent === undefined ? 'none' : 'live'
+      let controllerState: 'resolved' | 'declined' | 'absent' | 'threw' | 'unprobed' = 'unprobed'
       if (agent === undefined) {
         // The activation owner runs FIRST and needs no recovered route: it
         // resolves provider/model itself while composing the session's preset.
         const activation = await activateSessionAgent(ctx, sessionId, {
           ...(deps.resolveSessionAgent !== undefined ? { resolveSessionAgent: deps.resolveSessionAgent } : {}),
         })
+        controllerState = activation.controller
         if (activation.agent !== undefined) {
           agent = activation.agent
+          source = 'controller'
           ctx.logger?.info?.(`[supervisor] auto-resume: resolved the agent for ${id} through sessionController`)
         } else {
           const { SessionId } = await import('@deepseek-ai/dsh-session' as any).catch(() => ({ SessionId: (s: string) => s as any }))
@@ -829,12 +838,17 @@ export async function resumeInterrupted(
             throw error
           }
           agent = handle?.agent
+          source = 'manual'
           if (agent !== undefined) ctx.logger?.info?.(`[supervisor] auto-resume: re-attached agent for ${id}`)
         }
       }
       if (typeof agent?.followup !== 'function') {
-        ctx.logger?.warn?.(`[supervisor] auto-resume: no live agent available for ${id}`)
-        doLog({ ts: Date.now(), sessionId, kind: 'no-agent', detail: 'agents.resume returned no followup-capable handle' })
+        const detail =
+          `agents.resume returned no followup-capable handle ` +
+          `(source=${source} agents=${agents == null ? 'absent' : 'present'} ` +
+          `controller=${controllerState} agentType=${agent === undefined ? 'undefined' : typeof agent})`
+        ctx.logger?.warn?.(`[supervisor] auto-resume: no live agent available for ${id} — ${detail}`)
+        doLog({ ts: Date.now(), sessionId, kind: 'no-agent', detail })
         continue
       }
       await verifyResumedComposition(sessionId, agent)

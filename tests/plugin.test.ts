@@ -4,6 +4,16 @@ import { describe, it, expect, vi } from 'vitest'
 import { resumeInterrupted, runAutoResume, apply, createResumeRpcHandler, createSessionHealthRpcHandler, inject, snapshotResumeToolHealth, isAutoResumePinned, processStartedAtMs } from '../src/host/plugin.js'
 import { SUPERVISOR_SOURCE_KIND } from '../src/host/source.js'
 
+// The resume journal defaults to the real sidecar at ~/.dsh/.supervisor.
+// Tests that exercise resumeInterrupted/runAutoResume without injecting
+// logResume would append synthetic fixture ids to the operator's live journal
+// (measured 2026-11-05: session-abc/abc-123 rows interleaved with real boot
+// scans), so neutralize the file write here while keeping every other export.
+vi.mock('../src/host/resume-log.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/host/resume-log.js')>()),
+  appendResumeLog: vi.fn(),
+}))
+
 /**
  * The plugin's own source text. The `inject` contract below is about WHICH
  * services block activation, and that cannot be asserted from the exported
@@ -101,6 +111,72 @@ describe('resumeInterrupted', () => {
     expect(sentMessage.content[0].text).toContain('TOOL_OUTCOME_UNKNOWN')
     expect(sentMessage.source).toEqual({ kind: SUPERVISOR_SOURCE_KIND })
     expect(ctx._logs.some((l: string) => l.includes('sent recovery continue'))).toBe(true)
+  })
+
+  it('attributes a no-agent skip to the branch that produced the bad agent', async () => {
+    // Live diagnosis 2026-11-05: every real resume attempt on DSH 0.2.2-rc.1
+    // ends as no-agent, and the old detail named no branch, so the journal
+    // could not say whether the agents service, the controller, or the resume
+    // handle was at fault. The entry must carry all three.
+    const entries: any[] = []
+    const persistence = {
+      open: async () => ({
+        read: async () => ([
+          { type: 'request/context', data: { provider: 'example-provider', model: 'example-model' } },
+        ]),
+        close: async () => {},
+      }),
+    }
+    const ctx = makeCtx({
+      sessionPersistence: persistence,
+      agents: { get: () => undefined, resume: async () => ({}) },
+    })
+    await resumeInterrupted(ctx, ['proj/session-abc'], { logResume: (e: any) => entries.push(e) })
+    const skip = entries.find((e: any) => e.kind === 'no-agent')
+    expect(skip, 'a no-agent entry must be journalled').toBeDefined()
+    expect(skip.detail).toContain('source=manual')
+    expect(skip.detail).toContain('agents=present')
+    expect(skip.detail).toContain('controller=absent')
+    expect(skip.detail).toContain('agentType=undefined')
+  })
+
+  it('attributes a no-agent skip when the agents service itself is missing', async () => {
+    const entries: any[] = []
+    const persistence = {
+      open: async () => ({
+        read: async () => ([
+          { type: 'request/context', data: { provider: 'example-provider', model: 'example-model' } },
+        ]),
+        close: async () => {},
+      }),
+    }
+    const ctx = makeCtx({ sessionPersistence: persistence })
+    await resumeInterrupted(ctx, ['proj/session-abc'], { logResume: (e: any) => entries.push(e) })
+    const skip = entries.find((e: any) => e.kind === 'no-agent')
+    expect(skip, 'a no-agent entry must be journalled').toBeDefined()
+    expect(skip.detail).toContain('agents=absent')
+  })
+
+  it('attributes a no-agent skip to the live branch when agents.get returns a handle without followup', async () => {
+    const entries: any[] = []
+    const ctx = makeCtx({ agents: { get: () => ({}) } })
+    await resumeInterrupted(ctx, ['proj/session-abc'], { logResume: (e: any) => entries.push(e) })
+    const skip = entries.find((e: any) => e.kind === 'no-agent')
+    expect(skip, 'a no-agent entry must be journalled').toBeDefined()
+    expect(skip.detail).toContain('source=live')
+    expect(skip.detail).toContain('agents=present')
+  })
+
+  it('attributes a no-agent skip to the controller branch', async () => {
+    const entries: any[] = []
+    const ctx = makeCtx({ agents: { get: () => undefined } })
+    await resumeInterrupted(ctx, ['proj/session-abc'], {
+      logResume: (e: any) => entries.push(e),
+      resolveSessionAgent: async () => ({ agent: {} }),
+    })
+    const skip = entries.find((e: any) => e.kind === 'no-agent')
+    expect(skip, 'a no-agent entry must be journalled').toBeDefined()
+    expect(skip.detail).toContain('source=controller')
   })
 
   it('retries a resume whose write handle is still held, then re-attaches', async () => {
