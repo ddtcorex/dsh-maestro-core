@@ -12,54 +12,6 @@ import { SyncPanel } from './SyncPanel.js'
 
 export const inject = ['slots', 'connection'] as const
 
-const SETTINGS_NAV_MARKER = 'data-maestro-sync-settings-nav'
-const SETTINGS_NAV_CSS = `
-[${SETTINGS_NAV_MARKER}] > svg:first-child,
-[${SETTINGS_NAV_MARKER}] > svg.zWKi1a_navIcon {
-  display: none !important;
-}
-[${SETTINGS_NAV_MARKER}]::before {
-  content: '';
-  flex: none;
-  width: 16px;
-  height: 16px;
-  display: inline-block;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11 L5 4 L8 9 L11 4 L14 11'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-`
-
-function registerSyncNavIcon(label: () => string, root?: any): () => void {
-  if (typeof document === 'undefined' && root === undefined) return () => {}
-  const scope: any = root ?? document
-  let disposed = false
-  const sync = () => {
-    if (disposed) return
-    const currentLabel = label().trim()
-    const buttons = scope.querySelectorAll('[role="dialog"] nav button')
-    for (const button of Array.from(buttons as any) as Element[]) {
-      const el = button as any
-      const matches = currentLabel.length > 0 && (button as Element).textContent != null && (button as Element).textContent!.trim() === currentLabel
-      if (matches) el.setAttribute(SETTINGS_NAV_MARKER, '')
-      else el.removeAttribute(SETTINGS_NAV_MARKER)
-    }
-  }
-  sync()
-  let observer: MutationObserver | null = null
-  if (typeof MutationObserver !== 'undefined') {
-    observer = new MutationObserver(sync)
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
-  }
-  return () => {
-    disposed = true
-    if (observer !== null) observer.disconnect()
-    for (const element of Array.from(scope.querySelectorAll(`[${SETTINGS_NAV_MARKER}]`) as any)) {
-      ;(element as any).removeAttribute(SETTINGS_NAV_MARKER)
-    }
-  }
-}
-
 function installStyleTag(css: string, pluginCss: string): () => void {
   if (typeof document === 'undefined') return () => {}
   const tag = document.createElement('style')
@@ -312,8 +264,6 @@ function apply(ctx: any): void {
   const slots = (ctx as any).slots ?? (ctx as any).get?.('slots')
   if (!slots?.inject || !slots?.register) return
 
-  ctx.effect(() => registerSyncNavIcon(() => 'Maestro Sync'), 'maestro-sync: settings nav icon')
-  ctx.effect(() => installStyleTag(SETTINGS_NAV_CSS, 'maestro-sync/settings-nav.css'), 'maestro-sync: settings nav css')
   ctx.effect(() => installStyleTag(SYNC_CSS, 'maestro-sync/settings.css'), 'maestro-sync: settings css')
 
   ctx.effect(() => {

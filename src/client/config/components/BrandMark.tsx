@@ -45,7 +45,6 @@ export {
   MAESTRO_MARK_PATH,
   MAESTRO_MARK_STROKE_WIDTH,
   MAESTRO_MARK_VIEWBOX,
-  maestroMarkMaskUri,
 } from '../maestro-mark.js'
 
 /**

@@ -34,10 +34,16 @@ describe('Maestro M logo reference implementation', () => {
 
   // The consumers build their glyph from the constant. A re-hardcoded literal
   // is how the glyph drifted across four files in the first place.
-  it('leaves no literal copy in the settings-nav CSS', () => {
-    const entry = read('index.tsx')
-    expect(entry).toContain('maestroMarkMaskUri()')
-    expect(entry).not.toContain('M2 11 L5 4')
+  it('drops the CSS-mask URI that only the settings-nav row painted', () => {
+    // maestroMarkMaskUri() built the data-URI for the nav row's ::before mask.
+    // That row renders the shell's default gear now, so the mask helper and its
+    // re-export are dead code and must not linger as a second glyph source.
+    expect(read('index.tsx')).not.toContain('maestroMarkMaskUri')
+    expect(read('maestro-mark.ts')).not.toContain('export function maestroMarkMaskUri')
+    expect(read('components/BrandMark.tsx')).not.toContain('maestroMarkMaskUri')
+    // The badge draws the glyph as an <svg> element from MAESTRO_MARK_PATH, so
+    // no data-URI literal may survive anywhere in the card entry.
+    expect(read('index.tsx')).not.toContain('data:image/svg+xml')
   })
 
   it('leaves no inline badge style in the settings card', () => {
@@ -75,31 +81,5 @@ describe('BrandBadge chrome is not caller-overridable', () => {
     expect(brand).toMatch(/BRAND_BADGE_LAYOUT_KEYS/)
     // the raw `...props.style` spread is what let a caller repaint the tile
     expect(brand).not.toMatch(/\.\.\.\(\s*props\.style\s*\?\?\s*\{\}\s*\)/)
-  })
-})
-
-// The mask URI renders through CSS `mask`, so a subtly different encoding leaves
-// the settings-nav row blank rather than erroring. BrandMark.tsx cannot be
-// imported (react is a client-bundler EXTERNAL with no package.json entry), so
-// the react-free half lives in maestro-mark.ts and is pinned here by exact
-// bytes — not by grepping a call site for a function name.
-import { maestroMarkMaskUri, MAESTRO_MARK_PATH } from '../../src/client/config/maestro-mark.js'
-
-describe('maestroMarkMaskUri encoding', () => {
-  it('encodes only < and >, leaving quotes, slashes and spaces intact', () => {
-    expect(maestroMarkMaskUri()).toBe(
-      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' " +
-      "viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' " +
-      `stroke-linejoin='round'%3E%3Cpath d='${MAESTRO_MARK_PATH}'/%3E%3C/svg%3E`,
-    )
-  })
-
-  // A naive encodeURIComponent rewrite satisfies every other assertion in this
-  // file and still blanks the row. This is the assertion that would catch it.
-  it('would differ from encodeURIComponent, which is why it is not used', () => {
-    const naive = `data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg"><path d="${MAESTRO_MARK_PATH}"/></svg>`,
-    )}`
-    expect(naive).not.toBe(maestroMarkMaskUri())
   })
 })
