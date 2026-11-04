@@ -96,6 +96,45 @@ describe('findInterrupted — plain .jsonl detection', () => {
   })
 })
 
+function abortedLine(time: number, shutdownReason?: string): string {
+  return JSON.stringify({
+    type: 'turn/end',
+    time,
+    data: { reason: { kind: 'aborted', ...(shutdownReason === undefined ? {} : { reason: { kind: shutdownReason } }) } },
+  })
+}
+
+describe('findInterrupted — graceful shutdown closes the turn as aborted', () => {
+  // Observed 2026-11-05 on a supervisor-managed restart: the host disposes the
+  // agent, so the in-flight turn is written as
+  // {"kind":"aborted","reason":{"kind":"disposed"}} rather than "interrupted".
+  // A restart that never crashes still has to be resumed, otherwise the user
+  // has to reopen and retype the turn by hand.
+  it('detects a turn the host closed while shutting down', async () => {
+    const dir = sessionDir('proj', 'sess-disposed')
+    writeJsonl(dir, [
+      JSON.stringify({ type: 'turn/start', time: Date.now() - 1000 }),
+      abortedLine(Date.now(), 'disposed'),
+    ])
+    const res = await findInterrupted(tmp)
+    expect(res.interrupted).toContain('proj/sess-disposed')
+  })
+
+  it('ignores a turn the user stopped on purpose', async () => {
+    const dir = sessionDir('proj', 'sess-user-stop')
+    writeJsonl(dir, [abortedLine(Date.now(), 'user')])
+    const res = await findInterrupted(tmp)
+    expect(res.interrupted).not.toContain('proj/sess-user-stop')
+  })
+
+  it('ignores an aborted turn that carries no shutdown reason', async () => {
+    const dir = sessionDir('proj', 'sess-aborted-bare')
+    writeJsonl(dir, [abortedLine(Date.now())])
+    const res = await findInterrupted(tmp)
+    expect(res.interrupted).not.toContain('proj/sess-aborted-bare')
+  })
+})
+
 describe('findInterrupted — .zstd detection', () => {
   it.skipIf(!zstdAvailable)('detects an interrupted turn/end in a zstd-compressed log', async () => {
     const dir = sessionDir('proj', 'sess-z')
