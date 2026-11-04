@@ -81,7 +81,16 @@ export async function findInterrupted(dshHome?: string, opts?: FindInterruptedOp
             try {
               const obj = JSON.parse(line)
               foundTime = typeof obj.time === 'number' ? obj.time : undefined
-              if (obj.type === 'turn/end' && obj.data?.reason?.kind === 'interrupted') { found = true; break }
+              // Two shapes mean "this turn never finished":
+              //   interrupted        the host died with the turn in flight
+              //   aborted/disposed   the host shut the turn down on purpose
+              //                      (supervisor restart, graceful stop)
+              // `aborted/user` is the person pressing stop and must stay out.
+              const reason = obj.data?.reason
+              const resumable =
+                reason?.kind === 'interrupted' ||
+                (reason?.kind === 'aborted' && reason?.reason?.kind === 'disposed')
+              if (obj.type === 'turn/end' && resumable) { found = true; break }
             } catch {}
           }
           if (!found) continue
