@@ -28,6 +28,8 @@ describe('peer refusal', () => {
       caught = e;
     }
     expect(caught?.code).toBe('PEER_NOT_MOVED');
+    // The message must say which machine, or the operator has to guess.
+    expect(String(caught?.message)).toContain('kai@ssh.ddtcorex.com');
   });
 
   it('accepts a moved peer, and an empty one', () => {

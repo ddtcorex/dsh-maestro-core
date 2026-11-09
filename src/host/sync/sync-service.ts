@@ -354,7 +354,7 @@ export class SyncService {
       throw syncFailure(
         'snapshot',
         'PEER_NOT_MOVED',
-        'the peer still keeps its store inside the DSH home; upgrade maestro-memory there and restart it before syncing',
+        `the peer ${this.remote ?? 'unknown'} still keeps its store inside its DSH home (memory files present, no migrated-v5.json marker); upgrade maestro-memory on that machine and restart it before syncing`,
       );
     }
   }
