@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { localPathForWirePath } from '../../src/host/sync/store-root.js';
 import { SyncService } from '../../src/host/sync/sync-service.js';
+import { BackupService } from '../../src/host/sync/backup-service.js';
 
 describe('sync store root', () => {
   it('maps the memory prefix onto the store root and leaves sessions under DSH', () => {
@@ -35,6 +36,20 @@ describe('sync store root', () => {
     // The refusal carries a code, not a magic string in the sentence.
     expect(caught?.code).toBe('STORE_NOT_MIGRATED');
     expect(String(caught?.message)).toContain(join(dsh, 'maestro-memory'));
+  });
+
+  it('refuses a backup while the store is still at a legacy root', () => {
+    const dsh = mkdtempSync(join(tmpdir(), 'sync-dsh5-'));
+    mkdirSync(join(dsh, 'maestro-memory'), { recursive: true });
+    writeFileSync(join(dsh, 'maestro-memory', 'MEMORY.md'), 'x\n');
+    const svc = new BackupService({ localDsh: dsh, storeRoot: join(dsh, 'nowhere'), store: {} as any, target: {} as any, previewDir: dsh, cacheDir: dsh } as any);
+    let caught: any = null;
+    try {
+      (svc as any).listEligibleFiles();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught?.code).toBe('STORE_NOT_MIGRATED');
   });
 
   it('hashes memory files from the store root, not the DSH home', async () => {

@@ -76,7 +76,33 @@ export class BackupService {
     return `blobs/sha256/${sha}`;
   }
 
+  /**
+   * A backup taken in the core-first release window would walk a root that does not
+   * exist yet, record zero memory files, and report `ok: true`. Refuse instead, with
+   * the same sentinel sync uses.
+   */
+  assertStoreMigrated(): void {
+    const fsMod = this.opts.fs ?? nodeFs;
+    if (typeof fsMod.existsSync !== 'function') return;
+    const storeRoot = this.resolveStoreRoot();
+    const exists = (p: string) => {
+      try {
+        return fsMod.existsSync(p);
+      } catch {
+        return false;
+      }
+    };
+    if (!exists(storeRoot) && exists(path.join(this.opts.localDsh, 'maestro-memory'))) {
+      const error: any = new Error(
+        `local store is still at ${path.join(this.opts.localDsh, 'maestro-memory')}; install the current build (its boot migration moves it to ${storeRoot}) before backing up`,
+      );
+      error.code = 'STORE_NOT_MIGRATED';
+      throw error;
+    }
+  }
+
   listEligibleFiles(): string[] {
+    this.assertStoreMigrated();
     const root = this.opts.localDsh;
     const storeRoot = this.resolveStoreRoot();
     const fsMod = this.opts.fs ?? nodeFs;
