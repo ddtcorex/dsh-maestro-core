@@ -23,6 +23,24 @@ export interface RemoteManifestEntry {
  * "the peer has no memory", and the next push would have looked like the first
  * one. A named refusal is worth more than a silent empty inventory.
  */
+/**
+ * Raised when the peer has moved its store out of the DSH home.
+ *
+ * Sync still addresses memory as `<dshRoot>/maestro-memory` on the sending side, so a
+ * push to a moved peer writes into the directory that peer no longer reads, and the
+ * transfer reports success. Until the remote scripts learn a second base path, the only
+ * honest thing is to refuse: a named refusal is worth more than memories that vanish.
+ */
+export class PeerStoreMovedError extends Error {
+  readonly code = 'PEER_STORE_MOVED'
+  constructor(readonly remotePath: string) {
+    super(
+      `peer store moved to ${remotePath}: this sync can only write <dshRoot>/maestro-memory, so publishing would be lost. Upgrade this machine's sync before transferring`,
+    )
+    this.name = 'PeerStoreMovedError'
+  }
+}
+
 export class StoreNotMigratedError extends Error {
   readonly code = 'STORE_NOT_MIGRATED'
   constructor(readonly remotePath: string) {
@@ -48,6 +66,10 @@ export function buildRemoteManifestScript(dshRoot: string): string {
     // Preflight sentinel: no 4.0 marker means the peer still holds the old
     // root, so an empty inventory must not be mistaken for an empty store.
     `if [ ! -f ${dshRoot}/maestro-memory/.maestro-memory/migrated-v4 ] && [ -d ${dshRoot}/dsh-maestro-memory ]; then printf 'STORE_NOT_MIGRATED\\t0\\t0\\t%s\\0' ${dshRoot}/dsh-maestro-memory; exit 0; fi;`,
+    // 5.0 moved the store out of the DSH home on the peer. Its `find` below would match
+    // nothing and read as "the peer has no memory", exactly the failure the v4 sentinel
+    // above exists to prevent.
+    `if [ -f "$HOME/.maestro-memory/.maestro-memory/migrated-v5.json" ]; then printf 'PEER_STORE_MOVED\\t0\\t0\\t%s\\0' "$HOME/.maestro-memory"; exit 0; fi;`,
     `find ${dshRoot}/maestro-memory ${dshRoot}/sessions`,
     `\\( -name node_modules -o -name .git -o -name .supervisor -o -name profiles \\) -prune -o -type f -print0`,
     `| xargs -0 stat --printf='%i %s %.Y %.Z\\t%n\\n' 2>/dev/null`,
@@ -74,6 +96,9 @@ export function parseRemoteManifest(buf: Buffer): RemoteManifestEntry[] {
     if (!part) continue;
     if (part.startsWith('STORE_NOT_MIGRATED\t')) {
       throw new StoreNotMigratedError(part.split('\t').slice(3).join('\t'));
+    }
+    if (part.startsWith('PEER_STORE_MOVED\t')) {
+      throw new PeerStoreMovedError(part.split('\t').slice(3).join('\t'));
     }
     const [sha, sizeRaw, mtimeRaw, ...rest] = part.split('\t');
     const p = rest.join('\t');

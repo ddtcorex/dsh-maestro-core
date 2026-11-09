@@ -3,6 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { isEligiblePath } from '../../src/host/sync/validation.js';
 import { SyncService } from '../../src/host/sync/sync-service.js';
+import { buildRemoteManifestScript, parseRemoteManifest } from '../../src/host/sync/remote-manifest.js';
 
 describe('peer marker eligibility', () => {
   it('accepts the v5 marker on the wire', () => {
@@ -34,5 +35,38 @@ describe('peer refusal', () => {
       (svc as any).assertPeerMoved(['maestro-memory/MEMORY.md', 'maestro-memory/.maestro-memory/migrated-v5.json']),
     ).not.toThrow();
     expect(() => (svc as any).assertPeerMoved([])).not.toThrow();
+  });
+});
+
+describe('moved-peer sentinel', () => {
+  it('parses a moved peer into a named refusal', () => {
+    const buf = Buffer.from('PEER_STORE_MOVED\t0\t0\t/home/u/.maestro-memory\0');
+    let caught: any = null;
+    try {
+      parseRemoteManifest(buf);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught?.code).toBe('PEER_STORE_MOVED');
+    expect(String(caught?.message)).toContain('/home/u/.maestro-memory');
+  });
+
+  it('keeps the pre-4.0 sentinel working', () => {
+    const buf = Buffer.from('STORE_NOT_MIGRATED\t0\t0\t/home/u/.dsh/dsh-maestro-memory\0');
+    let caught: any = null;
+    try {
+      parseRemoteManifest(buf);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught?.code).toBe('STORE_NOT_MIGRATED');
+  });
+});
+
+describe('remote manifest script', () => {
+  it('probes the moved store before the find, and never guesses', () => {
+    const script = buildRemoteManifestScript('/home/u/.dsh');
+    expect(script).toContain('PEER_STORE_MOVED');
+    expect(script).toContain('$HOME/.maestro-memory/.maestro-memory/migrated-v5.json');
   });
 });
