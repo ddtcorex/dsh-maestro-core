@@ -69,8 +69,8 @@ export function buildRemoteManifestScript(dshRoot: string): string {
     // 5.0 moved the store out of the DSH home on the peer. Its `find` below would match
     // nothing and read as "the peer has no memory", exactly the failure the v4 sentinel
     // above exists to prevent.
-    `if [ -f "$HOME/.maestro-memory/.maestro-memory/migrated-v5.json" ]; then printf 'PEER_STORE_MOVED\\t0\\t0\\t%s\\0' "$HOME/.maestro-memory"; exit 0; fi;`,
-    `find ${dshRoot}/maestro-memory ${dshRoot}/sessions`,
+    `mem_root=${dshRoot}/maestro-memory; if [ -f "$HOME/.maestro-memory/.maestro-memory/migrated-v5.json" ]; then mem_root="$HOME/.maestro-memory"; fi;`,
+    `find "$mem_root" ${dshRoot}/sessions`,
     `\\( -name node_modules -o -name .git -o -name .supervisor -o -name profiles \\) -prune -o -type f -print0`,
     `| xargs -0 stat --printf='%i %s %.Y %.Z\\t%n\\n' 2>/dev/null`,
     `| awk -F '\\t' -v root='${dshRoot}/' -v cachefile='${cache}' 'BEGIN{while((getline line < cachefile) > 0){if(line=="")continue; m=split(line,a,"\\t"); if(m>=6){c[a[1]]=(a[2]" "a[3]" "a[4]" "a[5])"\\t"a[6]"\\t"a[3]"\\t"a[4];}} close(cachefile);} {st=$1; rel=$2; sub(root,"",rel); if(rel in c){split(c[rel],e,"\\t"); if(e[1]==st){print "H\\t"rel"\\t"e[2]"\\t"e[3]"\\t"e[4]; next;}} print "M\\t"rel"\\t"st;}'`,
@@ -81,7 +81,8 @@ export function buildRemoteManifestScript(dshRoot: string): string {
     `printf '%s\\t%s\\t%s\\t%s\\0' "$sha" "$size" "$mtime" "$rel";`,
     `else`,
     `rel=\${rest%%$'\\t'*}; st=\${rest#*$'\\t'};`,
-    `sha=$(sha256sum -- "${dshRoot}/$rel" 2>/dev/null | awk '{print $1}');`,
+    `case "$rel" in maestro-memory/*) if [ "$mem_root" != "${dshRoot}/maestro-memory" ]; then full="$mem_root/\${rel#maestro-memory/}"; else full="${dshRoot}/$rel"; fi;; *) full="${dshRoot}/$rel";; esac;`,
+    `sha=$(sha256sum -- "$full" 2>/dev/null | awk '{print $1}');`,
     `set -- $st;`,
     `printf '%s\\t%s\\t%s\\t%s\\0' "$sha" "$2" "$3" "$rel";`,
     `fi;`,
