@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { normalizeEligiblePath } from './validation.js';
 import { hashFiles } from './hashing.js';
+import { localPathForWirePath, resolveStoreRoot } from './store-root.js';
 import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint } from './fingerprint.js';
 import type { S3ObjectStore } from './s3-object-store.js';
 import type { BackupTarget } from './backup-config.js';
@@ -54,7 +55,22 @@ export interface SyncFailureLike {
 const TTL_MS = 60_000;
 
 export class BackupService {
-  constructor(private readonly opts: { localDsh: string; store: S3ObjectStore; target: BackupTarget; previewDir: string; cacheDir: string; fs?: any }) {}
+  constructor(private readonly opts: { localDsh: string; storeRoot?: string; store: S3ObjectStore; target: BackupTarget; previewDir: string; cacheDir: string; fs?: any }) {}
+
+  /**
+   * The store may live outside the DSH home. Reads and writes of memory content map
+   * through the resolved root; sessions and sync state stay under the DSH home.
+   */
+  private resolveStoreRoot(): string {
+    return (
+      this.opts.storeRoot ??
+      resolveStoreRoot({ env: { ...process.env, DSH_HOME: this.opts.localDsh } }).root
+    );
+  }
+
+  private localPathForWirePath(wirePath: string): string {
+    return localPathForWirePath(wirePath, { storeRoot: this.resolveStoreRoot(), localDsh: this.opts.localDsh });
+  }
 
   blobKey(sha: string): string {
     return `blobs/sha256/${sha}`;
@@ -62,9 +78,12 @@ export class BackupService {
 
   listEligibleFiles(): string[] {
     const root = this.opts.localDsh;
+    const storeRoot = this.resolveStoreRoot();
     const fsMod = this.opts.fs ?? nodeFs;
     const out: string[] = [];
-    const walk = (dir: string) => {
+    // `prefix` is the wire prefix of the directory being walked, so a store outside the
+    // DSH home still reports `maestro-memory/...` and passes normalization.
+    const walk = (dir: string, prefix = '') => {
       let ents: any[];
       try {
         ents = fsMod.readdirSync(dir, { withFileTypes: true });
@@ -74,9 +93,11 @@ export class BackupService {
       for (const ent of ents) {
         const full = path.join(dir, ent.name);
         if (typeof ent.isDirectory === 'function' && ent.isDirectory()) {
-          if (!['node_modules', '.git', '.supervisor', 'profiles'].includes(ent.name)) walk(full);
+          if (!['node_modules', '.git', '.supervisor', 'profiles'].includes(ent.name)) {
+            walk(full, prefix ? `${prefix}/${ent.name}` : ent.name);
+          }
         } else {
-          const rel = full.slice(root.length + 1).split(path.sep).join('/');
+          const rel = (prefix ? `${prefix}/${ent.name}` : ent.name).split(path.sep).join('/');
           try {
             normalizeEligiblePath(rel);
             out.push(rel);
@@ -85,8 +106,10 @@ export class BackupService {
       }
     };
     try {
-      walk(path.join(root, 'maestro-memory'));
-      walk(path.join(root, 'sessions'));
+      walk(storeRoot, 'maestro-memory');
+      // When the store sits inside the DSH home its files were already collected above,
+      // so sessions alone are walked from there.
+      walk(path.join(root, 'sessions'), 'sessions');
     } catch {}
     return out.sort();
   }
@@ -117,7 +140,7 @@ export class BackupService {
     const stale: string[] = [];
     const local: { path: string; sha256: string; size: number }[] = [];
     for (const rel of paths) {
-      const full = path.join(this.opts.localDsh, rel);
+      const full = this.localPathForWirePath(rel);
       try {
         const st = fsMod.statSync(full, { bigint: true } as any);
         const e = probeIndex(rel, index);
@@ -131,7 +154,7 @@ export class BackupService {
     for (const f of hashed) {
       local.push({ path: f.path, sha256: f.sha256, size: f.size });
       try {
-        const st = fsMod.statSync(path.join(this.opts.localDsh, f.path), { bigint: true } as any);
+        const st = fsMod.statSync(this.localPathForWirePath(f.path), { bigint: true } as any);
         index.entries[f.path] = { ...statFingerprint(st), sha256: f.sha256 };
       } catch {}
     }
@@ -225,7 +248,7 @@ export class BackupService {
       }
       if (sha === null) {
         try {
-          const buf = fsMod.readFileSync(path.join(this.opts.localDsh, rel));
+          const buf = fsMod.readFileSync(this.localPathForWirePath(rel));
           const b = Buffer.isBuffer(buf) ? buf : Buffer.from(String(buf), 'utf-8');
           sha = createHash('sha256').update(b).digest('hex');
           size = b.length;
@@ -286,7 +309,7 @@ export class BackupService {
         copied++;
         continue;
       }
-      const full = path.join(this.opts.localDsh, f.path);
+      const full = this.localPathForWirePath(f.path);
       let cur: string | null = null;
       try {
         cur = createHash('sha256').update(fsMod.readFileSync(full)).digest('hex');
@@ -321,8 +344,12 @@ export class BackupService {
     try {
       for (const f of head.manifest.files) {
         try {
-          const destBase = req.mode === 'new-dir' ? req.destDir ?? path.join(this.opts.localDsh, 'restored') : this.opts.localDsh;
-          const outFull = path.join(destBase, f.path);
+          // In place means "into the live store", which is the resolved root, not the
+          // DSH home. Getting this wrong recreates the legacy directory on restore.
+          const outFull =
+            req.mode === 'new-dir'
+              ? path.join(req.destDir ?? path.join(this.opts.localDsh, 'restored'), f.path)
+              : this.localPathForWirePath(f.path);
           if (req.mode === 'in-place') {
             try {
               const cur = createHash('sha256').update(fsMod.readFileSync(outFull)).digest('hex');
