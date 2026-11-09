@@ -74,6 +74,8 @@ export interface StatusResult {
   bothFiles: string[];
   connection: ConnectionStatus;
   remoteHost: string;
+  /** `legacy` means the local store still sits at an old root, so the counts are short. */
+  storeMigration?: 'ok' | 'legacy';
 }
 
 /** Cursor-paged status page for bounded RPC payloads (< 64 KiB). */
@@ -212,6 +214,16 @@ export class SyncService {
     const storeRootDiffers = this.storeRoot !== path.join(this.localDsh, 'maestro-memory');
     const result: string[] = [];
     const fsMod = this.fs;
+    /** Walk `dir` and return the wire paths it holds, without touching `result`. */
+    const collect = (dir: string, base: string): string[] => {
+      const out: Array<{ push: (...items: string[]) => number }> = [];
+      void out;
+      const sink: string[] = [];
+      const previous = result.length;
+      walk(dir, base);
+      sink.push(...result.splice(previous));
+      return sink;
+    };
     const walk = (dir: string, base: string) => {
       try {
         if (typeof fsMod.readdirSync !== 'function') return;
@@ -253,17 +265,13 @@ export class SyncService {
     } else {
       // Store elsewhere: walk the DSH home for sessions and harness state, skipping the
       // path the store would occupy, then walk the store itself under its wire prefix.
-      const harnessOwned: string[] = [];
-      const push = result.push.bind(result);
-      result.push = (...items: string[]) => harnessOwned.push(...items) as unknown as number;
-      walk(root, '');
-      result.push = push;
+      const harnessOwned = collect(root, '');
       for (const wire of harnessOwned) {
         const normalised = wire.split(path.sep).join('/');
         if (normalised === 'maestro-memory' || normalised.startsWith('maestro-memory/')) continue;
         result.push(wire);
       }
-      walk(this.storeRoot, 'maestro-memory');
+      result.push(...collect(this.storeRoot, 'maestro-memory'));
     }
     return [...new Set(
       result
@@ -875,10 +883,18 @@ export class SyncService {
   }
 
   async status(): Promise<StatusResult> {
+    // A legacy store inventories zero memory files, which reads as "nothing to sync".
+    // The count stays honest, and the reason travels with it.
+    let storeMigration: 'ok' | 'legacy' = 'ok';
+    try {
+      this.assertLocalStoreMigrated();
+    } catch {
+      storeMigration = 'legacy';
+    }
     const connection = await this.checkConnection();
     const localFiles = this.listLocalFiles();
     if (!connection.ok) {
-      return { localOnly: localFiles.length, remoteOnly: 0, both: 0, localOnlyFiles: localFiles, remoteOnlyFiles: [], bothFiles: [], connection, remoteHost: this.remote };
+      return { localOnly: localFiles.length, remoteOnly: 0, both: 0, localOnlyFiles: localFiles, remoteOnlyFiles: [], bothFiles: [], connection, remoteHost: this.remote, storeMigration };
     }
     let remoteFiles: string[] = [];
     try {
