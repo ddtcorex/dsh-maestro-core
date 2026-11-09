@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mergeDelimited } from './merge.js';
+import { resolveStoreRoot } from './store-root.js';
 import { mergeSessionBuffers } from './session-plan.js';
 import { kindForPath } from './snapshot.js';
 import { hashFiles } from './hashing.js';
@@ -86,6 +87,8 @@ export interface PreviewResult extends SyncPreview {
 
 export interface SyncServiceOpts {
   localDsh?: string;
+  /** Resolved memory store root; defaults to the same rules the plugin uses. */
+  storeRoot?: string;
   remote?: string;
   remoteDsh?: string;
   previewDir?: string;
@@ -101,6 +104,7 @@ function syncFailure(phase: SyncFailure['phase'], code: string, detail: string, 
 
 export class SyncService {
   localDsh: string;
+  storeRoot: string;
   remote: string;
   remoteDsh: string;
   previewDir: string;
@@ -111,6 +115,9 @@ export class SyncService {
 
   constructor(opts: SyncServiceOpts = {}) {
     this.localDsh = opts.localDsh || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+    // The store can live outside the DSH home. Wire paths stay `maestro-memory/...`,
+    // so every site that touches disk maps through this root, never through localDsh.
+    this.storeRoot = opts.storeRoot ?? resolveStoreRoot({ env: process.env }).root;
     this.remote = opts.remote || process.env.REMOTE_HOST || process.env.REMOTE || 'kai@ssh.ddtcorex.com';
     this.remoteDsh = opts.remoteDsh || process.env.REMOTE_DSH_PATH || '~/.dsh';
     // Sidecar preview store shared by every CLI process (preview -> separate apply run).
