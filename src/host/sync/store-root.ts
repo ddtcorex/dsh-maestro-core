@@ -61,3 +61,23 @@ export function localPathForWirePath(
   }
   return join(roots.localDsh, wirePath);
 }
+
+/**
+ * Group wire paths by the local root they resolve to, so a caller that hashes or stats
+ * many paths at once hashes each group against its own root instead of assuming the
+ * DSH home. After the store move, `maestro-memory/...` and `sessions/...` live in two
+ * different trees.
+ */
+export function partitionByWireRoot(
+  wirePaths: string[],
+  roots: { storeRoot: string; localDsh: string },
+): Array<{ root: string; paths: string[] }> {
+  const groups = new Map<string, string[]>();
+  for (const wire of wirePaths) {
+    const root = wire.startsWith('maestro-memory/') ? roots.storeRoot : roots.localDsh;
+    const bucket = groups.get(root);
+    if (bucket) bucket.push(wire);
+    else groups.set(root, [wire]);
+  }
+  return [...groups.entries()].map(([root, paths]) => ({ root, paths }));
+}

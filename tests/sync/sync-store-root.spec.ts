@@ -37,6 +37,15 @@ describe('sync store root', () => {
     expect(String(caught?.message)).toContain(join(dsh, 'maestro-memory'));
   });
 
+  it('hashes memory files from the store root, not the DSH home', async () => {
+    const dsh = mkdtempSync(join(tmpdir(), 'sync-dsh4-'));
+    const store = mkdtempSync(join(tmpdir(), 'sync-store4-'));
+    writeFileSync(join(store, 'MEMORY.md'), 'x\n');
+    const svc = new SyncService({ localDsh: dsh, storeRoot: store, cacheDir: join(dsh, 'cache') } as any);
+    const hashed = await (svc as any).localSnapshotsWithHashes(['maestro-memory/MEMORY.md']);
+    expect(hashed.get('maestro-memory/MEMORY.md')).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it('writes a pulled file into the resolved root, never the DSH home', async () => {
     const dsh = mkdtempSync(join(tmpdir(), 'sync-dsh3-'));
     const store = mkdtempSync(join(tmpdir(), 'sync-store3-'));

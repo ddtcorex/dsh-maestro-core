@@ -18,10 +18,17 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mergeDelimited } from './merge.js';
+
+/**
+ * Hash a mixed list of wire paths, each group against the root it lives under.
+ * Before the store moved, one root covered everything; it no longer does, and hashing
+ * `maestro-memory/...` under the DSH home fails with ENOENT on the first memory file.
+ */
+
 import { localPathForWirePath, resolveStoreRoot } from './store-root.js';
 import { mergeSessionBuffers } from './session-plan.js';
 import { kindForPath } from './snapshot.js';
-import { hashFiles } from './hashing.js';
+import { hashFiles, hashWirePaths } from './hashing.js';
 import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint } from './fingerprint.js';
 import type { RemoteManifestEntry } from './remote-manifest.js';
 import { buildPlan, buildPreview, getPreview, getPreviewDirection, deletePreview, storePreview } from './sync-plan.js';
@@ -187,6 +194,11 @@ export class SyncService {
    * sessions/<cwd-hash>/<id>/session.jsonl.zstd) as relative paths, sorted.
    * Only content that matches the eligible contract is ever read or hashed.
    */
+  /** The two roots a wire path can resolve to. */
+  hashRoots(): { storeRoot: string; localDsh: string } {
+    return { storeRoot: this.storeRoot, localDsh: this.localDsh };
+  }
+
   /** Map a wire path to its local file, through the resolved store root. */
   localPathForWirePath(wirePath: string): string {
     return localPathForWirePath(wirePath, { storeRoot: this.storeRoot, localDsh: this.localDsh });
@@ -393,7 +405,7 @@ export class SyncService {
       }
     }
     let hashedCount = 0;
-    const staleHashes = await hashFiles(fsMod, this.localDsh, stale, {
+    const staleHashes = await hashWirePaths(fsMod, this.hashRoots(), stale, {
       onFile: (h) => {
         hashedCount++;
         progress('hashing', hashedCount, stale.length, h.path);
@@ -844,7 +856,7 @@ export class SyncService {
     }
     if (stale.length > 0) {
       let i = 0;
-      const hashed = await hashFiles(fsMod, this.localDsh, stale, {
+      const hashed = await hashWirePaths(fsMod, this.hashRoots(), stale, {
         onFile: (h) => {
           i++;
           onProgress?.(i, stale.length, h.path);

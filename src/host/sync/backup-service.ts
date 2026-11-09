@@ -10,7 +10,7 @@ import * as nodeFs from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { normalizeEligiblePath } from './validation.js';
-import { hashFiles } from './hashing.js';
+import { hashFiles, hashWirePaths } from './hashing.js';
 import { localPathForWirePath, resolveStoreRoot } from './store-root.js';
 import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint } from './fingerprint.js';
 import type { S3ObjectStore } from './s3-object-store.js';
@@ -150,7 +150,7 @@ export class BackupService {
         stale.push(rel);
       }
     }
-    const hashed = await hashFiles(fsMod, this.opts.localDsh, stale);
+    const hashed = await hashWirePaths(fsMod, { storeRoot: this.resolveStoreRoot(), localDsh: this.opts.localDsh }, stale);
     for (const f of hashed) {
       local.push({ path: f.path, sha256: f.sha256, size: f.size });
       try {

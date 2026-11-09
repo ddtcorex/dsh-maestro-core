@@ -56,3 +56,36 @@ export async function hashFiles(
   await Promise.all(workers);
   return results.sort((a, b) => a.path.localeCompare(b.path));
 }
+/**
+ * Hash wire paths that live under two different roots.
+ *
+ * After the store move `maestro-memory/...` is under the store root and `sessions/...`
+ * under the DSH home, so one `hashFiles(root, paths)` call cannot cover a mixed list.
+ * The wire path is restored on the way out, because every caller reports wire paths.
+ */
+export async function hashWirePaths(
+  fs: any,
+  roots: { storeRoot: string; localDsh: string },
+  wirePaths: string[],
+  opts: { onFile?: (h: HashOutcome) => void } = {},
+): Promise<HashOutcome[]> {
+  const out: HashOutcome[] = [];
+  const groups = new Map<string, string[]>();
+  for (const wire of wirePaths) {
+    const root = wire.startsWith('maestro-memory/') ? roots.storeRoot : roots.localDsh;
+    const bucket = groups.get(root);
+    if (bucket) bucket.push(wire);
+    else groups.set(root, [wire]);
+  }
+  for (const [root, wires] of groups) {
+    const rel = wires.map((w) => (w.startsWith('maestro-memory/') ? w.slice('maestro-memory/'.length) : w));
+    const hashed = await hashFiles(fs, root, rel);
+    for (const entry of hashed) {
+      const wire = root === roots.storeRoot ? `maestro-memory/${entry.path}` : entry.path;
+      const outcome = { ...entry, path: wire };
+      opts.onFile?.(outcome as HashOutcome);
+      out.push(outcome as HashOutcome);
+    }
+  }
+  return out;
+}
