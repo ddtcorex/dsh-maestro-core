@@ -324,6 +324,29 @@ export class SyncService {
     }
   }
 
+  /**
+   * Refuse a peer that still keeps its store inside the DSH home.
+   *
+   * The wire paths are the same on both sides, so a mixed pair writes into a directory
+   * the upgraded machine no longer reads: the transfer succeeds and the memories are
+   * invisible. The marker is the only signal available before the transfer starts.
+   */
+  assertPeerMoved(remotePaths: string[]): void {
+    // Only meaningful once this machine has moved: while our own store still sits inside
+    // the DSH home, the peer's layout is the one that matches and there is nothing to
+    // protect against.
+    if (this.storeRoot === path.join(this.localDsh, 'maestro-memory')) return;
+    const hasMemory = remotePaths.some((p) => p.startsWith('maestro-memory/'));
+    const hasMarker = remotePaths.includes('maestro-memory/.maestro-memory/migrated-v5.json');
+    if (hasMemory && !hasMarker) {
+      throw syncFailure(
+        'snapshot',
+        'PEER_NOT_MOVED',
+        'the peer still keeps its store inside the DSH home; upgrade maestro-memory there and restart it before syncing',
+      );
+    }
+  }
+
   private async snapshotBoth(opts: { scope?: SyncScope; sessionsCountOnly?: boolean; onProgress?: (p: SyncProgress) => void; shouldStop?: () => boolean } = {}): Promise<{
     target: RemoteTarget;
     localSnapshots: FileSnapshot[];
@@ -346,6 +369,7 @@ export class SyncService {
     const inScope = (p: string): boolean => opts.scope !== 'memory' || !p.startsWith('sessions/');
     const localPaths = this.listLocalFiles().filter(inScope);
     const remoteManifest = (await this.transport.manifest(target)).filter((e) => inScope(e.path));
+    this.assertPeerMoved(remoteManifest.map((e) => e.path));
     stop();
     const remoteSnapshots = remoteManifest.map((e) => ({ path: e.path, sha256: e.sha256, size: e.size, kind: kindForPath(e.path) }));
     const remoteSet = new Set(remoteManifest.map((e) => e.path));
