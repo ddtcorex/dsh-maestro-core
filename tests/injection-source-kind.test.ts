@@ -5,7 +5,7 @@ import { warnCoreToolLoss } from '../src/host/resume-tools.js'
 
 // Messages this plugin injects into a session are machine-initiated. Claiming
 // `kind: 'user'` made them indistinguishable from a human prompt — including to
-// dsh-maestro-memory's write guard, which documents that plugin-initiated turns
+// maestro-memory's write guard, which documents that plugin-initiated turns
 // carry no per-turn write duty and can only honour that if the producer says so.
 // A bare 'plugin' is not an option: session format v4 rejects it outright.
 describe('supervisor message attribution', () => {

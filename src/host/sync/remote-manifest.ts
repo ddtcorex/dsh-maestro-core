@@ -16,6 +16,21 @@ export interface RemoteManifestEntry {
   mtimeSec: number;
 }
 
+/**
+ * Raised when the peer has not moved its store to the 4.0 root yet.
+ *
+ * Before this guard the peer's `find` simply matched nothing, the plan read as
+ * "the peer has no memory", and the next push would have looked like the first
+ * one. A named refusal is worth more than a silent empty inventory.
+ */
+export class StoreNotMigratedError extends Error {
+  readonly code = 'STORE_NOT_MIGRATED'
+  constructor(readonly remotePath: string) {
+    super(`remote store not migrated: ${remotePath} has no migrated-v4 marker; run the new build on that machine first`)
+    this.name = 'StoreNotMigratedError'
+  }
+}
+
 export function buildRemoteManifestScript(dshRoot: string): string {
   // Fixed script; dshRoot is the validated absolute root (same trust rule as transport.list).
   // Cache-aware, READ-ONLY (spec §4.7 clarification, decision C): it consults
@@ -30,7 +45,10 @@ export function buildRemoteManifestScript(dshRoot: string): string {
   // inside a `do...done` one-liner break bash's parser (verified 2026-09-02).
   const cache = remoteCachePath(dshRoot);
   return [
-    `find ${dshRoot}/dsh-maestro-memory ${dshRoot}/sessions`,
+    // Preflight sentinel: no 4.0 marker means the peer still holds the old
+    // root, so an empty inventory must not be mistaken for an empty store.
+    `if [ ! -f ${dshRoot}/maestro-memory/.maestro-memory/migrated-v4 ] && [ -d ${dshRoot}/dsh-maestro-memory ]; then printf 'STORE_NOT_MIGRATED\\t0\\t0\\t%s\\0' ${dshRoot}/dsh-maestro-memory; exit 0; fi;`,
+    `find ${dshRoot}/maestro-memory ${dshRoot}/sessions`,
     `\\( -name node_modules -o -name .git -o -name .supervisor -o -name profiles \\) -prune -o -type f -print0`,
     `| xargs -0 stat --printf='%i %s %.Y %.Z\\t%n\\n' 2>/dev/null`,
     `| awk -F '\\t' -v root='${dshRoot}/' -v cachefile='${cache}' 'BEGIN{while((getline line < cachefile) > 0){if(line=="")continue; m=split(line,a,"\\t"); if(m>=6){c[a[1]]=(a[2]" "a[3]" "a[4]" "a[5])"\\t"a[6]"\\t"a[3]"\\t"a[4];}} close(cachefile);} {st=$1; rel=$2; sub(root,"",rel); if(rel in c){split(c[rel],e,"\\t"); if(e[1]==st){print "H\\t"rel"\\t"e[2]"\\t"e[3]"\\t"e[4]; next;}} print "M\\t"rel"\\t"st;}'`,
@@ -54,6 +72,9 @@ export function parseRemoteManifest(buf: Buffer): RemoteManifestEntry[] {
   const parts = buf.toString('utf-8').split('\0');
   for (const part of parts) {
     if (!part) continue;
+    if (part.startsWith('STORE_NOT_MIGRATED\t')) {
+      throw new StoreNotMigratedError(part.split('\t').slice(3).join('\t'));
+    }
     const [sha, sizeRaw, mtimeRaw, ...rest] = part.split('\t');
     const p = rest.join('\t');
     const size = Number(sizeRaw);

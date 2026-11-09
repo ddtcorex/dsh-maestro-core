@@ -171,7 +171,7 @@ export class SyncService {
   }
 
   /**
-   * Local eligible files (dsh-maestro-memory/*.md, dsh-maestro-memory/SUGGESTIONS.jsonl,
+   * Local eligible files (maestro-memory/*.md, maestro-memory/SUGGESTIONS.jsonl,
    * sessions/<cwd-hash>/<id>/session.jsonl.zstd) as relative paths, sorted.
    * Only content that matches the eligible contract is ever read or hashed.
    */
@@ -242,6 +242,36 @@ export class SyncService {
    * re-hashed at write time (see apply), so a stale cache can never publish a
    * wrong mutation target.
    */
+  /**
+   * The 4.0 rename moved the store root. A machine still on the old root would
+   * inventory zero memory files, which reads exactly like "nothing to sync".
+   * Refuse instead: the marker is written by the plugin's boot migration.
+   */
+  private assertLocalStoreMigrated(): void {
+    const probe = (this.fs as any)?.existsSync;
+    if (typeof probe !== 'function') return;
+    const current = path.join(this.localDsh, 'maestro-memory');
+    const legacy = path.join(this.localDsh, 'dsh-maestro-memory');
+    let currentExists = false;
+    let legacyExists = false;
+    try {
+      currentExists = probe.call(this.fs, current);
+      legacyExists = probe.call(this.fs, legacy);
+    } catch {
+      return;
+    }
+    // Only the half-migrated shape is refused: the old root is still there and
+    // the new one is absent. A fresh DSH_HOME has neither, and a migrated one
+    // has the new root, so both stay usable.
+    if (!currentExists && legacyExists) {
+      throw syncFailure(
+        'snapshot',
+        'STORE_NOT_MIGRATED',
+        `local store is still at ${legacy}; run the current build on this machine (its boot migration moves it) before syncing`,
+      );
+    }
+  }
+
   private async snapshotBoth(opts: { scope?: SyncScope; sessionsCountOnly?: boolean; onProgress?: (p: SyncProgress) => void; shouldStop?: () => boolean } = {}): Promise<{
     target: RemoteTarget;
     localSnapshots: FileSnapshot[];
@@ -250,6 +280,7 @@ export class SyncService {
     remoteContents: Map<string, Buffer>;
     cleanup: () => void;
   }> {
+    this.assertLocalStoreMigrated();
     const progress = (phase: SyncProgress['phase'], current: number, total: number, file?: string) => opts.onProgress?.({ phase, current, total, file });
     const stop = () => {
       if (opts.shouldStop?.()) throw syncFailure('snapshot', 'CANCELLED', 'preview cancelled');
@@ -258,7 +289,7 @@ export class SyncService {
     const fsMod = this.fs;
     const target = await this.requireTarget();
     stop();
-    // Scope filter: 'memory' covers dsh-maestro-memory only and skips the
+    // Scope filter: 'memory' covers maestro-memory only and skips the
     // live session logs; undefined/'all' preserves the legacy full inventory.
     const inScope = (p: string): boolean => opts.scope !== 'memory' || !p.startsWith('sessions/');
     const localPaths = this.listLocalFiles().filter(inScope);

@@ -350,7 +350,7 @@ describe('log scan scoping (2026-09-13 incident log shape)', () => {
     const log = [
       `${BOOT_BOUNDARY_MARKER} ${new Date(BOUNDARY_AT).toISOString()}`,
       'dsh web: http://127.0.0.1:3082/?token=this-boot',
-      "ERR_MODULE_NOT_FOUND: Cannot find module '/home/example/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-memory/lib/index.js'",
+      "ERR_MODULE_NOT_FOUND: Cannot find module '/home/example/.dsh/profiles/web/node_modules/@ddtcorex/maestro-memory/lib/index.js'",
     ].join('\n')
     const res = await pollHealth({
       fetch: async () => ({ status: 200, text: async () => 'ok' }) as any,

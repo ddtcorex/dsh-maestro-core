@@ -6,7 +6,7 @@ import { clearPreviews } from '../../src/host/sync/sync-plan.js';
 import { createFakeRemote, makeTempRoots } from './helpers/fake-transport.js';
 import { makeSessionBuffer, sessionHeader } from './helpers/zstd.js';
 
-const MD = 'dsh-maestro-memory/daily/2026-09-09.md';
+const MD = 'maestro-memory/daily/2026-09-09.md';
 const SESSION = 'sessions/abc123/def456/session.jsonl.zstd';
 
 const stubRunner: any = {
@@ -99,7 +99,7 @@ describe('scope filter', () => {
   it("memory scope excludes sessions/ paths from the plan", async () => {
     const { localRoot, cleanup } = makeTempRoots('scope-memory-');
     try {
-      fs.mkdirSync(path.join(localRoot, 'dsh-maestro-memory', 'daily'), { recursive: true });
+      fs.mkdirSync(path.join(localRoot, 'maestro-memory', 'daily'), { recursive: true });
       fs.writeFileSync(path.join(localRoot, MD), 'a\n§\nlocal\n');
       const header = sessionHeader();
       fs.mkdirSync(path.join(localRoot, 'sessions', 'abc123', 'def456'), { recursive: true });
@@ -124,7 +124,7 @@ describe('scope filter', () => {
   it("all scope keeps sessions/ paths in the plan", async () => {
     const { localRoot, cleanup } = makeTempRoots('scope-all-');
     try {
-      fs.mkdirSync(path.join(localRoot, 'dsh-maestro-memory', 'daily'), { recursive: true });
+      fs.mkdirSync(path.join(localRoot, 'maestro-memory', 'daily'), { recursive: true });
       fs.writeFileSync(path.join(localRoot, MD), 'a\n§\nlocal\n');
       const header = sessionHeader();
       fs.mkdirSync(path.join(localRoot, 'sessions', 'abc123', 'def456'), { recursive: true });

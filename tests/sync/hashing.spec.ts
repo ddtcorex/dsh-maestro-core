@@ -12,13 +12,13 @@ describe('hashFiles', () => {
   it('hashes all paths, sorted, with correct sha+size', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hash-'));
     try {
-      fs.mkdirSync(path.join(root, 'dsh-maestro-memory', 'daily'), { recursive: true });
-      const f1 = path.join(root, 'dsh-maestro-memory', 'b.md');
+      fs.mkdirSync(path.join(root, 'maestro-memory', 'daily'), { recursive: true });
+      const f1 = path.join(root, 'maestro-memory', 'b.md');
       fs.writeFileSync(f1, 'bbb');
-      const f2 = path.join(root, 'dsh-maestro-memory', 'a.md');
+      const f2 = path.join(root, 'maestro-memory', 'a.md');
       fs.writeFileSync(f2, 'aaa');
-      const out = await hashFiles(fs, root, ['dsh-maestro-memory/b.md', 'dsh-maestro-memory/a.md']);
-      expect(out.map((h) => h.path)).toEqual(['dsh-maestro-memory/a.md', 'dsh-maestro-memory/b.md']);
+      const out = await hashFiles(fs, root, ['maestro-memory/b.md', 'maestro-memory/a.md']);
+      expect(out.map((h) => h.path)).toEqual(['maestro-memory/a.md', 'maestro-memory/b.md']);
       expect(out[0]!.sha256).toBe(sha(Buffer.from('aaa')));
       expect(out[1]!.size).toBe(3);
     } finally {
@@ -29,12 +29,12 @@ describe('hashFiles', () => {
   it('reports progress per file and hashes a large file correctly', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hash2-'));
     try {
-      fs.mkdirSync(path.join(root, 'dsh-maestro-memory'));
-      const big = path.join(root, 'dsh-maestro-memory', 'big.md');
+      fs.mkdirSync(path.join(root, 'maestro-memory'));
+      const big = path.join(root, 'maestro-memory', 'big.md');
       fs.writeFileSync(big, Buffer.alloc(2 * 1024 * 1024, 0x61));
       const ticks: string[] = [];
-      const out = await hashFiles(fs, root, ['dsh-maestro-memory/big.md'], { onFile: (h) => ticks.push(h.path) });
-      expect(ticks).toEqual(['dsh-maestro-memory/big.md']);
+      const out = await hashFiles(fs, root, ['maestro-memory/big.md'], { onFile: (h) => ticks.push(h.path) });
+      expect(ticks).toEqual(['maestro-memory/big.md']);
       expect(out[0]!.size).toBe(2 * 1024 * 1024);
       expect(sha(fs.readFileSync(big))).toBe(out[0]!.sha256);
     } finally {
