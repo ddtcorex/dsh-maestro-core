@@ -71,7 +71,8 @@ async function autoFixKnownPatterns(err: string, exec: (c: string, o?: any) => s
     return
   }
   if (err.includes('ERR_MODULE_NOT_FOUND') || err.includes('Cannot find module')) {
-    const candidates = ['dsh-maestro-core', 'dsh-maestro-observe', 'dsh-maestro-memory']
+    // memory left the workspace on 2026-11-09 for ~/Work/htdocs/maestro-memory
+    const candidates = ['dsh-maestro-core', 'dsh-maestro-observe']
     for (const pkg of candidates) {
       try {
         const p = `${harnessRoot}/packages/${pkg}/lib/index.js`

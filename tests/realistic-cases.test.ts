@@ -28,7 +28,7 @@ const cases = [
   },
   {
     id: 'B1-plugin-lib-missing',
-    log: 'Error: Cannot find module \'/home/user/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-memory/lib/index.js\'\nERR_MODULE_NOT_FOUND',
+    log: 'Error: Cannot find module \'/home/user/.dsh/profiles/web/node_modules/@ddtcorex/maestro-memory/lib/index.js\'\nERR_MODULE_NOT_FOUND',
     fetchStatus: 500,
     expectUp: false,
     expectDegraded: false,
@@ -36,7 +36,7 @@ const cases = [
   },
   {
     id: 'B2-cordis-channel-missing-slash',
-    log: 'Error: assertChannel failed: channel must match /^\\/[A-Za-z0-9._~-]+$/ — got "dsh-maestro-memory" (missing leading /)',
+    log: 'Error: assertChannel failed: channel must match /^\\/[A-Za-z0-9._~-]+$/ — got "maestro-memory" (missing leading /)',
     fetchStatus: 500,
     expectUp: false,
     expectDegraded: false,
@@ -44,7 +44,7 @@ const cases = [
   },
   {
     id: 'B3-allowBuilds-missing',
-    log: 'ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @ddtcorex/dsh-maestro-memory — allowBuilds.esbuild is not set',
+    log: 'ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @ddtcorex/maestro-memory — allowBuilds.esbuild is not set',
     fetchStatus: 500,
     expectUp: false,
     expectDegraded: false,
