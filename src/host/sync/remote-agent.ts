@@ -147,7 +147,18 @@ while IFS= read -r line; do
   esac
   staged="$stage_dir/$rel"
   [ -f "$staged" ] || { echo "maestro-sync-commit: missing staged artifact: $rel" >&2; fail=1; continue; }
-  target="$dsh_root/$rel"
+  # The peer's store may live outside its DSH home since 5.0. Memory wire paths land in
+  # whichever store root that peer actually reads; everything else stays under the DSH
+  # home. Resolved once per commit from the peer's own marker, never assumed.
+  case "$rel" in
+    maestro-memory/*)
+      if [ -f "$HOME/.maestro-memory/.maestro-memory/migrated-v5.json" ]; then
+        target="$HOME/.maestro-memory/\${rel#maestro-memory/}"
+      else
+        target="$dsh_root/$rel"
+      fi ;;
+    *) target="$dsh_root/$rel" ;;
+  esac
   if [ "$expected" = "absent" ]; then
     if [ -e "$target" ]; then
       echo "CONCURRENT_MODIFICATION: $rel (target exists, expected absent)" >&2

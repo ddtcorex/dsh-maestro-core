@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.15.0] - 2026-11-09
+
+### Added
+
+- `resolveStoreRoot` in `src/host/sync/store-root.ts` mirrors the plugin's rules, and
+  `tests/sync/store-root-parity.spec.ts` runs the shared fixture against it so the two
+  implementations cannot drift silently.
+- `PEER_NOT_MOVED`: sync refuses a peer whose store has not moved, because the wire paths
+  are unchanged and a mixed pair would otherwise write into a dead directory and report
+  success with zero files.
+
+### Fixed
+
+- Store reads and writes map through the resolved root (`localPathForWirePath`), including
+  pull publish and restore in place. A missed write site recreated `~/.dsh/maestro-memory`
+  and made every later boot refuse.
+- Backup walks the resolved store root, and restore in place lands there.
+
 ## [0.14.0] - 2026-10-28
 
 ### Changed

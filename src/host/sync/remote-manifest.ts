@@ -23,6 +23,24 @@ export interface RemoteManifestEntry {
  * "the peer has no memory", and the next push would have looked like the first
  * one. A named refusal is worth more than a silent empty inventory.
  */
+/**
+ * Raised when the peer has moved its store out of the DSH home.
+ *
+ * Sync still addresses memory as `<dshRoot>/maestro-memory` on the sending side, so a
+ * push to a moved peer writes into the directory that peer no longer reads, and the
+ * transfer reports success. Until the remote scripts learn a second base path, the only
+ * honest thing is to refuse: a named refusal is worth more than memories that vanish.
+ */
+export class PeerStoreMovedError extends Error {
+  readonly code = 'PEER_STORE_MOVED'
+  constructor(readonly remotePath: string) {
+    super(
+      `peer store moved to ${remotePath}: this sync can only write <dshRoot>/maestro-memory, so publishing would be lost. Upgrade this machine's sync before transferring`,
+    )
+    this.name = 'PeerStoreMovedError'
+  }
+}
+
 export class StoreNotMigratedError extends Error {
   readonly code = 'STORE_NOT_MIGRATED'
   constructor(readonly remotePath: string) {
@@ -48,7 +66,11 @@ export function buildRemoteManifestScript(dshRoot: string): string {
     // Preflight sentinel: no 4.0 marker means the peer still holds the old
     // root, so an empty inventory must not be mistaken for an empty store.
     `if [ ! -f ${dshRoot}/maestro-memory/.maestro-memory/migrated-v4 ] && [ -d ${dshRoot}/dsh-maestro-memory ]; then printf 'STORE_NOT_MIGRATED\\t0\\t0\\t%s\\0' ${dshRoot}/dsh-maestro-memory; exit 0; fi;`,
-    `find ${dshRoot}/maestro-memory ${dshRoot}/sessions`,
+    // 5.0 moved the store out of the DSH home on the peer. Its `find` below would match
+    // nothing and read as "the peer has no memory", exactly the failure the v4 sentinel
+    // above exists to prevent.
+    `mem_root=${dshRoot}/maestro-memory; if [ -f "$HOME/.maestro-memory/.maestro-memory/migrated-v5.json" ]; then mem_root="$HOME/.maestro-memory"; fi;`,
+    `find "$mem_root" ${dshRoot}/sessions`,
     `\\( -name node_modules -o -name .git -o -name .supervisor -o -name profiles \\) -prune -o -type f -print0`,
     `| xargs -0 stat --printf='%i %s %.Y %.Z\\t%n\\n' 2>/dev/null`,
     `| awk -F '\\t' -v root='${dshRoot}/' -v cachefile='${cache}' 'BEGIN{while((getline line < cachefile) > 0){if(line=="")continue; m=split(line,a,"\\t"); if(m>=6){c[a[1]]=(a[2]" "a[3]" "a[4]" "a[5])"\\t"a[6]"\\t"a[3]"\\t"a[4];}} close(cachefile);} {st=$1; rel=$2; sub(root,"",rel); if(rel in c){split(c[rel],e,"\\t"); if(e[1]==st){print "H\\t"rel"\\t"e[2]"\\t"e[3]"\\t"e[4]; next;}} print "M\\t"rel"\\t"st;}'`,
@@ -59,7 +81,8 @@ export function buildRemoteManifestScript(dshRoot: string): string {
     `printf '%s\\t%s\\t%s\\t%s\\0' "$sha" "$size" "$mtime" "$rel";`,
     `else`,
     `rel=\${rest%%$'\\t'*}; st=\${rest#*$'\\t'};`,
-    `sha=$(sha256sum -- "${dshRoot}/$rel" 2>/dev/null | awk '{print $1}');`,
+    `case "$rel" in maestro-memory/*) if [ "$mem_root" != "${dshRoot}/maestro-memory" ]; then full="$mem_root/\${rel#maestro-memory/}"; else full="${dshRoot}/$rel"; fi;; *) full="${dshRoot}/$rel";; esac;`,
+    `sha=$(sha256sum -- "$full" 2>/dev/null | awk '{print $1}');`,
     `set -- $st;`,
     `printf '%s\\t%s\\t%s\\t%s\\0' "$sha" "$2" "$3" "$rel";`,
     `fi;`,
@@ -74,6 +97,9 @@ export function parseRemoteManifest(buf: Buffer): RemoteManifestEntry[] {
     if (!part) continue;
     if (part.startsWith('STORE_NOT_MIGRATED\t')) {
       throw new StoreNotMigratedError(part.split('\t').slice(3).join('\t'));
+    }
+    if (part.startsWith('PEER_STORE_MOVED\t')) {
+      throw new PeerStoreMovedError(part.split('\t').slice(3).join('\t'));
     }
     const [sha, sizeRaw, mtimeRaw, ...rest] = part.split('\t');
     const p = rest.join('\t');

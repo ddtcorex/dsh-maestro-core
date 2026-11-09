@@ -1,0 +1,27 @@
+[
+  {
+    "name": "production shape: DSH_HOME equals <home>/.dsh",
+    "opts": { "env": { "DSH_HOME": "/home/u/.dsh" }, "home": "/home/u" },
+    "expected": { "root": "/home/u/.maestro-memory", "mode": "default" }
+  },
+  {
+    "name": "no DSH_HOME at all",
+    "opts": { "env": {}, "home": "/home/u" },
+    "expected": { "root": "/home/u/.maestro-memory", "mode": "default" }
+  },
+  {
+    "name": "isolated dry-boot home",
+    "opts": { "env": { "DSH_HOME": "/tmp/dry-boot" }, "home": "/home/u" },
+    "expected": { "root": "/tmp/dry-boot/maestro-memory", "mode": "isolated" }
+  },
+  {
+    "name": "MAESTRO_MEMORY_DIR beats the mode",
+    "opts": { "env": { "MAESTRO_MEMORY_DIR": "/env-store", "DSH_HOME": "/tmp/x" }, "home": "/home/u" },
+    "expected": { "root": "/env-store", "mode": "env" }
+  },
+  {
+    "name": "config memoryDir beats everything",
+    "opts": { "memoryDir": "/custom", "env": { "MAESTRO_MEMORY_DIR": "/env-store" }, "home": "/home/u" },
+    "expected": { "root": "/custom", "mode": "configured" }
+  }
+]

@@ -2,8 +2,21 @@ import type { RemoteTarget } from './sync-types.js';
 
 export const HOST_RE = /^(?!-)[A-Za-z0-9._@:-]+$/;
 export const ABSOLUTE_RE = /^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+$/;
+// `migrated-v5.json` is the store-move marker: a peer that carries it has moved its
+// store out of the DSH home. Sync needs to see it to refuse a half-upgraded pair instead
+// of publishing into a directory the peer no longer reads.
 export const ELIGIBLE_RE =
-  /^(?:maestro-memory\/(?!.*\.bak\.)[A-Za-z0-9._\/-]+\.md|maestro-memory\/SUGGESTIONS\.jsonl|sessions\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/session\.jsonl\.zstd|sessions\/[A-Za-z0-9._\/-]+\.jsonl\.zstd)$/;
+  /^(?:maestro-memory\/(?!.*\.bak\.)[A-Za-z0-9._\/-]+\.md|maestro-memory\/SUGGESTIONS\.jsonl|maestro-memory\/\.maestro-memory\/migrated-v5\.json|sessions\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/session\.jsonl\.zstd|sessions\/[A-Za-z0-9._\/-]+\.jsonl\.zstd)$/;
+
+/** True when a wire path is eligible, without throwing at the caller. */
+export function isEligiblePath(value: string): boolean {
+  try {
+    normalizeEligiblePath(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Backwards-compatible aliases required by spec
 export const HOST = HOST_RE;

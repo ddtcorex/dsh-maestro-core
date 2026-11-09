@@ -18,9 +18,17 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { mergeDelimited } from './merge.js';
+
+/**
+ * Hash a mixed list of wire paths, each group against the root it lives under.
+ * Before the store moved, one root covered everything; it no longer does, and hashing
+ * `maestro-memory/...` under the DSH home fails with ENOENT on the first memory file.
+ */
+
+import { localPathForWirePath, resolveStoreRoot } from './store-root.js';
 import { mergeSessionBuffers } from './session-plan.js';
 import { kindForPath } from './snapshot.js';
-import { hashFiles } from './hashing.js';
+import { hashFiles, hashWirePaths } from './hashing.js';
 import { loadIndex, saveIndex, probeIndex, matchesStat, statFingerprint } from './fingerprint.js';
 import type { RemoteManifestEntry } from './remote-manifest.js';
 import { buildPlan, buildPreview, getPreview, getPreviewDirection, deletePreview, storePreview } from './sync-plan.js';
@@ -86,6 +94,8 @@ export interface PreviewResult extends SyncPreview {
 
 export interface SyncServiceOpts {
   localDsh?: string;
+  /** Resolved memory store root; defaults to the same rules the plugin uses. */
+  storeRoot?: string;
   remote?: string;
   remoteDsh?: string;
   previewDir?: string;
@@ -101,6 +111,7 @@ function syncFailure(phase: SyncFailure['phase'], code: string, detail: string, 
 
 export class SyncService {
   localDsh: string;
+  storeRoot: string;
   remote: string;
   remoteDsh: string;
   previewDir: string;
@@ -111,6 +122,14 @@ export class SyncService {
 
   constructor(opts: SyncServiceOpts = {}) {
     this.localDsh = opts.localDsh || process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+    // The store can live outside the DSH home. Wire paths stay `maestro-memory/...`,
+    // so every site that touches disk maps through this root, never through localDsh.
+    // A caller that pins `localDsh` pins the whole machine state, so the store is
+    // resolved against it: a temp home is isolated by construction, and production's
+    // own home is not, which is exactly the plugin's rule.
+    this.storeRoot =
+      opts.storeRoot ??
+      resolveStoreRoot({ env: { ...process.env, DSH_HOME: opts.localDsh ?? process.env.DSH_HOME } }).root;
     this.remote = opts.remote || process.env.REMOTE_HOST || process.env.REMOTE || 'kai@ssh.ddtcorex.com';
     this.remoteDsh = opts.remoteDsh || process.env.REMOTE_DSH_PATH || '~/.dsh';
     // Sidecar preview store shared by every CLI process (preview -> separate apply run).
@@ -175,8 +194,22 @@ export class SyncService {
    * sessions/<cwd-hash>/<id>/session.jsonl.zstd) as relative paths, sorted.
    * Only content that matches the eligible contract is ever read or hashed.
    */
+  /** The two roots a wire path can resolve to. */
+  hashRoots(): { storeRoot: string; localDsh: string } {
+    return { storeRoot: this.storeRoot, localDsh: this.localDsh };
+  }
+
+  /** Map a wire path to its local file, through the resolved store root. */
+  localPathForWirePath(wirePath: string): string {
+    return localPathForWirePath(wirePath, { storeRoot: this.storeRoot, localDsh: this.localDsh });
+  }
+
   listLocalFiles(): string[] {
     const root = this.localDsh;
+    // The store may live outside the DSH home, so its files are collected from the
+    // resolved root and labelled with the wire prefix. Sessions stay under the DSH
+    // home; they are harness data by definition.
+    const storeRootDiffers = this.storeRoot !== path.join(this.localDsh, 'maestro-memory');
     const result: string[] = [];
     const fsMod = this.fs;
     const walk = (dir: string, base: string) => {
@@ -214,7 +247,24 @@ export class SyncService {
     } catch {
       return [];
     }
-    walk(root, '');
+    if (!storeRootDiffers) {
+      // Store inside the DSH home: one walk covers everything, exactly as before.
+      walk(root, '');
+    } else {
+      // Store elsewhere: walk the DSH home for sessions and harness state, skipping the
+      // path the store would occupy, then walk the store itself under its wire prefix.
+      const harnessOwned: string[] = [];
+      const push = result.push.bind(result);
+      result.push = (...items: string[]) => harnessOwned.push(...items) as unknown as number;
+      walk(root, '');
+      result.push = push;
+      for (const wire of harnessOwned) {
+        const normalised = wire.split(path.sep).join('/');
+        if (normalised === 'maestro-memory' || normalised.startsWith('maestro-memory/')) continue;
+        result.push(wire);
+      }
+      walk(this.storeRoot, 'maestro-memory');
+    }
     return [...new Set(
       result
         .map((p) => p.split(path.sep).join('/'))
@@ -250,8 +300,9 @@ export class SyncService {
   private assertLocalStoreMigrated(): void {
     const probe = (this.fs as any)?.existsSync;
     if (typeof probe !== 'function') return;
-    const current = path.join(this.localDsh, 'maestro-memory');
+    const current = this.storeRoot;
     const legacy = path.join(this.localDsh, 'dsh-maestro-memory');
+    const v4 = path.join(this.localDsh, 'maestro-memory');
     let currentExists = false;
     let legacyExists = false;
     try {
@@ -263,11 +314,47 @@ export class SyncService {
     // Only the half-migrated shape is refused: the old root is still there and
     // the new one is absent. A fresh DSH_HOME has neither, and a migrated one
     // has the new root, so both stay usable.
+    // A store still at a legacy root would inventory zero files through the new root,
+    // which reads exactly like "nothing to sync". Refuse instead.
+    let v4Exists = false;
+    try {
+      v4Exists = current !== v4 && probe.call(this.fs, v4);
+    } catch {}
     if (!currentExists && legacyExists) {
       throw syncFailure(
         'snapshot',
         'STORE_NOT_MIGRATED',
         `local store is still at ${legacy}; run the current build on this machine (its boot migration moves it) before syncing`,
+      );
+    }
+    if (!currentExists && v4Exists) {
+      throw syncFailure(
+        'snapshot',
+        'STORE_NOT_MIGRATED',
+        `local store is still at ${v4}; install the current build (its boot migration moves it to ${current}) before syncing`,
+      );
+    }
+  }
+
+  /**
+   * Refuse a peer that still keeps its store inside the DSH home.
+   *
+   * The wire paths are the same on both sides, so a mixed pair writes into a directory
+   * the upgraded machine no longer reads: the transfer succeeds and the memories are
+   * invisible. The marker is the only signal available before the transfer starts.
+   */
+  assertPeerMoved(remotePaths: string[]): void {
+    // Only meaningful once this machine has moved: while our own store still sits inside
+    // the DSH home, the peer's layout is the one that matches and there is nothing to
+    // protect against.
+    if (this.storeRoot === path.join(this.localDsh, 'maestro-memory')) return;
+    const hasMemory = remotePaths.some((p) => p.startsWith('maestro-memory/'));
+    const hasMarker = remotePaths.includes('maestro-memory/.maestro-memory/migrated-v5.json');
+    if (hasMemory && !hasMarker) {
+      throw syncFailure(
+        'snapshot',
+        'PEER_NOT_MOVED',
+        `the peer ${this.remote ?? 'unknown'} still keeps its store inside its DSH home (memory files present, no migrated-v5.json marker); upgrade maestro-memory on that machine and restart it before syncing`,
       );
     }
   }
@@ -294,6 +381,7 @@ export class SyncService {
     const inScope = (p: string): boolean => opts.scope !== 'memory' || !p.startsWith('sessions/');
     const localPaths = this.listLocalFiles().filter(inScope);
     const remoteManifest = (await this.transport.manifest(target)).filter((e) => inScope(e.path));
+    this.assertPeerMoved(remoteManifest.map((e) => e.path));
     stop();
     const remoteSnapshots = remoteManifest.map((e) => ({ path: e.path, sha256: e.sha256, size: e.size, kind: kindForPath(e.path) }));
     const remoteSet = new Set(remoteManifest.map((e) => e.path));
@@ -306,7 +394,7 @@ export class SyncService {
       const entry = probeIndex(p, index);
       let st: any = null;
       try {
-        st = typeof fsMod.statSync === 'function' ? fsMod.statSync(path.join(this.localDsh, p), { bigint: true } as any) : null;
+        st = typeof fsMod.statSync === 'function' ? fsMod.statSync(this.localPathForWirePath(p), { bigint: true } as any) : null;
       } catch {
         st = null;
       }
@@ -317,7 +405,7 @@ export class SyncService {
       }
     }
     let hashedCount = 0;
-    const staleHashes = await hashFiles(fsMod, this.localDsh, stale, {
+    const staleHashes = await hashWirePaths(fsMod, this.hashRoots(), stale, {
       onFile: (h) => {
         hashedCount++;
         progress('hashing', hashedCount, stale.length, h.path);
@@ -327,7 +415,7 @@ export class SyncService {
     for (const h of staleHashes) {
       localSnapshots.push({ path: h.path, sha256: h.sha256, size: h.size, kind: kindForPath(h.path) });
       try {
-        const st = typeof fsMod.statSync === 'function' ? fsMod.statSync(path.join(this.localDsh, h.path), { bigint: true } as any) : null;
+        const st = typeof fsMod.statSync === 'function' ? fsMod.statSync(this.localPathForWirePath(h.path), { bigint: true } as any) : null;
         if (st) index.entries[h.path] = { ...statFingerprint(st), sha256: h.sha256 };
       } catch {
         // stat races are tolerable — the entry simply misses next run
@@ -353,7 +441,7 @@ export class SyncService {
     const localBufferOf = (rel: string): Buffer | undefined => {
       if (localContents.has(rel)) return localContents.get(rel);
       try {
-        const d = fsMod.readFileSync(path.join(this.localDsh, rel));
+        const d = fsMod.readFileSync(this.localPathForWirePath(rel));
         const buf = Buffer.isBuffer(d) ? Buffer.from(d) : Buffer.from(String(d), 'utf-8');
         localContents.set(rel, buf);
         return buf;
@@ -643,7 +731,7 @@ export class SyncService {
             } else {
               buf = this.mergeBuffer(act, localContents, remoteContents, 'pull');
             }
-            await this.atomicWriteWithBackup(path.join(this.localDsh, act.path), buf);
+            await this.atomicWriteWithBackup(this.localPathForWirePath(act.path), buf);
             committed.push(act.path);
           } catch (e: any) {
             failures.push(syncFailure('publish', e?.code ?? 'PUBLISH_FAILED', String(e?.message ?? e), act.path) as SyncFailure);
@@ -759,7 +847,7 @@ export class SyncService {
       const entry = probeIndex(p, index);
       let st: any = null;
       try {
-        st = typeof fsMod.statSync === 'function' ? fsMod.statSync(path.join(this.localDsh, p), { bigint: true } as any) : null;
+        st = typeof fsMod.statSync === 'function' ? fsMod.statSync(this.localPathForWirePath(p), { bigint: true } as any) : null;
       } catch {
         st = null;
       }
@@ -768,7 +856,7 @@ export class SyncService {
     }
     if (stale.length > 0) {
       let i = 0;
-      const hashed = await hashFiles(fsMod, this.localDsh, stale, {
+      const hashed = await hashWirePaths(fsMod, this.hashRoots(), stale, {
         onFile: (h) => {
           i++;
           onProgress?.(i, stale.length, h.path);
@@ -777,7 +865,7 @@ export class SyncService {
       for (const h of hashed) {
         out.set(h.path, h.sha256);
         try {
-          const st = typeof fsMod.statSync === 'function' ? fsMod.statSync(path.join(this.localDsh, h.path), { bigint: true } as any) : null;
+          const st = typeof fsMod.statSync === 'function' ? fsMod.statSync(this.localPathForWirePath(h.path), { bigint: true } as any) : null;
           if (st) index.entries[h.path] = { ...statFingerprint(st), sha256: h.sha256 };
         } catch {}
       }
