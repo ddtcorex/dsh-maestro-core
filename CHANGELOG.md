@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.15.1] - 2026-11-09
+
+- `status()` reports `storeMigration: 'legacy'` when the local store still sits at an old root, instead of counting zero memory files and looking identical to "nothing to sync".
+- `listLocalFiles` collects the harness-home walk into its own array rather than temporarily replacing `result.push`.
+
 ## [0.15.0] - 2026-11-09
 
 ### Added
