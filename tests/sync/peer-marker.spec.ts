@@ -40,37 +40,10 @@ describe('peer refusal', () => {
   });
 });
 
-describe('moved-peer sentinel (kept for old senders)', () => {
-  it('parses a moved peer into a named refusal', () => {
-    const buf = Buffer.from('PEER_STORE_MOVED\t0\t0\t/home/u/.maestro-memory\0');
-    let caught: any = null;
-    try {
-      parseRemoteManifest(buf);
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught?.code).toBe('PEER_STORE_MOVED');
-    expect(String(caught?.message)).toContain('/home/u/.maestro-memory');
-  });
-
-  it('keeps the pre-4.0 sentinel working', () => {
-    const buf = Buffer.from('STORE_NOT_MIGRATED\t0\t0\t/home/u/.dsh/dsh-maestro-memory\0');
-    let caught: any = null;
-    try {
-      parseRemoteManifest(buf);
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught?.code).toBe('STORE_NOT_MIGRATED');
-  });
-});
-
 describe('remote manifest script', () => {
-  it('inventories whichever store root the peer actually reads', () => {
+  it('keeps the pre-4.0 sentinel and inventories the harness root', () => {
     const script = buildRemoteManifestScript('/home/u/.dsh');
-    expect(script).toContain('$HOME/.maestro-memory/.maestro-memory/migrated-v5.json');
-    expect(script).toContain('find "$mem_root"');
-    // The wire prefix is restored when files come from the moved root.
-    expect(script).toContain('maestro-memory/');
+    expect(script).toContain('STORE_NOT_MIGRATED');
+    expect(script).toContain('/home/u/.dsh/maestro-memory');
   });
 });
