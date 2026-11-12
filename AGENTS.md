@@ -182,8 +182,17 @@ Verify the link:
 ```sh
 ls -l ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core  # → .../packages/dsh-maestro-core
 cat ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core/package.json | grep -A2 '"version"'
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | head -n 5  # window.__ModuleLoader__.load
+
+# Client bundle: the built artifact, then the bytes the host actually serves.
+grep -o 'window.location.reload' ~/.dsh/profiles/web/node_modules/@ddtcorex/dsh-maestro-core/lib/client.js | wc -l  # 2
+TOK=$(grep -o 'token=[A-Za-z0-9_-]*' ~/.dsh/dsh-web.log | tail -1 | cut -d= -f2)
+JAR=$(mktemp); curl -s -c "$JAR" -o /dev/null "http://127.0.0.1:3082/?token=$TOK"
+URL=$(curl -s -b "$JAR" "http://127.0.0.1:3082/" | grep -oE '"@ddtcorex/dsh-maestro-core","url":"[^"]+"' | head -1 | sed -E 's/.*"url":"([^"]+)".*/\1/')
+curl -s -b "$JAR" "http://127.0.0.1:3082/$URL" | grep -o 'window.location.reload' | wc -l  # 2
+rm -f "$JAR"
 ```
+
+**Never curl `/plugins/<package>/client.js`.** The host serves every client bundle through ONE combined URL, `plugins/??<package>/client.js&rev=<hash>`, listed in the root HTML boot payload; the per-package path answers `404` and reads as "the bundle is missing" when it is not (measured on DSH 0.2.2-rc.2, 2026-11-12). Resolve the URL from the payload as above, and count with `grep -o | wc -l` rather than `grep -c`, because the minified bundle is one line.
 
 **Critical pre-flight (AGENTS.md Conventions):** before adding to a live profile's `bundles`, `pnpm build` must succeed **and** a dry-boot on an ephemeral port with isolated `DSH_HOME` must pass. `$DSH_BIN` is the installed `@deepseek-ai/dsh` bin (the systemd templates set `~/.local/share/dsh/current/bin/dsh`):
 
@@ -302,13 +311,13 @@ Never `A inject: ['B']` and `B inject: ['A']` — Cordis will deadlock. Pick one
 
 ### Client bundling
 
-Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `.client-build/*.js` (CommonJS) for the typecheck and the d.ts in `lib/types/client/`, then `scripts/build-client.mjs` esbuild-bundles the ONE entry `src/client/index.tsx` into `lib/client.js` (`window.__ModuleLoader__.load` wrapper). `package.json` `dsh.client` declares `platform: web` + `inject: ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-slots"]` and `exports["./client"]` points to `lib/client.js`. The `ClientModuleRegistry` (`@deepseek-ai/dsh-client-modules`) serves `/plugins/<id>/client.js` from that path. `pnpm build` must run both steps; `lib/client.js` is gitignored, so rebuild locally after pull and before restart.
+Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `.client-build/*.js` (CommonJS) for the typecheck and the d.ts in `lib/types/client/`, then `scripts/build-client.mjs` esbuild-bundles the ONE entry `src/client/index.tsx` into `lib/client.js` (`window.__ModuleLoader__.load` wrapper). `package.json` `dsh.client` declares `platform: web` + `inject: ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-slots"]` and `exports["./client"]` points to `lib/client.js`. The `ClientModuleRegistry` (`@deepseek-ai/dsh-client-modules`) registers `lib/client.js` as a client module and the host serves it through one combined URL per boot, `plugins/??<package>/client.js&rev=<hash>`, listed in the root HTML boot payload; the per-package path `/plugins/<package>/client.js` is not served. `pnpm build` must run both steps; `lib/client.js` is gitignored, so rebuild locally after pull and before restart.
 
 ## Validation
 
 - `pnpm verify` + `pnpm test` green before any success claim (a suite needing `DSH_INTEGRATION=1` stays skipped by default). `test -f lib/index.js && test -f lib/client.js` after build.
 - For daemon changes, manual ephemeral check: `DSH_HOME=$(mktemp -d) "$DSH_BIN" web --port 0` + corrupt `settings.json` → assert report + restart within 10s.
-- For plugin changes, live check: `curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST ...` → `scanned`/`interrupted`, and `findDanglingOpenTurns` full scan finds subagent `b6487e33` within 5m. For client, `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"` → 2, and after `kill` + restart, `fetch HEAD /` polling reloads the page without `F5`.
+- For plugin changes, live check: `curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST ...` → `scanned`/`interrupted`, and `findDanglingOpenTurns` full scan finds subagent `b6487e33` within 5m. For the client bundle, run the artifact + served-bytes check from Setup ("Verify the link"), which resolves the combined `plugins/??` URL from the boot payload: the marker counts 2 on both the built file and the served bytes, and after `kill` + restart, `fetch HEAD /` polling reloads the page without `F5`.
 - `"$DSH_BIN" web --port 0` dry-boot must pass before adding to a live profile (see Conventions).
 
 ## Troubleshooting
@@ -323,7 +332,7 @@ Host `tsc` outputs `lib/*.js` (flat, `rootDir src/host`). Client `tsc` outputs `
 | `findDangling` returns 0 but subagent is still running (open `turn/start` at beginning) | Tail window too small (`tail -20`/`tail -100` misses far-back open turn) | Fixed in `63b7719`: `findDangling` now does **full scan** for recent sessions (mtime within window, 1-2 files) — not tail. `findInterrupted` stays tail 100 (interrupted closer is always at tail). |
 | `RESUME FAILED: loopback unavailable` or `resumed: []` | Activation failed: no `sessionController`, no `sessionPersistence`, no recoverable `provider`/`model`, the preset could not be composed, or the session was not found | Check the session's log exists under `~/.dsh/sessions/<project>/<id>/` (resolve the name with `resolveSessionLogPath`, e.g. `session.v4.jsonl.zstd` today) and `zstd -d -c ... \| head -n 1` is a valid header, then `~/.dsh/.supervisor/resume.log.jsonl` for the journal entry (`resume-failed` names the reason). A routeless session is skipped on purpose rather than continued into a persona failure; a `setup` failure (`agent preset ... could not be composed`) aborts the session so it is never continued without its tools. |
 | `RESUME SKIPPED: no interrupted sessions could be re-attached` | No session within `autoResumeWithin` window or all filtered by `sinceMs` | Increase `autoResumeWithin` (e.g. `10` or `"10m"`), check `~/.dsh/.supervisor/config.json` and `DSH_SUPERVISOR_RESUME_WITHIN` env, verify `findDangling` with `withinMs: 60*60*1000` finds it. |
-| Page does not reload after `dsh web` restart | Client `lib/client.js` not served (missing `exports` or not built) or browser cache | `curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js \| grep -c "window.location.reload"` → 2, hard refresh `Ctrl+Shift+R`, check `window.__ModuleLoader__` in devtools console. Client polls `HEAD /` 1s on `offline`/`WebSocket close` — it needs `dsh.client` to be loaded. |
+| Page does not reload after `dsh web` restart | Client `lib/client.js` not served (missing `exports` or not built) or browser cache | Run the artifact + served-bytes check from Setup ("Verify the link"), which resolves the combined `plugins/??` URL from the boot payload; do not expect `/plugins/<package>/client.js` to answer, it 404s on current DSH. Then hard refresh `Ctrl+Shift+R` and check `window.__ModuleLoader__` in devtools console. Client polls `HEAD /` 1s on `offline`/`WebSocket close` — it needs `dsh.client` to be loaded. |
 | `dangling` found but `agents.get` says already live (skip) | Session is still live in current process (not a crash) | `findDangling` is only safe right after fresh boot when `dsh web` is sole owner. `resumeInterrupted` additionally checks `agents.get(sessionId)` and skips if live — this is correct, not a bug. Wait for next boot. |
 | Daemon `reports` not written | `flock` on `~/.dsh/.supervisor/lock` failed | Check `cat ~/.dsh/.supervisor/supervisor.log`, `ls -l ~/.dsh/.supervisor/lock`. Daemon never blocks on notifier. |
 | Tests fail with `zstd: command not found` | `zstd` not installed | `sudo apt install zstd` (or `brew install zstd`). Tests skip zstd suites if unavailable, but live `findDangling` needs it. |

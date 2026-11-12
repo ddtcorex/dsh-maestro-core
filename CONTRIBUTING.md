@@ -74,7 +74,10 @@ After touching the client bundle, verify on live DSH Web (`:3080`), not just cur
 
 ```bash
 curl -s http://127.0.0.1:3080/dsh-maestro-supervisor-resume/scan -X POST -H 'content-type: application/json' -d '{"type":"client-request","rpcId":"t","method":"scan","payload":{"withinMs":300000}}' | head -c 200
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"  # 2
+grep -o 'window.location.reload' lib/client.js | wc -l  # 2 in the built bundle
+# Served bytes: the host serves the bundle from the combined plugins/??@ddtcorex/dsh-maestro-core/client.js&rev=... URL
+# listed in the root HTML boot payload. /plugins/@ddtcorex/dsh-maestro-core/client.js answers 404, so never curl that path.
+# Full recipe (launch token + cookie): AGENTS.md, Setup → "Verify the link".
 ```
 
 Do not claim verified/done/clean without having actually run the checks — be ready to paste exact command output in the PR.

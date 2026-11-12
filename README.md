@@ -6,7 +6,7 @@ Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tre
 
 - **Daemon:** Polls `:3080` every 3s, restarts on crash (`debounce 60s`, `flock` lock), writes `report-<ts>.md` (health + `git diff` + log tail), and notifies via Telegram (loose, never blocks).
 - **Host plugin:** `runAutoResume()` 8s after boot — `findInterrupted` (tail 100) + `findDanglingOpenTurns` (full scan for recent sessions) within `autoResumeWithin` (default 5m) → `agents.resume({resumeSessionId, agentOptions: {provider,model}})` recovered from `request/context` → `followup('continue')`. Loopback RPC `POST /dsh-maestro-supervisor-resume/{scan,resume}` (reachable from loopback; `connection.isLoopback` reports it) for the daemon (`resumeViaRpc`).
-- **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as `window.__ModuleLoader__.load` bundle at `/plugins/@ddtcorex/dsh-maestro-core/client.js` via `dsh.client`.
+- **Client plugin:** Hybrid auto-reload — `fetch HEAD /` polling 1s on `offline`/`WebSocket close`/`visibilitychange` → `200` → `location.reload()`. Served as a `window.__ModuleLoader__.load` bundle registered through `dsh.client` and fetched from the per-boot combined URL `plugins/??@ddtcorex/dsh-maestro-core/client.js&rev=<hash>` that the root HTML boot payload lists.
 
 ## Modules
 
@@ -179,7 +179,7 @@ The daemon uses `resumeViaRpc()` (`supervisor.ts`) which POSTs the same envelope
 ## Auto-Reload Details (Hybrid)
 
 - **Client** (`src/client/auto-reload.ts`, `lib/client.js` via `window.__ModuleLoader__.load`): `ctx.effect` hooks `WebSocket` (patches `window.WebSocket` to catch `close` for same-origin DSH ws), `offline`/`online`, `visibilitychange` → `setInterval(fetch HEAD / 1s)` when down → `200` → `location.reload()` (once, `reloading` guard). Also checks `HEAD /` on load in case the page was opened while down.
-- **Host** (`supervisor.ts` `pollHealth` 3s + `notify`, `plugin.ts` `runAutoResume`): health check + restart + notify is the host half; together with client polling they cover manual, supervisor, and systemd restarts without `F5`. No extra host push channel needed — client polling is primary, host health is secondary; the `window.__ModuleLoader__` bundle is served at `/plugins/@ddtcorex/dsh-maestro-core/client.js` via `ClientModuleRegistry` (`dsh.client` + `exports["./client"]`).
+- **Host** (`supervisor.ts` `pollHealth` 3s + `notify`, `plugin.ts` `runAutoResume`): health check + restart + notify is the host half; together with client polling they cover manual, supervisor, and systemd restarts without `F5`. No extra host push channel needed — client polling is primary, host health is secondary; the `window.__ModuleLoader__` bundle is registered through `ClientModuleRegistry` (`dsh.client` + `exports["./client"]`) and served from the combined `plugins/??` URL listed in the boot payload, never from a per-package `/plugins/<package>/client.js` path.
 
 ## Verification
 
@@ -189,7 +189,10 @@ pnpm --dir packages/dsh-maestro-core verify   # host + client
 pnpm --dir packages/dsh-maestro-core test     # vitest run
 test -f packages/dsh-maestro-core/lib/index.js
 test -f packages/dsh-maestro-core/lib/client.js
-curl -s http://127.0.0.1:3080/plugins/@ddtcorex/dsh-maestro-core/client.js | grep -c "window.location.reload"  # 2
+grep -o 'window.location.reload' packages/dsh-maestro-core/lib/client.js | wc -l  # 2
+# Served bytes: resolve the combined plugins/??@ddtcorex/dsh-maestro-core/client.js&rev=... URL
+# from the root HTML boot payload and curl it with the launch-token cookie (AGENTS.md "Verify the link").
+# /plugins/@ddtcorex/dsh-maestro-core/client.js is NOT served any more and answers 404.
 
 # Live
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3080/  # 200
