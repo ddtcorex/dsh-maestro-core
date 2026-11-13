@@ -7,9 +7,8 @@ const clientDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/cl
 const read = (f: string) => readFileSync(resolve(clientDir, f), 'utf8')
 
 describe('Maestro M logo reference implementation', () => {
-  // The documented source of the glyph used to be
-  // dsh-maestro-dashboard/src/client/components/BrandMark.tsx, which this
-  // plugin set removes. The declaration now lives here, in the plugin that
+  // The documented source of the glyph used to be a settings dashboard that
+  // this plugin set removes. The declaration now lives here, in the plugin that
   // survives. Every OTHER Maestro package still inlines its own copy and must:
   // each declares its own dsh.client entry and builds its own lib/client.js, so
   // one plugin's client module cannot import another's, and

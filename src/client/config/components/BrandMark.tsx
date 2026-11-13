@@ -1,9 +1,9 @@
 /**
  * The Maestro M logo — canonical reference implementation.
  *
- * This file was a verbatim copy of dsh-maestro-dashboard's
- * `src/client/components/BrandMark.tsx`, which this plugin set no longer
- * installs. It is now the source of record: `AGENTS.md:394` points here, and
+ * This file started as a copy of a settings dashboard that this plugin set no
+ * longer installs. It is now the source of record: `AGENTS.md:394` points
+ * here, and
  * the settings-nav mask in `index.tsx` plus the Settings card badge in
  * `MaestroSettings.tsx` both build from the constants declared below.
  *
