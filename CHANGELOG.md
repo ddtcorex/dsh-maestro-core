@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0] - 2026-11-17
+
+### Removed
+
+- The sync engine, and with it the `dsh-maestro-sync` Cordis row, the `Maestro Sync` settings section and every `maestro_sync_*`, `maestro_backup_*` and `maestro_restore_*` tool. Its subject was the markdown memory store, which the harness no longer runs: memory moved to claude-mem, whose SQLite plus Chroma layout cannot be file-synced. Cross-machine file movement stays with `sync-harness.sh`.
+- `scripts/sync/` probe scripts, `tests/sync/` and the module's own specs.
+
 ## [0.15.1] - 2026-11-09
 
 - `status()` reports `storeMigration: 'legacy'` when the local store still sits at an old root, instead of counting zero memory files and looking identical to "nothing to sync".

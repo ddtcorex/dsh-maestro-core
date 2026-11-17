@@ -13,18 +13,6 @@
       config:
         autoResumeWithin: 5
 
-    # Backup, restore, retention GC and the Maestro Sync settings section.
-    # The row name is a subpath of this package, so `exports["./lib/*"]` has to
-    # admit it: a name the exports map does not resolve is skipped silently at
-    # boot. The name follows the package rename, not before it.
-    - id: dsh-maestro-sync
-      name: '@ddtcorex/dsh-maestro-core/lib/sync/index.js'
-      channel: /dsh-maestro-sync
-      # rpc.handle registers a webServer route inside an effect fiber
-      # which carries only the row's inject (not the module's);
-      # not sufficient on DSH 0.2.x on its own: see the `connection` entry at the end of this file.
-      inject: ['tools', 'connection', 'webServer']
-
     # Guard rules, journal and approval prompts. The channel is declared by the
     # row only: guard exposes no rpc.handle today, it answers through the
     # harness approval prompt.

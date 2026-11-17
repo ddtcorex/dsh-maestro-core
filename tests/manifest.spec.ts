@@ -48,19 +48,22 @@ describe('core manifest', () => {
     expect(JSON.stringify(pkg.dependencies ?? {})).not.toContain('config-lib')
   })
 
-  it('has the four rows with their ids and channels', () => {
-    for (const id of ['maestro-supervisor', 'dsh-maestro-sync', 'dsh-maestro-guard', 'maestro-config']) {
+  it('has the three rows with their ids and channels', () => {
+    for (const id of ['maestro-supervisor', 'dsh-maestro-guard', 'maestro-config']) {
       expect(rows).toContain(`id: ${id}`)
     }
-    expect(rows).toContain('channel: /dsh-maestro-sync')
+    // The sync row retired on 2026-11-17 with the sync engine itself: a row that
+    // names a module which no longer exists is skipped silently at boot.
+    expect(rows).not.toContain('dsh-maestro-sync')
+    expect(rows).not.toMatch(/lib\/sync\/index\.js/)
     expect(rows).toContain('channel: /dsh-maestro-guard')
-    expect(rows).toMatch(/lib\/sync\/index\.js/)
     expect(rows).toMatch(/lib\/guard\/index\.js/)
     expect(rows).toMatch(/lib\/config\/index\.js/)
   })
 
   it('lists every absorbed module entry as a build artifact name', () => {
-    expect(existsSync(join(root, 'src/host/sync/index.ts'))).toBe(true)
+    // The sync module was retired on 2026-11-17; its entry must not linger.
+    expect(existsSync(join(root, 'src/host/sync/index.ts'))).toBe(false)
     expect(existsSync(join(root, 'src/host/guard/index.ts'))).toBe(true)
     expect(existsSync(join(root, 'src/host/config/index.ts'))).toBe(true)
     expect(existsSync(join(root, 'src/host/store/index.ts'))).toBe(true)
@@ -78,17 +81,16 @@ describe('core manifest', () => {
       expect(subpath, name).toMatch(/^lib\/.+\.js$/)
       absorbed += 1
     }
-    expect(absorbed).toBe(3)
+    expect(absorbed).toBe(2)
   })
 
   it('composes one client entry that guards every module apply', () => {
     const entry = readFileSync(join(root, 'src/client/index.tsx'), 'utf8')
     expect(entry).toContain("from './auto-reload.js'")
     expect(entry).toContain("from './config/index.js'")
-    expect(entry).toContain("from './sync/index.js'")
     // One loop, one try/catch around it: a module that throws on register must
     // not cost the remaining modules their registration.
-    expect(entry.match(/\['[a-z-]+', apply[A-Za-z]+\]/g)?.length ?? 0).toBe(3)
+    expect(entry.match(/\['[a-z-]+', apply[A-Za-z]+\]/g)?.length ?? 0).toBe(2)
     expect(entry).toMatch(/for \(const \[name, register\] of MODULES\)/)
     expect(entry).toMatch(/catch \(err\)/)
   })

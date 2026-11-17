@@ -4,7 +4,7 @@
 
 ## Purpose
 
-This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine, all shipped as one package with one client bundle. The npm package, the GitHub repository and the workspace directory all carry the `dsh-maestro-core` name; the previous `dsh-maestro-supervisor` spelling survives only in dated history (`CHANGELOG.md`, `docs/history/`) and in the RPC channel names, which are wire protocol and did not change. See `## Modules`.
+This repository is **dsh-maestro-core**: the DSH Web resilience supervisor plus the settings store, the Maestro settings card and the tool guard, all shipped as one package with one client bundle. The npm package, the GitHub repository and the workspace directory all carry the `dsh-maestro-core` name; the previous `dsh-maestro-supervisor` spelling survives only in dated history (`CHANGELOG.md`, `docs/history/`) and in the RPC channel names, which are wire protocol and did not change. See `## Modules`.
 
 Supervisor for DSH Web resilience — three cooperating layers:
 
@@ -18,7 +18,7 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 
 ### Absorbed repositories
 
-`dsh-maestro-config-lib`, `dsh-maestro-config`, `dsh-maestro-guard` and `dsh-maestro-sync` were absorbed here as source, **not as history**: `git log --follow <path>` on an absorbed module stops at the absorbing commit, and `git merge-base --is-ancestor <old-tip> HEAD` is false, because the modules arrived as a fresh start rather than a history merge. Measured 2026-10-05. The per-repository changelogs are the surviving record and are kept under `docs/history/<name>.md`; the git history behind them stays in the original repositories, which is why they are archived rather than deleted. Each module's tests run from `tests/<name>/`. A core-side fix for a module belongs to this repository; do not reopen the absorbed repositories.
+`dsh-maestro-config-lib`, `dsh-maestro-config` and `dsh-maestro-guard` were absorbed here as source, **not as history**: `git log --follow <path>` on an absorbed module stops at the absorbing commit, and `git merge-base --is-ancestor <old-tip> HEAD` is false, because the modules arrived as a fresh start rather than a history merge. Measured 2026-10-05. The per-repository changelogs are the surviving record and are kept under `docs/history/<name>.md`; the git history behind them stays in the original repositories, which is why they are archived rather than deleted. Each module's tests run from `tests/<name>/`. A core-side fix for a module belongs to this repository; do not reopen the absorbed repositories.
 
 ## Architecture
 
@@ -64,32 +64,31 @@ Part of the Maestro Harness suite. See spec for Phase 2 (loader isolation) and P
 - `src/host/resume.ts` — `findInterrupted()` (tail 100, mtime pre-filter) and `findDanglingOpenTurns()` (full scan for recent sessions, mtime pre-filter). `parseDuration` for `5m`/`30s`/`1h`. See `## Known Issues` for why dangling needs full scan.
 - `src/host/plugin.ts` — in-tree Cordis host plugin: `inject: ['sessions','agents','connection']`, `apply()` (never throws), `runAutoResume()` (merges interrupted + dangling, 5m window), `resumeInterrupted()`. Activation goes through `activateSessionAgent()` — `sessionController.resolveAgent` FIRST (the owner of agent activation the Web API uses: it composes the session's preset, de-dupes concurrent resumes, and needs no separately recovered route), then `agents.resume` with `setup: agentPresets.mount(agentCtx, presetId)`; a session that records no preset resumes bare, and a `setup` failure is wrapped in `PresetComposeError` and ABORTS that session (journal + notify + `continue`) rather than degrading into a preset-less resume. A resume blocked by another owner's write handle (the reconnecting browser re-opens the interrupted session while the boot scan runs) is retried with bounded backoff, and if the host still owns it the recovery prompt is delivered through the `sessionController.prompt` API the UI uses. Both delivery paths then `verifyResumedComposition()` — the roster answers whether the agent is joined, and a preset-less agent is repaired (`resumeAutoRepair`) BEFORE the prompt is sent — and run the tool-view probe, `createResumeRpcHandler()` (`scan`/`resume` endpoints)
 - `src/client/auto-reload.ts` — in-tree Cordis client plugin: `apply()` with `ctx.effect`, `fetch HEAD /` polling on `offline`/`WebSocket close`/`visibilitychange`, `window.location.reload()` on `200`. Built via `tsc -p tsconfig.client.json && node scripts/build-client.mjs` → `lib/client.js` (`window.__ModuleLoader__.load` wrapper).
-- `src/client/index.tsx` — the ONE composed client entry: `inject: ['slots','connection']` plus an `apply()` that calls `auto-reload`, `config` and `sync` in a loop, each in its own `try`/`catch` so one failing surface cannot cost the others their registration.
+- `src/client/index.tsx` — the ONE composed client entry: `inject: ['slots','connection']` plus an `apply()` that calls `auto-reload` and `config` in a loop, each in its own `try`/`catch` so one failing surface cannot cost the others their registration.
 - `lib/` — gitignored build output. Generated; do not hand-edit, never commit. `lib/client.js` is the browser bundle, `lib/types/client/` for its d.ts (the only `declarationDir` in the build; host declarations land beside their js).
 - `scripts/build-client.mjs` — esbuild bundle of `src/client/index.tsx` into the `window.__ModuleLoader__.load` wrapper (react and the DSH platform modules stay external).
 - `scripts/vendor-store.mjs` — writes a consumer's embedded store copy (`<dir>/src/host/vendor/store.ts`) as one file with a `sha256` header; also exports `verifyVendored(file, sourceDir?)` for a consumer's drift test.
 - `tsconfig.json` — host: `rootDir src/host → lib`, `module nodenext`. **This contract is load-bearing**: a `rootDir`/`include` that does not emit a flat `lib/index.js` bricks the plugin-tree boot before any code runs.
 - `tsconfig.client.json` — client: `rootDir src/client → .client-build` (typecheck + d.ts), `jsx react-jsx`, `declarationDir lib/types/client`
 - `vitest.config.ts` — `environment: node`; the three client specs opt into jsdom with a `// @vitest-environment jsdom` pragma
-- `cordis.patch.yml` — four `- insert:` rows: `maestro-supervisor`, `dsh-maestro-sync`, `dsh-maestro-guard`, `maestro-config` (see `## Modules`)
+- `cordis.patch.yml` — three `- insert:` rows: `maestro-supervisor`, `dsh-maestro-guard`, `maestro-config` (see `## Modules`)
 - `systemd/dsh-web-supervisor.service.template` — systemd user unit (`Restart=always`, `Environment=TELEGRAM_*` commented)
 - `scripts/install-systemd.sh` — installs unit to `~/.config/systemd/user/`
 - `tests/*.test.ts` — vitest suites (one integration suite stays skipped unless `DSH_INTEGRATION=1`)
 
 ## Modules
 
-One package, four host rows and one client bundle. The four absorbed repositories keep their history, their `docs/history/<name>.md` changelog and their own tests under `tests/<name>/`.
+One package, three host rows and one client bundle. The four absorbed repositories keep their history, their `docs/history/<name>.md` changelog and their own tests under `tests/<name>/`.
 
 | Row id | Source | Channel | Notes |
 |---|---|---|---|
 | `maestro-supervisor` | `src/host/*.ts` | `/dsh-maestro-supervisor-resume` (loopback-reachable) | `name` is the package root; `config.autoResumeWithin: 5` |
-| `dsh-maestro-sync` | `src/host/sync/` | `/dsh-maestro-sync` | `inject: ['tools','connection','webServer']` |
 | `dsh-maestro-guard` | `src/host/guard/` | `/dsh-maestro-guard` | Channel declared by the row only; guard answers through the harness approval prompt, it registers no `rpc.handle` |
 | `maestro-config` | `src/host/config/` | `/dsh-maestro-config` | `inject: ['connection','webServer']`, `config: {}` |
 
 **`webServer` lives on the `connection` entry.** On DSH 0.2.x `rpc.handle` resolves `webServer` on the `connection` row's own fiber, so the row-level `inject: [..., 'webServer']` below is not sufficient on its own: `cordis.patch.yml` also carries a top-level `- id: connection` entry with `inject: [webStartup, webServer]` (`inject` replaces the base list, so `webStartup` is repeated). Pinned by `tests/connection-inject.spec.ts`.
 
-**Row names are subpaths.** `dsh-maestro-sync`, `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. A row `name` that names a package which no longer exists fails as `entry … not found` and is skipped at load time, so a rename has to rewrite all three subpath names in the same commit.
+**Row names are subpaths.** `dsh-maestro-guard` and `maestro-config` use `name: '@ddtcorex/dsh-maestro-core/lib/<module>/index.js'`, which is why `exports["./lib/*"]` exists in the manifest: with an `exports` map present, a subpath that is not listed does not resolve, and a row whose module cannot be imported is skipped at load time. Two failure arms are silent on a normal boot, so check them deliberately with `dsh --profile web --dump-config` and grep for `name mismatch` and `entry … not found`. A row `name` that names a package which no longer exists fails as `entry … not found` and is skipped at load time, so a rename has to rewrite all three subpath names in the same commit.
 
 ### Module: store (`src/host/store/`)
 
@@ -109,10 +108,6 @@ The namespaced settings document at `<DSH_HOME>/dsh-maestro-config/settings.json
 ### Module: guard (`src/host/guard/`)
 
 Rule classification, the approval gate and its journal. It answers through the DSH approval prompt, not through an RPC handler, so `channel: /dsh-maestro-guard` is declared by the row alone. `validators.ts` registers the `guard` and `guardBlacklist` domains with the store at module load — that import is the registration, so removing it silently disables validation for the whole package.
-
-### Module: sync (`src/host/sync/`)
-
-Backup, restore and retention GC over S3 or SSH, plus the `Maestro Sync` settings section (`id: maestro-sync`, `order: 28`). Every mutation is preview-first: a read-only preview produces a single-use id, and the mutation exists only in a dialog bound to that id with `confirm: true`. Its probe scripts (`scripts/sync/*.mjs`) run against a live profile, not against this package.
 
 ### Vendoring the store into another package
 
@@ -256,7 +251,7 @@ pnpm test     # vitest run
 pnpm build    # tsc host + tsc client + node scripts/build-client.mjs → lib/ + lib/client.js
 ```
 
-Client: `src/client/index.tsx` is the browser half (auto-reload + settings card + Sync card), typechecked via `tsconfig.client.json` (`rootDir src/client → .client-build`, d.ts to `lib/types/client/`) then esbuild-bundled by `scripts/build-client.mjs` into `lib/client.js` (`window.__ModuleLoader__.load` wrapper). Host: `src/host/*` → `lib/*.js` (flat, `rootDir src/host`).
+Client: `src/client/index.tsx` is the browser half (auto-reload + settings card), typechecked via `tsconfig.client.json` (`rootDir src/client → .client-build`, d.ts to `lib/types/client/`) then esbuild-bundled by `scripts/build-client.mjs` into `lib/client.js` (`window.__ModuleLoader__.load` wrapper). Host: `src/host/*` → `lib/*.js` (flat, `rootDir src/host`).
 
 `pnpm build` is required after any source change; `lib/` and `lib/client.js` are gitignored, so rebuild locally after pull and before restart. `test -f lib/index.js && test -f lib/client.js` after build.
 
@@ -305,7 +300,7 @@ DSH_INTEGRATION=1 pnpm test -- tests/integration.test.ts  # needs real DSH web
 
 Never `A inject: ['B']` and `B inject: ['A']` — Cordis will deadlock. Pick one:
 
-1. **Extract shared lib C** (like this package's own store): `C` provides `serviceC`, both `A` and `B` do `inject: ['serviceC']`, `C` injects nobody. When `C` is a package, put it in `pnpm-workspace.yaml` `packages: ["../dsh-maestro-C"]` for both. When `A` and `B` ship in one package, `C` is just a module they both import — which is what the store now does, and it costs no dependency at all. This is the cleanest for true mutual data (e.g., `guard` ↔ `sync` sharing health).
+1. **Extract shared lib C** (like this package's own store): `C` provides `serviceC`, both `A` and `B` do `inject: ['serviceC']`, `C` injects nobody. When `C` is a package, put it in `pnpm-workspace.yaml` `packages: ["../dsh-maestro-C"]` for both. When `A` and `B` ship in one package, `C` is just a module they both import — which is what the store now does, and it costs no dependency at all. This is the cleanest for true mutual data shared by two rows.
 2. **One-way + events:** `A` provides `serviceA`, `B` does `inject: ['serviceA']` and `ctx.emit('b:done', payload)`; `A` listens with `ctx.on('b:done', ...)`. No reverse inject, so no cycle.
 3. **Isolate + RPC:** If they must stay separate, use `isolate` realms and a `/dsh-maestro-A` RPC channel instead of direct `inject`.
 

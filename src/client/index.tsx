@@ -9,7 +9,6 @@
  */
 import { apply as applyAutoReload } from './auto-reload.js'
 import { apply as applyConfig } from './config/index.js'
-import { apply as applySync } from './sync/index.js'
 
 /** Union of what the three modules need from the client context. */
 export const inject = ['slots', 'connection'] as const
@@ -19,7 +18,6 @@ type ClientCtx = Parameters<typeof applyAutoReload>[0]
 const MODULES = [
   ['auto-reload', applyAutoReload],
   ['config', applyConfig],
-  ['sync', applySync],
 ] as const
 
 export function apply(ctx: ClientCtx): void {
