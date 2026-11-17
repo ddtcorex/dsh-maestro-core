@@ -1,6 +1,6 @@
 # dsh-maestro-core
 
-Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Resume & Auto-Reload** — together with the settings store, the Maestro settings card, the tool guard and the harness-to-harness sync engine that used to be four separate packages.
+Supervisor for DSH Web resilience — **Phase 1 Guard & Report + Phase 3 Auto-Resume & Auto-Reload** — together with the settings store, the Maestro settings card and the tool guard that used to be separate packages.
 
 Runs **outside** the `pnpm → sh → node` tree (systemd daemon) to survive tree crashes, plus **inside** `dsh web` as a host+client Cordis plugin to auto-resume interrupted sessions and auto-reload the browser after restart.
 
@@ -18,7 +18,6 @@ One package, four host rows and one client bundle.
 | Store | `src/host/store/` | — | — | The namespaced `settings.json` every other module reads and writes |
 | Config | `src/host/config/` | `maestro-config` | `/dsh-maestro-config` | `maestroConfig` service over the store, backing the Maestro settings card |
 | Guard | `src/host/guard/` | `dsh-maestro-guard` | `/dsh-maestro-guard` | Rule classification, the approval gate and its journal |
-| Sync | `src/host/sync/` | `dsh-maestro-sync` | `/dsh-maestro-sync` | Backup, restore, retention GC and two-machine sync |
 
 Row `name`s for the absorbed modules are subpaths of this package (`@ddtcorex/dsh-maestro-core/lib/<module>/index.js`), which is why `exports["./lib/*"]` exists: a row name the exports map cannot resolve is skipped silently at boot.
 
@@ -38,8 +37,6 @@ Host tools registered with `ctx.tools.register`:
 | `maestro_resume_tool_health` | supervisor | Tool-view health of a resumed session |
 | `maestro_repair_session_preset` | supervisor | Re-link an agent that joined no preset |
 | `maestro_guard_status`, `maestro_guard_stats`, `maestro_full_scan` | guard | Guard state, counters and a full rule scan |
-| `maestro_sync_status`, `maestro_sync_check_machines`, `maestro_sync_preview`, `maestro_sync_apply`, `maestro_sync_bidirectional_preview`, `maestro_sync_bidirectional_apply`, `maestro_sync_tunnel_restore` | sync | Two-machine sync, preview first |
-| `maestro_backup_preview`, `maestro_backup_apply`, `maestro_backup_gc_preview`, `maestro_backup_gc_apply`, `maestro_restore_preview`, `maestro_restore_apply` | sync | Backup, retention GC and restore, preview first |
 
 ## Requirements
 

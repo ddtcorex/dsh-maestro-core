@@ -48,7 +48,7 @@ export interface PollHealthOpts {
 
 // Specific parse/boot-failure markers only. Bare 'JSON'/'YAML' were removed
 // (2026-08-31): they matched any line whose payload merely *contained* those
-// substrings — e.g. maestro-sync's status JSON listing session.jsonl.zstd /
+// substrings — e.g. a sync status JSON listing session.jsonl.zstd /
 // settings.json paths — turning a healthy 401 into a restart.
 const ERROR_PATTERNS = [
   'ERR_MODULE_NOT_FOUND',

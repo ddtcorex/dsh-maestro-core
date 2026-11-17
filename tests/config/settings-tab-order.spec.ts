@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 // collision introduced in a sibling stays invisible to its own tests.
 //
 // This spec therefore asserts invariants over whichever sections can be read:
-//   - core's own sections (`maestro`, `maestro-sync`) are ALWAYS read from this
+//   - core's own section (`maestro`) is ALWAYS read from this
 //     repository;
 //   - sibling plugin sources are read from MAESTRO_SIBLINGS_DIR (default: the
 //     parent of this repository, where CI clones siblings and where the live
@@ -38,7 +38,6 @@ interface Found {
 
 const CORE: Array<{ id: string; file: string }> = [
   { id: 'maestro', file: resolve(repoRoot, 'src/client/config/index.tsx') },
-  { id: 'maestro-sync', file: resolve(repoRoot, 'src/client/sync/index.tsx') },
 ]
 
 // `dir` overrides the checkout location relative to the siblings dir, for
@@ -54,7 +53,6 @@ const SUTUNAM_PKG = 'dsh-sutunam-kit'
 const EXPECTED: Record<string, number> = {
   maestro: 26,
   'maestro-jobs': 27,
-  'maestro-sync': 28,
   'maestro-gateway': 29,
   'maestro-remote': 31,
   'maestro-review': 32,
@@ -95,10 +93,11 @@ const load = (): { maestro: Found[]; sutunamOrder: number | undefined } => {
 }
 
 describe('Maestro settings tab ordering', () => {
-  it('declares core sections maestro=26 and maestro-sync=28 from this repository', () => {
+  it('declares the core section maestro=26 from this repository', () => {
     const { maestro } = load()
     expect(maestro.find((s) => s.id === 'maestro')).toMatchObject({ id: 'maestro', order: 26 })
-    expect(maestro.find((s) => s.id === 'maestro-sync')).toMatchObject({ id: 'maestro-sync', order: 28 })
+    // `maestro-sync` retired with the sync engine on 2026-11-17.
+    expect(maestro.find((s) => s.id === 'maestro-sync')).toBeUndefined()
   })
 
   it('gives every Maestro tab a distinct order', () => {
