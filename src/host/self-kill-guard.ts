@@ -3,9 +3,17 @@
  * kill or restart the very dsh web process the agent is running inside. The
  * model must route restarts through the supervisor's dsh_web_restart tool, not
  * by killing the host.
+ *
+ * The predicate is scoped to the HOST, not to the verb family: what makes a
+ * command a self-kill is its TARGET (a live host pid, or the `dsh` name in a
+ * kill/restart shape), never the mere presence of `kill`/`pkill`/`killall`.
+ * A blanket verb deny read as "no process may ever be killed through the agent"
+ * and blocked ordinary work (`pkill -f chrome`, `systemctl status nginx`,
+ * `kill 1234 2>/dev/null`), which is not the protection this file exists for.
  */
 
 import { createRequire } from 'node:module'
+import { parseCommand, unwrapSegments, type Segment } from './guard/parse.js'
 
 const require = createRequire(import.meta.url)
 
@@ -17,11 +25,24 @@ const require = createRequire(import.meta.url)
 // not argv.
 const SELF_KILL_RE = /(systemctl\s+--?user\s+.*(restart|stop|start).*dsh-web|pkill\s+.*dsh|killall\s+.*dsh|ss\s+.*3080.*kill|restart-dsh-web)/i
 
-// A segment whose command position is one of these verbs is a real kill-family
-// invocation: blanket-denied even when its target lives inside quotes
-// (`pkill -f "dsh web"` must still be caught). `sudo`/`env VAR=` prefixes are
-// stripped before the verb is read.
-const DANGEROUS_KILL_VERB = /^(?:sudo\s+|env\s+\S+\s+)*(pkill|killall|kill|systemctl)\b/i
+/** Verbs whose whole job is ending a process (their target is what matters). */
+const KILL_FAMILY = new Set(['kill', 'pkill', 'killall'])
+
+/**
+ * The `systemctl` actions that can stop the host or something it depends on. A
+ * read-only `systemctl status` is deliberately absent: it is how an operator
+ * inspects the host, and refusing it protects nothing.
+ */
+const SYSTEMCTL_ACTIONS = new Set([
+  'restart', 'stop', 'start', 'kill', 'try-restart', 'reload-or-restart',
+  'force-reload', 'isolate', 'reboot', 'halt', 'poweroff', 'suspend',
+])
+
+/** The host's own name, in any spelling the process or unit carries it in. */
+const DSH_TARGET = /dsh/i
+
+/** Fallback reading for input the parser refuses: a kill-family word plus the host's name. */
+const KILL_FAMILY_RAW = /\b(?:kill|pkill|killall)\b/i
 
 /**
  * Remove data spans (quoted strings and heredoc bodies) from a command before
@@ -122,34 +143,71 @@ export function resolveDshWebTreePids(
 }
 
 /**
- * Whether a shell command is a self-kill. `livePids` are the pids of the dsh
- * web process forest; a `kill <pid>` whose pid is one of ours is a self-kill
- * regardless of anything else in the command. The kill parser accepts flag
- * forms (`kill -9 <pid>`, `kill -TERM <pid>`). A command that is essentially
- * JUST a `kill <unrelated-pid>` is allowed (idempotent cleanups are common),
- * as are kill attempts whose output reports "not found"/"done" — but any
- * compound that chains a restart/kill after it (or before the end) stays
- * denied.
+ * Whether a shell command is a self-kill. Two questions decide it, and both are
+ * about the TARGET, never about the verb:
+ *
+ * 1. does the command name a pid of the dsh web process forest? A command that
+ *    signals a live host pid is a self-kill in whatever shape it arrives
+ *    (`kill -9 300`, `kill -9 300 2>/dev/null`, `nice kill 300`, `pkill -9 300`),
+ *    because the target is exact;
+ * 2. does a kill-family or restart shape name the host? `kill`/`pkill`/`killall`
+ *    carrying `dsh` in any argument (`pkill -f "dsh web"`, `bash -c "pkill -f
+ *    dsh"`), a `systemctl` ACTION on a dsh unit, the `restart-dsh-web` helper,
+ *    and killing whatever owns :3080.
+ *
+ * Everything else is allowed, including a kill of an unrelated pid, `killall
+ * node`, `pkill -f chrome` and `systemctl restart mysql`. Wide patterns such as
+ * `pkill -f node` can still take the host down, so the guard only promises that
+ * it will not DENY ordinary kill-family work: the host's own recovery (supervisor
+ * daemon + auto-resume) is what covers an agent that aims badly, exactly as
+ * before this file existed.
  */
 export function isSelfKillCommand(cmd: string, livePids: number[]): boolean {
-  // pid-targeted kill: an exact live pid is a self-kill regardless of context
-  if (/kill\s+(?:-\S+\s+)?(\d+)/i.test(cmd)) {
-    const pid = Number(cmd.match(/kill\s+(?:-\S+\s+)?(\d+)/i)?.[1])
-    if (livePids.includes(pid)) return true
+  const live = new Set(livePids)
+  // An exact host pid anywhere in a kill invocation is a self-kill, including
+  // through wrappers whose verb the parser cannot see (`nice -n 10 kill 300`).
+  for (const match of cmd.matchAll(/\bkill\s+(?:-\S+\s+)*(\d+)/gi)) {
+    if (live.has(Number(match[1]))) return true
   }
-  // Targeted patterns may span segments (`ss ... | grep 3080 | xargs kill`),
-  // so test the stripped full text once, then verbs per segment.
+  // Shapes whose target the argv does not carry: killing whatever owns :3080,
+  // and the guarded restart helper itself.
   const stripped = stripDataSpans(cmd)
   if (SELF_KILL_RE.test(stripped)) return true
-  for (const seg of stripped.split(/\s*(?:&&|\|\||;|\||\r?\n)+\s*/)) {
-    // Exclude ONLY a command that is JUST `kill [flags] <unrelated pid>` —
-    // anchored end-to-end so `kill 1234 && systemctl restart dsh-web` cannot
-    // whitelist the compound through its prefix.
-    if (/^kill\s+(?:-\S+\s+)?\d+\s*$/i.test(seg.trim())) continue
-    if (/kill\s+(?:-\S+\s+)?(\d+)\s+.*(not found|done)/i.test(seg)) continue
-    if (DANGEROUS_KILL_VERB.test(seg)) return true
+
+  const segs = segmentsOf(cmd)
+  if (segs === undefined) {
+    // Input the parser refused cannot be proven safe, so it keeps the
+    // conservative reading: a kill-family word next to the host's name.
+    return KILL_FAMILY_RAW.test(stripped) && DSH_TARGET.test(stripped)
+  }
+  for (const seg of segs) {
+    const verb = commandVerb(seg.verb)
+    const argv = seg.argv.slice(1)
+    if (!argv.some((token) => DSH_TARGET.test(token))) continue
+    if (verb !== undefined && KILL_FAMILY.has(verb)) return true
+    if (verb === 'systemctl' && argv.some((token) => SYSTEMCTL_ACTIONS.has(token.toLowerCase()))) return true
   }
   return false
+}
+
+/** The segment's verb without its directory (`/bin/kill` → `kill`). */
+function commandVerb(verb: string | undefined): string | undefined {
+  if (verb === undefined) return undefined
+  const cut = verb.lastIndexOf('/')
+  return cut === -1 ? verb : verb.slice(cut + 1)
+}
+
+/**
+ * The command's segments with shell wrappers unwrapped, so a kill hidden behind
+ * `bash -c` is judged as the kill it runs. `undefined` when the parser throws,
+ * which the caller answers conservatively rather than with an allow.
+ */
+function segmentsOf(cmd: string): Segment[] | undefined {
+  try {
+    return unwrapSegments(parseCommand(cmd))
+  } catch {
+    return undefined
+  }
 }
 
 /**
