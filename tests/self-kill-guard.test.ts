@@ -189,3 +189,36 @@ describe('self-kill guard: kill-family words as DATA, not commands (false-positi
     expect(isSelfKillCommand('kill -9 1234 && pkill -f "dsh web"', [848894])).toBe(true)
   })
 })
+describe('self-kill guard: only the dsh host is protected, kill-family is otherwise allowed', () => {
+  const live = [848894]
+
+  it('allows kill/pkill/killall whose target is not the dsh host', () => {
+    expect(isSelfKillCommand('pkill -0 no-such-process-xyz', live)).toBe(false)
+    expect(isSelfKillCommand('pkill -f chrome', live)).toBe(false)
+    expect(isSelfKillCommand('killall node', live)).toBe(false)
+    expect(isSelfKillCommand('kill nginx', live)).toBe(false)
+    expect(isSelfKillCommand('kill %1', live)).toBe(false)
+    expect(isSelfKillCommand('kill -0 999999 2>/dev/null', live)).toBe(false)
+    expect(isSelfKillCommand('kill 1234 && echo done', live)).toBe(false)
+    expect(isSelfKillCommand('kill 1234; pkill -f chrome', live)).toBe(false)
+  })
+
+  it('allows systemctl on units that are not the dsh host, and read-only status on dsh units', () => {
+    expect(isSelfKillCommand('systemctl status nginx', live)).toBe(false)
+    expect(isSelfKillCommand('sudo systemctl restart mysql', live)).toBe(false)
+    expect(isSelfKillCommand('systemctl --user status dsh-web-supervisor', live)).toBe(false)
+  })
+
+  it('keeps denying every spelling that targets dsh or a live host pid', () => {
+    expect(isSelfKillCommand('systemctl restart dsh-web', live)).toBe(true)
+    expect(isSelfKillCommand('kill -9 $(pgrep -f dsh)', live)).toBe(true)
+    expect(isSelfKillCommand('bash -c "pkill -f dsh"', live)).toBe(true)
+    expect(isSelfKillCommand('kill -9 848894 2>/dev/null', live)).toBe(true)
+  })
+
+  it('lets an ordinary pkill through the pre-execute listener', async () => {
+    const guard = makePreExecuteGuard({ livePids: () => live })
+    expect(await guard({ name: 'bash', args: { command: 'pkill -f chrome' } }, async () => ({ kind: 'allow' })))
+      .toEqual({ kind: 'allow' })
+  })
+})
