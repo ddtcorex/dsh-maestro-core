@@ -1,6 +1,10 @@
 # Changelog
 
-## [0.16.0] - 2026-11-17
+## [0.16.0] - 2026-11-26
+
+### Added
+
+- Plugin manager display metadata: `locale/en.json` with the row title and description, a 36x36 icon in the DSH artwork convention, and the manifest `icon` field, locale export and packaging entries the manager reads without activating the plugin. `tests/plugin-meta.spec.ts` pins the host reader's rules so the row cannot silently degrade.
 
 ### Removed
 
