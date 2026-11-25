@@ -1,6 +1,6 @@
 {
   "name": "@ddtcorex/dsh-maestro-core",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "description": "Maestro supervisor, settings store and tool guard for the DeepSeek Harness Web",
   "icon": "assets/icon.svg",
   "license": "MIT",
