@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Maestro core",
+    "description": "The Maestro settings store, the Maestro settings card and the tool guard, plus recovery: a session interrupted by a dsh web restart is resumed automatically, and the page reloads itself when the server comes back. The restart daemon runs outside this plugin as a systemd service, so crash restarts keep working with the plugin off. Driven from Settings, Maestro."
+  }
+}
