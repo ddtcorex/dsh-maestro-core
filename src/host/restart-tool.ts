@@ -12,7 +12,7 @@
  *      (out-of-band). This tool NEVER restarts the host in-tree.
  */
 
-import { join, dirname, resolve } from 'node:path'
+import { join, dirname, resolve, basename } from 'node:path'
 import { mkdtempSync, rmSync, cpSync, existsSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync, unlinkSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { spawn, execFileSync } from 'node:child_process'
@@ -63,6 +63,27 @@ export interface DryBootCandidate { pid: number; port: number; dshHome: string }
 
 const LIVE_PORTS = new Set([3080, 3081, 3082])
 
+/**
+ * The two disposable dry-boot shapes this package spawns: `dryBootVerify()`
+ * below on a `mkdtemp('dsh-dryboot-')` home + a 9000-9999 port, and
+ * `debug-agent.defaultDryBoot()` on a `mktemp -d` home (`/tmp/tmp.XXXXXX`) +
+ * a 19000-19999 port. Recognizing only one shape makes the other's leaks
+ * invisible to the reaper: measured 2026-11-28, a debug-agent orphan held
+ * 253M RSS + 234M swap on a memory-starved host while `dsh_web_gc` answered
+ * `candidates: []`.
+ */
+const DRY_BOOT_HOME_PREFIXES = ['dsh-dryboot-', 'tmp.']
+const DRY_BOOT_PORT_RANGES: ReadonlyArray<readonly [number, number]> = [[9000, 9999], [19000, 19999]]
+
+/** A direct child of the temp dir carrying a disposable-boot prefix. */
+export function isDryBootHome(home: string): boolean {
+  return dirname(home) === tmpdir() && DRY_BOOT_HOME_PREFIXES.some(prefix => basename(home).startsWith(prefix))
+}
+
+export function isDryBootPort(port: number): boolean {
+  return DRY_BOOT_PORT_RANGES.some(([lo, hi]) => port >= lo && port <= hi)
+}
+
 export interface GcReaders {
   readProc?: () => Array<{ pid: number; cmd: string; env: string }>
   ssPortsOf?: (pid: number) => number[]
@@ -112,10 +133,10 @@ export function listDryBootCandidates(readers: GcReaders = {}): DryBootCandidate
     if (p.pid === selfPid) continue
     if (!isDshWebCommand(p.cmd)) continue
     const home = /^DSH_HOME=([^\0]*)/m.exec(p.env)?.[1] ?? ''
-    if (!home.startsWith(join(tmpdir(), 'dsh-dryboot-'))) continue
+    if (!isDryBootHome(home)) continue
     const ports = ssPortsOf(p.pid)
     if (ports.some(port => LIVE_PORTS.has(port))) continue
-    const eph = ports.filter(port => port >= 9000 && port <= 9999)
+    const eph = ports.filter(isDryBootPort)
     if (eph.length === 0) continue
     out.push({ pid: p.pid, port: eph[0], dshHome: home })
   }

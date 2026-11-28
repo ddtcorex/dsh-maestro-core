@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { runDebugAgent, _resetDebugAgentForTest, buildDryBootCommand } from '../src/host/debug-agent.js'
+import { runDebugAgent, _resetDebugAgentForTest, buildDryBootCommand, reapDryBootLeftovers } from '../src/host/debug-agent.js'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -144,5 +144,35 @@ describe('debug-agent — dry-boot command', () => {
   it('boots the source checkout when DSH_BIN is unset', () => {
     const cmd = buildDryBootCommand('/tmp/x', 19001, { ...deps, env: {} })
     expect(cmd).toContain(`cd "/work/deepseek-harness" && DSH_HOME=/tmp/x "/opt/node/bin/node" "--import" "tsx/esm" "apps/cli/src/bin.ts" "web" "--port" "19001" "--no-open"`)
+  })
+})
+
+describe('debug-agent — dry-boot leftover sweep', () => {
+  // Under memory pressure the boot can bind its port only after the finally's
+  // kill-by-port already ran, so the port lookup finds nothing and the process
+  // survives the `rm -rf` of its temp home (measured 2026-11-28: pid 1588961
+  // held /tmp/tmp.NGDMmVlBrb on :19515 for 6+ minutes). The sweep kills by the
+  // home the boot was launched with, which cannot race the listener.
+  it('kills only the processes rooted at the temp home it booted', () => {
+    const killed: number[] = []
+    const leftover = reapDryBootLeftovers('/tmp/tmp.NGDMmVlBrb', {
+      list: () => [
+        { pid: 201, dshHome: '/tmp/tmp.NGDMmVlBrb' },
+        { pid: 202, dshHome: '/home/u/.dsh' },
+        { pid: 203, dshHome: '/tmp/tmp.OTHER' },
+      ],
+      kill: (pid: number) => { killed.push(pid) },
+    })
+    expect(killed).toEqual([201])
+    expect(leftover).toEqual([201])
+  })
+  it('sweeps nothing when there is no temp home', () => {
+    const killed: number[] = []
+    const res = reapDryBootLeftovers('', {
+      list: () => [{ pid: 204, dshHome: '' }],
+      kill: (pid: number) => { killed.push(pid) },
+    })
+    expect(killed).toEqual([])
+    expect(res).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
 import { resolveDshLaunch, type DshLaunchDeps } from './dsh-launch.js'
+import { listDryBootCandidates } from './restart-tool.js'
 
 export interface DebugAgentOpts {
   reportPath: string
@@ -124,6 +125,36 @@ export function buildDryBootCommand(tmp: string, port: number, deps: DshLaunchDe
   return `timeout 8 bash -c '${boot} pid=$!; for i in $(seq 1 5); do sleep 1; if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${port}/ 2>&1 | grep -q 200; then echo ok; exit 0; fi; done; echo fail; exit 1'`
 }
 
+export interface LeftoverSweepDeps {
+  /** Dry-boot candidates to consider; defaults to the live `/proc` scan. */
+  list?: () => Array<{ pid: number; dshHome: string }>
+  /** Kills one pid; defaults to SIGKILL. */
+  kill?: (pid: number) => void
+}
+
+/**
+ * Kill every dry-boot process still rooted at `home`, and report their pids.
+ *
+ * The kill-by-port cleanup below races a slow boot: under memory pressure the
+ * process binds its port only AFTER the lookup already ran, so nothing is
+ * found, the temp home is removed, and the orphan keeps serving a port nobody
+ * tracks. Keying on the DSH_HOME the boot was launched with cannot race the
+ * listener. Measured 2026-11-28: one such orphan held 253M RSS + 234M swap on
+ * a host that was already being OOM-killed.
+ */
+export function reapDryBootLeftovers(home: string, deps: LeftoverSweepDeps = {}): number[] {
+  if (!home) return []
+  const list = deps.list ?? (() => listDryBootCandidates())
+  const kill = deps.kill ?? ((pid: number) => { try { process.kill(pid, 'SIGKILL') } catch {} })
+  const killed: number[] = []
+  for (const candidate of list()) {
+    if (candidate.dshHome !== home) continue
+    kill(candidate.pid)
+    killed.push(candidate.pid)
+  }
+  return killed
+}
+
 async function defaultDryBoot(): Promise<boolean> {
   const { execSync } = await import('node:child_process')
   const { buildKillStalePortsCommand } = await import('./restart-guards.js')
@@ -144,6 +175,9 @@ async function defaultDryBoot(): Promise<boolean> {
     // for 7+ hours. Resolve the real pid by the port it is actually
     // listening on instead (same technique as the live-restart kill step).
     try { execSync(buildKillStalePortsCommand([port]), { timeout: 5000, stdio: 'pipe' } as any) } catch {}
+    // The port kill above cannot see a boot that had not bound its port yet;
+    // sweep by the home instead, then remove it.
+    reapDryBootLeftovers(tmp)
     if (tmp) { try { execSync(`rm -rf ${tmp}`) } catch {} }
   }
 }
