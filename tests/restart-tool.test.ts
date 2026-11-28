@@ -410,6 +410,43 @@ describe('dsh_web_gc', () => {
     expect(killPid).toHaveBeenCalledWith(104, 'SIGKILL')
     expect(result).toEqual({ killed: [104], candidates: [] })
   })
+  // Measured 2026-11-28: the debug-agent dry-boot (defaultDryBoot) boots on a
+  // `mktemp -d` home (/tmp/tmp.XXXXXX) and a 19000-19999 port, so a leaked one
+  // was invisible to this reaper: `dsh_web_gc` answered candidates: [] while
+  // the orphan held 253M RSS + 234M swap on an already memory-starved host.
+  it('reaps a debug-agent orphan on a mktemp home and a 19xxx port', async () => {
+    const registered: any[] = []
+    let alive = true
+    const killPid = vi.fn(() => { alive = false })
+    registerRestartTool(makeCtx(registered), {
+      gcReaders: {
+        readProc: () => (alive ? [{ pid: 105, cmd: 'node /rt/current/bin/dsh web --port 19515 --no-open', env: 'DSH_HOME=/tmp/tmp.NGDMmVlBrb' }] : []),
+        ssPortsOf: () => (alive ? [19515] : []),
+        selfPid: 1,
+      },
+      killPid,
+    } as any)
+    const t = registered.find(x => x.name === 'dsh_web_gc')
+    const result = await t.execute({ confirm: true }, {})
+    expect(killPid).toHaveBeenCalledWith(105, 'SIGKILL')
+    expect(result).toEqual({ killed: [105], candidates: [] })
+  })
+  it('still refuses a temp-home dsh web on a non-ephemeral port', async () => {
+    const registered: any[] = []
+    const killPid = vi.fn()
+    registerRestartTool(makeCtx(registered), {
+      gcReaders: {
+        readProc: () => [{ pid: 106, cmd: 'node /rt/current/bin/dsh web --port 8080', env: 'DSH_HOME=/tmp/tmp.someone-else' }],
+        ssPortsOf: () => [8080],
+        selfPid: 1,
+      },
+      killPid,
+    } as any)
+    const t = registered.find(x => x.name === 'dsh_web_gc')
+    const result = await t.execute({ confirm: true }, {})
+    expect(result).toEqual({ killed: [], candidates: [] })
+    expect(killPid).not.toHaveBeenCalled()
+  })
 })
 
 describe('dsh_web_restart evidence', () => {
